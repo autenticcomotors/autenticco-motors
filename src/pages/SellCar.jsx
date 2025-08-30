@@ -5,317 +5,176 @@ import { CheckCircle, Shield, Clock, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
 import { FaWhatsapp } from 'react-icons/fa';
+import BackgroundShape from '@/components/BackgroundShape';
+import { addLead } from '@/lib/car-api'; // Importando a nova função
 
 const SellCar = () => {
-  const [formData, setFormData] = useState({
-    name: '',
-    phone: '',
-    email: '',
-    brand: '',
-    model: '',
-    year: '',
-    observations: ''
-  });
-
-  const whatsappLink = "https://wa.me/5511975071300";
-
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    
-    if (!formData.name || !formData.phone || !formData.email || !formData.brand || !formData.model || !formData.year) {
-      toast({
-        title: "Por favor, preencha todos os campos obrigatórios.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    toast({
-      title: "Formulário enviado com sucesso! 🎉",
-      description: "Nossa equipe entrará em contato em breve para avaliar seu veículo."
+    const [formData, setFormData] = useState({
+        name: '', phone: '', email: '', brand: '', model: '', year: '', observations: ''
     });
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
-    e.target.submit();
+    const whatsappLink = "https://wa.me/5511975071300";
 
-  };
+    const handleInputChange = (e) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+    };
 
-  const benefits = [
-    {
-      icon: Shield,
-      title: "Avaliação Gratuita",
-      description: "Receba uma avaliação profissional do seu veículo sem compromisso"
-    },
-    {
-      icon: Clock,
-      title: "Venda Rápida",
-      description: "Processo otimizado para vender seu carro em até 15 dias"
-    },
-    {
-      icon: Zap,
-      title: "Melhor Preço",
-      description: "Marketing profissional para alcançar o melhor valor de mercado"
-    }
-  ];
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setIsSubmitting(true);
 
-  const process = [
-    "Preencha o formulário com os dados do seu veículo",
-    "Nossa equipe fará uma avaliação gratuita",
-    "Cuidamos de toda documentação e burocracia",
-    "Seu carro é vendido com segurança e agilidade"
-  ];
+        const requiredFields = ['name', 'phone', 'email', 'brand', 'model', 'year'];
+        if (requiredFields.some(field => !formData[field])) {
+            toast({
+                title: "Campos obrigatórios",
+                description: "Por favor, preencha todos os campos com *.",
+                variant: "destructive"
+            });
+            setIsSubmitting(false);
+            return;
+        }
 
-  return (
-    <>
-      <Helmet>
-        <title>Vender Meu Carro - AutenTicco Motors</title>
-        <meta name="description" content="Venda seu carro com segurança e agilidade. Avaliação gratuita, processo sem burocracia e venda em até 15 dias. Solicite sua avaliação agora!" />
-        <meta property="og:title" content="Vender Meu Carro - AutenTicco Motors" />
-        <meta property="og:description" content="Venda seu carro com segurança e agilidade. Avaliação gratuita, processo sem burocracia e venda em até 15 dias. Solicite sua avaliação agora!" />
-      </Helmet>
+        // Prepara os dados para a tabela 'leads'
+        const leadData = {
+            client_name: formData.name,
+            client_contact: `${formData.phone} | ${formData.email}`,
+            lead_type: 'Venda',
+            car_details: `${formData.brand} ${formData.model} ${formData.year}`,
+            notes: formData.observations
+        };
 
-      <div className="pt-20 min-h-screen bg-black">
-        {/* Hero Section */}
-        <section className="py-20 bg-gray-900">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <motion.div
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6 }}
-              className="text-center mb-16"
-            >
-              <h1 className="text-4xl md:text-6xl font-bold mb-6">
-                Venda seu carro com <span className="gradient-text">segurança</span>
-              </h1>
-              <p className="text-xl text-gray-400 max-w-3xl mx-auto">
-                Processo completo sem burocracia, avaliação gratuita e venda garantida em até 15 dias
-              </p>
-            </motion.div>
+        // Envia os dados para a API
+        const { error } = await addLead(leadData);
 
-            {/* Benefícios */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
-              {benefits.map((benefit, index) => (
-                <motion.div
-                  key={index}
-                  initial={{ opacity: 0, y: 30 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.6, delay: index * 0.2 }}
-                  className="glass-effect rounded-2xl p-8 text-center"
-                >
-                  <div className="w-16 h-16 bg-yellow-400 rounded-full flex items-center justify-center mx-auto mb-6">
-                    <benefit.icon className="w-8 h-8 text-black" />
-                  </div>
-                  <h3 className="text-xl font-bold mb-4">{benefit.title}</h3>
-                  <p className="text-gray-400">{benefit.description}</p>
+        if (!error) {
+            toast({
+                title: "Proposta enviada com sucesso! 🎉",
+                description: "Nossa equipe entrará em contato em breve."
+            });
+            setFormData({ name: '', phone: '', email: '', brand: '', model: '', year: '', observations: '' });
+        } else {
+            toast({
+                title: "Erro no envio",
+                description: "Ocorreu um problema. Tente novamente ou entre em contato pelo WhatsApp.",
+                variant: "destructive"
+            });
+        }
+        setIsSubmitting(false);
+    };
+
+    const benefits = [
+        { icon: Shield, title: "Avaliação Gratuita", description: "Receba uma avaliação profissional do seu veículo sem custo ou compromisso." },
+        { icon: Clock, title: "Venda Rápida", description: "Nosso processo otimizado e marketing focado garantem a venda em tempo recorde." },
+        { icon: Zap, title: "Melhor Valor de Mercado", description: "Anunciamos seu carro da melhor forma para alcançar o maior valor possível." }
+    ];
+
+    const itemVariants = {
+        hidden: { y: 20, opacity: 0 },
+        visible: { y: 0, opacity: 1 }
+    };
+
+    return (
+        <div className="relative isolate min-h-screen bg-gray-50 text-gray-800 pt-28">
+            <Helmet>
+                <title>Vender Meu Carro - AutenTicco Motors</title>
+                <meta name="description" content="Venda seu carro com segurança e agilidade. Avaliação gratuita, processo sem burocracia e a melhor valorização do mercado. Solicite sua avaliação agora!" />
+            </Helmet>
+            <BackgroundShape />
+
+            <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+                <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="text-center mb-20">
+                    <h1 className="text-4xl md:text-6xl font-extrabold text-gray-900 tracking-tight">
+                        Venda seu carro com <span className="text-yellow-500">segurança e sem esforço</span>
+                    </h1>
+                    <p className="mt-6 text-lg text-gray-600 max-w-3xl mx-auto">
+                        Cuidamos de tudo para você, da avaliação profissional à documentação. Preencha o formulário e receba uma proposta.
+                    </p>
                 </motion.div>
-              ))}
-            </div>
-          </div>
-        </section>
 
-        {/* Formulário e Processo */}
-        <section className="py-20">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-              {/* Formulário */}
-              <motion.div
-                initial={{ opacity: 0, x: -30 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.6 }}
-                className="glass-effect rounded-2xl p-8"
-              >
-                <h2 className="text-3xl font-bold mb-6">
-                  Solicite sua <span className="gradient-text">avaliação</span>
-                </h2>
-                <p className="text-gray-400 mb-8">
-                  Preencha os dados abaixo e nossa equipe entrará em contato para avaliar seu veículo
-                </p>
-
-                <form 
-                  onSubmit={handleSubmit} 
-                  action="https://formsubmit.co/contato@autenticcomotors.com.br"
-                  method="POST"
-                  className="space-y-6"
-                >
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Nome *</label>
-                      <input
-                        type="text"
-                        name="name"
-                        value={formData.name}
-                        onChange={handleInputChange}
-                        className="w-full px-4 py-3 bg-black/50 border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:border-yellow-400 focus:outline-none"
-                        placeholder="Seu nome completo"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Telefone *</label>
-                      <input
-                        type="tel"
-                        name="phone"
-                        value={formData.phone}
-                        onChange={handleInputChange}
-                        className="w-full px-4 py-3 bg-black/50 border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:border-yellow-400 focus:outline-none"
-                        placeholder="(11) 97507-1300"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-2">E-mail *</label>
-                    <input
-                      type="email"
-                      name="email"
-                      value={formData.email}
-                      onChange={handleInputChange}
-                      className="w-full px-4 py-3 bg-black/50 border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:border-yellow-400 focus:outline-none"
-                      placeholder="seu@email.com"
-                      required
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Marca *</label>
-                      <input
-                        type="text"
-                        name="brand"
-                        value={formData.brand}
-                        onChange={handleInputChange}
-                        className="w-full px-4 py-3 bg-black/50 border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:border-yellow-400 focus:outline-none"
-                        placeholder="BMW, Mercedes..."
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Modelo *</label>
-                      <input
-                        type="text"
-                        name="model"
-                        value={formData.model}
-                        onChange={handleInputChange}
-                        className="w-full px-4 py-3 bg-black/50 border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:border-yellow-400 focus:outline-none"
-                        placeholder="X5, C300..."
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Ano *</label>
-                      <input
-                        type="number"
-                        name="year"
-                        value={formData.year}
-                        onChange={handleInputChange}
-                        className="w-full px-4 py-3 bg-black/50 border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:border-yellow-400 focus:outline-none"
-                        placeholder="2023"
-                        min="2000"
-                        max="2024"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Observações</label>
-                    <textarea
-                      name="observations"
-                      value={formData.observations}
-                      onChange={handleInputChange}
-                      rows={4}
-                      className="w-full px-4 py-3 bg-black/50 border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:border-yellow-400 focus:outline-none resize-none"
-                      placeholder="Informações adicionais sobre o veículo (quilometragem, estado de conservação, etc.)"
-                    />
-                  </div>
-
-                  <div className="flex flex-col sm:flex-row gap-4">
-                    <Button 
-                      type="submit"
-                      className="flex-1 bg-yellow-400 text-black hover:bg-yellow-500 font-bold py-4 h-auto yellow-glow"
-                    >
-                      Solicitar Avaliação Gratuita
-                    </Button>
-                    <a href={whatsappLink} target="_blank" rel="noopener noreferrer" className="flex-1">
-                      <Button 
-                        type="button"
-                        variant="outline"
-                        className="w-full border-yellow-400 text-yellow-400 hover:bg-yellow-400 hover:text-black font-bold py-4 h-auto"
-                      >
-                        <FaWhatsapp className="w-4 h-4 mr-2" />
-                        WhatsApp
-                      </Button>
-                    </a>
-                  </div>
-                </form>
-              </motion.div>
-
-              {/* Processo */}
-              <motion.div
-                initial={{ opacity: 0, x: 30 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.6, delay: 0.2 }}
-                className="space-y-8"
-              >
-                <div>
-                  <h2 className="text-3xl font-bold mb-6">
-                    Como <span className="gradient-text">funciona</span>
-                  </h2>
-                  <p className="text-gray-400 mb-8">
-                    Nosso processo é simples, transparente e focado na sua segurança
-                  </p>
-                </div>
-
-                <div className="space-y-6">
-                  {process.map((step, index) => (
-                    <motion.div
-                      key={index}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.6, delay: 0.4 + index * 0.1 }}
-                      className="flex items-start space-x-4"
-                    >
-                      <div className="w-8 h-8 bg-yellow-400 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
-                        <span className="text-black font-bold text-sm">{index + 1}</span>
-                      </div>
-                      <p className="text-gray-300 leading-relaxed">{step}</p>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-start">
+                    <motion.div initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.7 }} className="bg-white/80 backdrop-blur-sm rounded-2xl p-8 shadow-xl border sticky top-28">
+                        <h2 className="text-3xl font-bold text-gray-900 mb-2">Solicite sua avaliação</h2>
+                        <p className="text-gray-600 mb-8">É rápido, fácil e gratuito.</p>
+                        <form onSubmit={handleSubmit} className="space-y-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="space-y-2">
+                                    <label htmlFor="name" className="block text-sm font-medium text-gray-700">Nome *</label>
+                                    <input id="name" name="name" value={formData.name} onChange={handleInputChange} placeholder="Seu nome completo" className="w-full px-4 py-3 bg-gray-100 border-gray-300 rounded-lg focus:ring-yellow-500 focus:border-yellow-500" />
+                                </div>
+                                <div className="space-y-2">
+                                    <label htmlFor="phone" className="block text-sm font-medium text-gray-700">WhatsApp *</label>
+                                    <input id="phone" name="phone" value={formData.phone} onChange={handleInputChange} placeholder="(11) 99999-9999" className="w-full px-4 py-3 bg-gray-100 border-gray-300 rounded-lg focus:ring-yellow-500 focus:border-yellow-500" />
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <label htmlFor="email" className="block text-sm font-medium text-gray-700">E-mail *</label>
+                                <input id="email" type="email" name="email" value={formData.email} onChange={handleInputChange} placeholder="seu@email.com" className="w-full px-4 py-3 bg-gray-100 border-gray-300 rounded-lg focus:ring-yellow-500 focus:border-yellow-500" />
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div className="space-y-2">
+                                    <label htmlFor="brand" className="block text-sm font-medium text-gray-700">Marca *</label>
+                                    <input id="brand" name="brand" value={formData.brand} onChange={handleInputChange} placeholder="Ex: BMW" className="w-full px-4 py-3 bg-gray-100 border-gray-300 rounded-lg focus:ring-yellow-500 focus:border-yellow-500" />
+                                </div>
+                                <div className="space-y-2">
+                                    <label htmlFor="model" className="block text-sm font-medium text-gray-700">Modelo *</label>
+                                    <input id="model" name="model" value={formData.model} onChange={handleInputChange} placeholder="Ex: X5" className="w-full px-4 py-3 bg-gray-100 border-gray-300 rounded-lg focus:ring-yellow-500 focus:border-yellow-500" />
+                                </div>
+                                <div className="space-y-2">
+                                    <label htmlFor="year" className="block text-sm font-medium text-gray-700">Ano *</label>
+                                    <input id="year" name="year" type="number" value={formData.year} onChange={handleInputChange} placeholder="Ex: 2023" className="w-full px-4 py-3 bg-gray-100 border-gray-300 rounded-lg focus:ring-yellow-500 focus:border-yellow-500" />
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <label htmlFor="observations" className="block text-sm font-medium text-gray-700">Observações</label>
+                                <textarea id="observations" name="observations" value={formData.observations} onChange={handleInputChange} placeholder="Detalhes como KM, versão, cor, estado de conservação..." rows={4} className="w-full px-4 py-3 bg-gray-100 border-gray-300 rounded-lg resize-none focus:ring-yellow-500 focus:border-yellow-500" />
+                            </div>
+                            <Button type="submit" disabled={isSubmitting} className="w-full bg-yellow-400 text-black font-bold py-6 text-lg hover:bg-yellow-500 transition-all duration-300 transform hover:scale-105">
+                                {isSubmitting ? 'Enviando...' : 'Solicitar Avaliação Gratuita'}
+                            </Button>
+                        </form>
                     </motion.div>
-                  ))}
-                </div>
 
-                <div className="glass-effect rounded-2xl p-6 mt-8">
-                  <div className="flex items-center space-x-3 mb-4">
-                    <CheckCircle className="w-6 h-6 text-yellow-400" />
-                    <h3 className="text-xl font-bold">Garantias AutenTicco</h3>
-                  </div>
-                  <ul className="space-y-2 text-gray-400">
-                    <li>✓ Avaliação gratuita e sem compromisso</li>
-                    <li>✓ Processo 100% seguro e transparente</li>
-                    <li>✓ Documentação completa incluída</li>
-                    <li>✓ Suporte durante todo o processo</li>
-                  </ul>
+                    <motion.div 
+                        initial="hidden"
+                        animate="visible"
+                        variants={{ visible: { transition: { staggerChildren: 0.1 } } }}
+                        className="space-y-6"
+                    >
+                        {benefits.map((benefit, index) => (
+                            <motion.div 
+                                key={index} 
+                                variants={itemVariants}
+                                className="flex items-start gap-4 p-6 bg-gray-800 bg-opacity-80 border border-gray-700 rounded-xl shadow-md
+                                           transform transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-yellow-500/30 hover:border-yellow-500"
+                            >
+                                <div className="flex-shrink-0 w-12 h-12 bg-yellow-400 rounded-full flex items-center justify-center">
+                                    <benefit.icon className="w-6 h-6 text-black" />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-bold text-white mb-1">{benefit.title}</h3>
+                                    <p className="text-gray-300">{benefit.description}</p>
+                                </div>
+                            </motion.div>
+                        ))}
+                        <motion.div 
+                            variants={itemVariants} 
+                            className="bg-white/80 backdrop-blur-sm rounded-2xl p-8 shadow-xl border text-center mt-12"
+                        >
+                            <h3 className="text-xl font-bold text-gray-900 mb-4">Prefere falar agora?</h3>
+                            <p className="text-gray-600 mb-6">Clique no botão abaixo e fale diretamente com um de nossos assessores pelo WhatsApp.</p>
+                            <Button asChild className="w-full bg-green-500 text-white font-bold py-6 text-lg hover:bg-green-600 transition-all duration-300 transform hover:scale-105">
+                                <a href={whatsappLink} target="_blank" rel="noopener noreferrer">
+                                    <FaWhatsapp className="w-6 h-6 mr-3" /> Chamar no WhatsApp
+                                </a>
+                            </Button>
+                        </motion.div>
+                    </motion.div>
                 </div>
-
-                <div className="aspect-video rounded-2xl overflow-hidden">
-                  <img  
-                    className="w-full h-full object-cover" 
-                    alt="Professional car evaluation process" src="https://images.unsplash.com/photo-1634324320508-b9a309a1fb1a" />
-                </div>
-              </motion.div>
             </div>
-          </div>
-        </section>
-      </div>
-    </>
-  );
+        </div>
+    );
 };
 
 export default SellCar;

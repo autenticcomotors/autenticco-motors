@@ -1,289 +1,237 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { Shield, Clock, Zap, Star, ArrowRight } from 'lucide-react';
+import { Star, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { FaWhatsapp } from 'react-icons/fa';
+import logo from '@/assets/logo.png';
+import heroBackground from '@/assets/familia-conquista.jpg';
+import { getFeaturedCars, getTestimonials } from '@/lib/car-api';
 
 const Home = () => {
+  const [featuredCars, setFeaturedCars] = useState([]);
+  const [testimonials, setTestimonials] = useState([]);
 
-  const whatsappLink = "https://wa.me/5511975071300";
+  useEffect(() => {
+    const loadData = async () => {
+        const [cars, tests] = await Promise.all([
+            getFeaturedCars(),
+            getTestimonials()
+        ]);
+        setFeaturedCars(cars || []);
+        setTestimonials(tests || []);
+    };
+    loadData();
+  }, []);
 
-  const featuredCars = [
-    {
-      id: 1,
-      brand: "BMW",
-      model: "X5 M Sport",
-      year: 2022,
-      price: "R$ 450.000",
-      image: "Luxurious BMW X5 M Sport in metallic gray"
-    },
-    {
-      id: 2,
-      brand: "Mercedes",
-      model: "C300 AMG",
-      year: 2023,
-      price: "R$ 320.000",
-      image: "Elegant Mercedes C300 AMG in pearl white"
-    },
-    {
-      id: 3,
-      brand: "Audi",
-      model: "Q7 Prestige",
-      year: 2022,
-      price: "R$ 380.000",
-      image: "Premium Audi Q7 Prestige in midnight black"
-    }
-  ];
-
-  const testimonials = [
-    {
-      name: "Carlos Silva",
-      text: "Experiência incrível! Venderam meu carro em 15 dias sem nenhuma dor de cabeça.",
-      rating: 5
-    },
-    {
-      name: "Marina Santos",
-      text: "Assessoria completa e profissional. Recomendo para quem quer segurança na compra.",
-      rating: 5
-    },
-    {
-      name: "Roberto Lima",
-      text: "Processo transparente do início ao fim. Equipe muito competente!",
-      rating: 5
-    }
+  const timelineSteps = [
+    { num: 1, title: "Primeiro Contato", description: "Você nos conta qual carro deseja comprar ou vender." },
+    { num: 2, title: "Nossa Atuação", description: "Cuidamos de toda a busca, avaliação, fotos e anúncios." },
+    { num: 3, title: "Negociação Segura", description: "Intermediamos o contato e a burocracia com total segurança." },
+    { num: 4, title: "Conquista Realizada", description: "Você fecha o melhor negócio sem sair de casa." },
   ];
 
   return (
     <>
       <Helmet>
-        <title>AutenTicco Motors - Marketplace de Veículos Premium</title>
-        <meta name="description" content="Compre e venda veículos premium com segurança total. Assessoria completa, verificação de procedência e processo sem burocracia." />
-        <meta property="og:title" content="AutenTicco Motors - Marketplace de Veículos Premium" />
-        <meta property="og:description" content="Compre e venda veículos premium com segurança total. Assessoria completa, verificação de procedência e processo sem burocracia." />
+        <title>AutenTicco Motors - A evolução na compra e venda de veículos</title>
+        <meta name="description" content="Segurança total, assessoria completa e zero burocracia para você comprar ou vender seu próximo carro." />
       </Helmet>
 
-      <div className="pt-20">
-        {/* Hero Section */}
-        <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
+      <div className="bg-white">
+        {/* Bloco 1: Hero Section */}
+        <section 
+          className="relative flex items-center justify-center text-center text-gray-900 overflow-hidden"
+          style={{ height: '75vh' }}
+        >
           <div className="absolute inset-0 z-0">
-             <img  class="w-full h-full object-cover opacity-40" alt="Abstract digital art of car silhouettes with dynamic light trails on a dark background" src="https://images.unsplash.com/photo-1688829012453-358ab4c3fe80" />
+            <img src={heroBackground} alt="Família feliz com carro novo" className="w-full h-full object-cover" />
+            <div className="absolute inset-0 bg-white/50 backdrop-blur-sm"></div>
           </div>
-           <div className="absolute inset-0 hero-gradient z-10"></div>
-          
-          <div className="relative z-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-            <motion.div
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8 }}
-            >
-             <img 
-                src="https://horizons-cdn.hostinger.com/658e15d6-90a3-489b-9359-6db98ae64202/c41758bb4f122fc5c7f566d37de84f3e.png" 
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8 }}
+            className="relative z-10 p-4"
+          >
+            <div className="flex justify-center items-center gap-4 md:gap-6 mb-8">
+              <img 
+                src={logo} 
                 alt="AutenTicco Motors Logo" 
-                className="h-28 md:h-40 w-auto mx-auto mb-8"
+                className="h-28 md:h-40 w-auto"
+                style={{ filter: 'drop-shadow(0 0 10px rgba(0,0,0,0.6))' }}
               />
-              <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold mb-6">
-                A <span className="gradient-text">evolução</span> na compra<br />
-                e venda de veículos
-              </h1>
-              <p className="text-xl md:text-2xl text-gray-300 mb-8 max-w-3xl mx-auto">
-                Segurança total, assessoria completa e zero burocracia
-              </p>
-              <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Link to="/vender">
-                  <Button className="bg-yellow-400 text-black hover:bg-yellow-500 text-lg px-8 py-4 h-auto font-bold yellow-glow">
-                    Vender Meu Carro Agora
-                    <ArrowRight className="ml-2 w-5 h-5" />
-                  </Button>
-                </Link>
-                <a href={whatsappLink} target="_blank" rel="noopener noreferrer">
-                    <Button 
-                    variant="outline" 
-                    className="border-yellow-400 text-yellow-400 hover:bg-yellow-400 hover:text-black text-lg px-8 py-4 h-auto font-bold w-full"
-                    >
-                    <FaWhatsapp className="mr-2 w-5 h-5" />
-                    Fale Conosco
-                    </Button>
-                </a>
-              </div>
-            </motion.div>
-          </div>
-        </section>
-
-        {/* Principais Vantagens */}
-        <section className="py-20 bg-gray-900">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <motion.div
-              initial={{ opacity: 0, y: 30 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6 }}
-              className="text-center mb-16"
-            >
-              <h2 className="text-3xl md:text-5xl font-bold mb-4">
-                Por que escolher a <span className="gradient-text">AutenTicco</span>?
-              </h2>
-              <p className="text-xl text-gray-400 max-w-2xl mx-auto">
-                Três pilares que fazem toda a diferença na sua experiência
-              </p>
-            </motion.div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              {[
-                {
-                  icon: Shield,
-                  title: "Segurança Total",
-                  description: "Proteção contra golpes, verificação completa de laudos e procedência garantida"
-                },
-                {
-                  icon: Clock,
-                  title: "Praticidade",
-                  description: "Processo simplificado do início ao fim, sem burocracia e com acompanhamento pessoal"
-                },
-                {
-                  icon: Zap,
-                  title: "Inovação",
-                  description: "Compramos seu veículo de troca e cuidamos do marketing profissional por nossa conta"
-                }
-              ].map((feature, index) => (
-                <motion.div
-                  key={index}
-                  initial={{ opacity: 0, y: 30 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.6, delay: index * 0.2 }}
-                  className="glass-effect rounded-2xl p-8 text-center card-hover"
-                >
-                  <div className="w-16 h-16 bg-yellow-400 rounded-full flex items-center justify-center mx-auto mb-6">
-                    <feature.icon className="w-8 h-8 text-black" />
-                  </div>
-                  <h3 className="text-2xl font-bold mb-4 text-white">{feature.title}</h3>
-                  <p className="text-gray-400 leading-relaxed">{feature.description}</p>
-                </motion.div>
-              ))}
+              <span 
+                className="text-4xl md:text-6xl font-bold text-gray-900"
+                style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.6)' }}
+              >AutenTicco Motors</span>
             </div>
-          </div>
-        </section>
-
-        {/* Veículos em Destaque */}
-        <section className="py-20 bg-black">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <motion.div
-              initial={{ opacity: 0, y: 30 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6 }}
-              className="text-center mb-16"
-            >
-              <h2 className="text-3xl md:text-5xl font-bold mb-4">
-                Veículos em <span className="gradient-text">Destaque</span>
-              </h2>
-              <p className="text-xl text-gray-400 max-w-2xl mx-auto">
-                Seleção premium de veículos verificados e com procedência garantida
-              </p>
-            </motion.div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
-              {featuredCars.map((car, index) => (
-                <motion.div
-                  key={car.id}
-                  initial={{ opacity: 0, y: 30 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.6, delay: index * 0.2 }}
-                  className="glass-effect rounded-2xl overflow-hidden card-hover"
-                >
-                  <div className="aspect-video overflow-hidden">
-                    <img  class="w-full h-full object-cover" alt={`${car.image}`} src="https://images.unsplash.com/photo-1694027655519-016c93b014e6" />
-                  </div>
-                  <div className="p-6">
-                    <h3 className="text-xl font-bold mb-2">{car.brand} {car.model}</h3>
-                    <p className="text-gray-400 mb-4">{car.year}</p>
-                    <div className="flex justify-between items-center">
-                      <span className="text-2xl font-bold text-yellow-400">{car.price}</span>
-                      <a href={whatsappLink} target="_blank" rel="noopener noreferrer">
-                        <Button 
-                            variant="outline" 
-                            className="border-yellow-400 text-yellow-400 hover:bg-yellow-400 hover:text-black"
-                        >
-                            Ver Detalhes
-                        </Button>
-                      </a>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
+            <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight">
+              A evolução na compra e venda de veículos
+            </h1>
+            <p className="mt-4 text-lg md:text-xl text-gray-700 max-w-2xl mx-auto font-medium">
+              Segurança total, assessoria completa e zero burocracia.
+            </p>
+            <div className="mt-10 flex flex-col sm:flex-row gap-4 justify-center">
+              <Button asChild size="lg" className="bg-yellow-400 text-black font-bold text-lg px-8 py-6 hover:bg-yellow-500 transition-transform hover:scale-105">
+                <Link to="/estoque">Quero Comprar</Link>
+              </Button>
+              <Button asChild size="lg" className="bg-black text-yellow-400 font-bold text-lg px-8 py-6 hover:bg-gray-800 transition-transform hover:scale-105">
+                <Link to="/vender">Quero Vender</Link>
+              </Button>
             </div>
-
+          </motion.div>
+        </section>
+        
+        {/* Bloco 2: Como Funciona (Linha do Tempo) - REINTRODUZIDO */}
+        <section className="py-24 bg-gray-50">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center">
-              <Link to="/estoque">
-                <Button className="bg-yellow-400 text-black hover:bg-yellow-500 text-lg px-8 py-4 h-auto font-bold">
-                  Ver Todo o Estoque
-                  <ArrowRight className="ml-2 w-5 h-5" />
-                </Button>
-              </Link>
+              <h2 className="text-3xl md:text-4xl font-extrabold text-gray-900">Como Funciona a Nossa Assessoria</h2>
+              <p className="mt-4 text-lg text-gray-600">Um processo simples e transparente em 4 passos.</p>
             </div>
-          </div>
-        </section>
-
-        {/* Depoimentos */}
-        <section className="py-20 bg-gray-900">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <motion.div
-              initial={{ opacity: 0, y: 30 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6 }}
-              className="text-center mb-16"
-            >
-              <h2 className="text-3xl md:text-5xl font-bold mb-4">
-                O que nossos <span className="gradient-text">clientes</span> dizem
-              </h2>
-              <p className="text-xl text-gray-400 max-w-2xl mx-auto">
-                Experiências reais de quem confia na AutenTicco Motors
-              </p>
-            </motion.div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              {testimonials.map((testimonial, index) => (
-                <motion.div
-                  key={index}
+            <div className="mt-16 grid grid-cols-1 md:grid-cols-4 gap-8">
+              {timelineSteps.map((step, index) => (
+                <motion.div 
+                  key={step.num}
                   initial={{ opacity: 0, y: 30 }}
                   whileInView={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.6, delay: index * 0.2 }}
-                  className="glass-effect rounded-2xl p-8 card-hover"
+                  viewport={{ once: true, amount: 0.5 }}
+                  transition={{ duration: 0.5, delay: index * 0.1 }}
+                  className="text-center"
                 >
-                  <div className="flex mb-4">
-                    {[...Array(testimonial.rating)].map((_, i) => (
-                      <Star key={i} className="w-5 h-5 text-yellow-400 fill-current" />
-                    ))}
+                  <div className="flex items-center justify-center w-16 h-16 bg-yellow-400 rounded-full mx-auto mb-4 ring-8 ring-white shadow-lg">
+                    <span className="text-2xl font-bold text-black">{step.num}</span>
                   </div>
-                  <p className="text-gray-300 mb-6 italic">"{testimonial.text}"</p>
-                  <p className="font-semibold text-yellow-400">{testimonial.name}</p>
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">{step.title}</h3>
+                  <p className="text-gray-600">{step.description}</p>
                 </motion.div>
               ))}
             </div>
           </div>
         </section>
 
-        {/* CTA Final */}
-        <section className="py-20 bg-black">
-          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-            <motion.div
-              initial={{ opacity: 0, y: 30 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6 }}
-            >
-              <h2 className="text-3xl md:text-5xl font-bold mb-6">
-                Pronto para <span className="gradient-text">vender</span> seu carro?
-              </h2>
-              <p className="text-xl text-gray-400 mb-8 max-w-2xl mx-auto">
-                Receba uma avaliação gratuita e descubra como podemos ajudar você a vender seu veículo com segurança e agilidade
-              </p>
-              <Link to="/vender">
-                <Button className="bg-yellow-400 text-black hover:bg-yellow-500 text-xl px-12 py-6 h-auto font-bold yellow-glow">
-                  Começar Agora
-                  <ArrowRight className="ml-2 w-6 h-6" />
-                </Button>
-              </Link>
-            </motion.div>
-          </div>
+        {/* Bloco 3: Vídeos Explicativos (Compra e Venda) - NOVO */}
+        <section className="py-24 bg-white">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div className="text-center mb-12">
+                    <h2 className="text-3xl md:text-4xl font-extrabold text-gray-900">Assista e Entenda</h2>
+                    <p className="mt-4 text-lg text-gray-600">Escolha o seu caminho: Compra ou Venda de veículos premium.</p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    {/* Vídeo de Compra */}
+                    <motion.div 
+                        initial={{ opacity: 0, x: -50 }}
+                        whileInView={{ opacity: 1, x: 0 }}
+                        viewport={{ once: true, amount: 0.5 }}
+                        transition={{ duration: 0.5 }}
+                        className="bg-gray-50 rounded-2xl overflow-hidden shadow-lg border p-6 flex flex-col items-center"
+                    >
+                        <h3 className="text-2xl font-bold text-gray-900 mb-4">Como Comprar seu Veículo</h3>
+                        <div className="aspect-video w-full rounded-lg overflow-hidden mb-4">
+                            <iframe
+                                src="https://www.youtube.com/embed/VIDEO_ID_COMPRA" // SUBSTITUA com o ID do seu vídeo de COMPRA
+                                title="Como Comprar com a AutenTicco Motors"
+                                frameBorder="0"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                allowFullScreen
+                                className="w-full h-full"
+                            ></iframe>
+                        </div>
+                        <p className="text-gray-700 text-center mb-4">Descubra um jeito seguro e sem burocracia de encontrar seu carro ideal.</p>
+                        <Button asChild className="bg-yellow-400 text-black font-bold hover:bg-yellow-500">
+                            <Link to="/estoque">Explorar Carros</Link>
+                        </Button>
+                    </motion.div>
+
+                    {/* Vídeo de Venda */}
+                    <motion.div 
+                        initial={{ opacity: 0, x: 50 }}
+                        whileInView={{ opacity: 1, x: 0 }}
+                        viewport={{ once: true, amount: 0.5 }}
+                        transition={{ duration: 0.5 }}
+                        className="bg-gray-50 rounded-2xl overflow-hidden shadow-lg border p-6 flex flex-col items-center"
+                    >
+                        <h3 className="text-2xl font-bold text-gray-900 mb-4">Como Vender seu Veículo</h3>
+                        <div className="aspect-video w-full rounded-lg overflow-hidden mb-4">
+                            <iframe
+                                src="https://www.youtube.com/embed/VIDEO_ID_VENDA" // SUBSTITUA com o ID do seu vídeo de VENDA
+                                title="Como Vender com a AutenTicco Motors"
+                                frameBorder="0"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                allowFullScreen
+                                className="w-full h-full"
+                            ></iframe>
+                        </div>
+                        <p className="text-gray-700 text-center mb-4">Venda seu carro de forma rápida, segura e pelo melhor preço.</p>
+                        <Button asChild className="bg-black text-yellow-400 font-bold hover:bg-gray-800 hover:text-white">
+                            <Link to="/vender">Quero Vender</Link>
+                        </Button>
+                    </motion.div>
+                </div>
+            </div>
+        </section>
+
+        {/* Bloco 4: Veículos em Destaque */}
+        <section className="py-24 bg-gray-50">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div className="text-center mb-12">
+                    <h2 className="text-3xl md:text-4xl font-extrabold text-gray-900">Veículos em Destaque</h2>
+                    <p className="mt-4 text-lg text-gray-600">Uma amostra do nosso estoque selecionado.</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+                    {featuredCars.map((car) => (
+                        <motion.div key={car.id} className="bg-white rounded-2xl overflow-hidden shadow-lg border flex flex-col transition-transform duration-300 hover:-translate-y-2">
+                             <img src={car.main_photo_url || 'https://placehold.co/400x300/e2e8f0/4a5568?text=Sem+Foto'} alt={`${car.brand} ${car.model}`} className="w-full h-48 object-cover" />
+                             <div className="p-4 flex flex-col flex-grow">
+                                <h3 className="text-lg font-bold text-gray-900">{car.brand} {car.model}</h3>
+                                <p className="text-xl font-bold text-gray-800 my-2">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(car.price)}</p>
+                                <Link to={`/carro/${car.slug}`} className="mt-auto group w-full inline-flex items-center justify-center text-center bg-yellow-400 text-black font-bold py-2 px-4 rounded-lg hover:bg-yellow-500 transition-all duration-300">
+                                    Ver Detalhes <ArrowRight className="ml-2 h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
+                                </Link>
+                             </div>
+                        </motion.div>
+                    ))}
+                </div>
+            </div>
+        </section>
+        
+        {/* Bloco 5: Depoimentos */}
+        {testimonials && testimonials.length > 0 && (
+            <section className="py-24 bg-white">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div className="text-center mb-12">
+                        <h2 className="text-3xl md:text-4xl font-extrabold text-gray-900">O que Nossos Clientes Dizem</h2>
+                        <p className="mt-4 text-lg text-gray-600">A confiança que construímos se reflete em cada negócio fechado.</p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                        {testimonials.slice(0, 3).map((testimonial) => (
+                            <motion.div key={testimonial.id} className="p-8 bg-gray-800 text-white rounded-2xl shadow-lg border border-gray-700">
+                                <div className="flex mb-4">
+                                    {[...Array(5)].map((_, i) => (<Star key={i} className="w-5 h-5 text-yellow-400 fill-current" />))}
+                                </div>
+                                <p className="italic mb-6">"{testimonial.testimonial_text}"</p>
+                                <p className="font-bold text-yellow-400">{testimonial.client_name}</p>
+                                {testimonial.car_sold && <p className="text-sm text-gray-400">Comprou/Vendeu um {testimonial.car_sold}</p>}
+                            </motion.div>
+                        ))}
+                    </div>
+                </div>
+            </section>
+        )}
+
+        {/* Bloco 6: CTA Final */}
+        <section className="py-24 bg-gray-900 text-white">
+            <div className="max-w-4xl mx-auto px-4 text-center">
+                <h2 className="text-3xl md:text-4xl font-extrabold">Pronto para dar o próximo passo?</h2>
+                <p className="mt-4 text-lg text-gray-300">Seja para comprar ou vender, a experiência AutenTicco está a um clique de distância.</p>
+                <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center">
+                    <Button asChild size="lg" className="bg-yellow-400 text-black font-bold text-lg px-8 py-6 hover:bg-yellow-500 transition-transform hover:scale-105">
+                        <Link to="/estoque">Quero Comprar</Link>
+                    </Button>
+                    <Button asChild size="lg" className="bg-black border-2 border-yellow-400 text-yellow-400 font-bold text-lg px-8 py-6 hover:bg-yellow-400 hover:text-black transition-transform hover:scale-105">
+                        <Link to="/vender">Quero Vender</Link>
+                    </Button>
+                </div>
+            </div>
         </section>
       </div>
     </>

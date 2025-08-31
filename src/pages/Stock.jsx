@@ -3,7 +3,7 @@ import { Helmet } from 'react-helmet';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { getCars } from '@/lib/car-api';
-import { ArrowRight, Gauge, Droplet } from 'lucide-react';
+import { ArrowRight, Gauge, Droplet, Calendar, Cog } from 'lucide-react';
 import BackgroundShape from '@/components/BackgroundShape';
 import CarFilter from '@/components/CarFilter';
 
@@ -132,15 +132,29 @@ const Stock = () => {
                         >
                             <div className="relative">
                                 <img src={car.main_photo_url || 'https://placehold.co/400x300/e2e8f0/4a5568?text=Sem+Foto'} alt={`${car.brand} ${car.model}`} className="w-full h-56 object-cover" />
-                                <div className="absolute top-4 right-4 bg-black/50 text-white text-sm font-bold py-1 px-3 rounded-full">{car.year}</div>
+                                <div className="absolute top-4 right-4 bg-black/50 text-white text-xs font-bold py-1 px-3 rounded-full flex items-center gap-1.5">
+                                    <Droplet size={12} />
+                                    <span>{car.fuel}</span>
+                                </div>
                             </div>
                             <div className="p-6 flex flex-col flex-grow">
                                 <h2 className="text-xl font-bold text-gray-900">{car.brand} {car.model}</h2>
                                 <p className="text-2xl font-bold text-gray-800 my-2">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(car.price)}</p>
                                 
-                                <div className="grid grid-cols-2 gap-4 text-sm text-gray-600 my-4 border-t border-b py-4">
-                                    <div className="flex items-center gap-2"><Gauge size={16} className="text-yellow-500" /> {new Intl.NumberFormat('pt-BR').format(car.mileage)} KM</div>
-                                    <div className="flex items-center gap-2"><Droplet size={16} className="text-yellow-500" /> {car.fuel}</div>
+                                {/* LAYOUT AJUSTADO PARA FONTE MAIOR E ESPAÇAMENTO OTIMIZADO */}
+                                <div className="grid grid-cols-3 gap-3 text-sm text-gray-600 my-4 border-t border-b py-4">
+                                    <div className="flex items-center gap-1.5">
+                                        <Calendar size={16} className="text-yellow-500 flex-shrink-0" /> 
+                                        <span className="truncate">{car.year}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                        <Gauge size={16} className="text-yellow-500 flex-shrink-0" /> 
+                                        <span className="truncate">{new Intl.NumberFormat('pt-BR').format(car.mileage)} km</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                        <Cog size={16} className="text-yellow-500 flex-shrink-0" /> 
+                                        <span className="truncate">{car.transmission}</span>
+                                    </div>
                                 </div>
                                 
                                 <div className="mt-auto">

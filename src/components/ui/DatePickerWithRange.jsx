@@ -1,7 +1,7 @@
 import * as React from "react"
 import { format } from "date-fns"
+import { ptBR } from "date-fns/locale" // 1. Importar o pacote de idioma Português-Brasil
 import { Calendar as CalendarIcon } from "lucide-react"
-// A linha "import { DateRange } from "react-day-picker" foi REMOVIDA
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
@@ -24,11 +24,11 @@ export function DatePickerWithRange({ className, date, setDate }) {
             {date?.from ? (
               date.to ? (
                 <>
-                  {format(date.from, "LLL dd, y")} -{" "}
-                  {format(date.to, "LLL dd, y")}
+                  {format(date.from, "dd 'de' LLL, y", { locale: ptBR })} -{" "}
+                  {format(date.to, "dd 'de' LLL, y", { locale: ptBR })}
                 </>
               ) : (
-                format(date.from, "LLL dd, y")
+                format(date.from, "dd 'de' LLL, y", { locale: ptBR })
               )
             ) : (
               <span>Selecione um período</span>
@@ -43,6 +43,7 @@ export function DatePickerWithRange({ className, date, setDate }) {
             selected={date}
             onSelect={setDate}
             numberOfMonths={2}
+            locale={ptBR} // 2. Passar o idioma para o componente do calendário
           />
         </PopoverContent>
       </Popover>

@@ -164,7 +164,6 @@ const Contact = () => {
                                         </iframe>
                                     </div>
                                 </div>
-                                {/* CARD "SIGA-NOS" COM TÍTULO MENOR E ÍCONES MAIORES */}
                                 <div className="p-8 bg-gray-800 bg-opacity-90 border border-gray-700 rounded-xl shadow-md">
                                     <h3 className="text-xl font-bold text-white mb-6 text-center">Siga-nos</h3>
                                     <div className="flex justify-center space-x-6">

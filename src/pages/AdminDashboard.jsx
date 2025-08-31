@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+// CÓDIGO COMPLETO E FINAL DO ADMIN DASHBOARD, SUBSTITUA TODO O SEU ARQUIVO
+
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Helmet } from 'react-helmet';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -9,14 +11,28 @@ import { CSVLink } from 'react-csv';
 import { supabase } from '@/lib/supabase';
 import { getCars, addCar, deleteCar, updateCar, getTestimonials, addTestimonial, deleteTestimonial, getLeads, updateLead } from '@/lib/car-api';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-// CAMINHO CORRIGIDO DA IMPORTAÇÃO
-import { DatePickerWithRange } from "@/components/ui/DatePickerWithRange"; 
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { DatePickerWithRange } from "@/components/ui/DatePickerWithRange";
 import BackgroundShape from '@/components/BackgroundShape';
 
+const FormFields = React.memo(({ carData, onChange, carOptions }) => (
+    <>
+        <input name="brand" value={carData.brand || ''} onChange={onChange} placeholder="Marca *" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none" />
+        <input name="model" value={carData.model || ''} onChange={onChange} placeholder="Modelo *" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none" />
+        <input name="year" value={carData.year || ''} onChange={onChange} placeholder="Ano" type="number" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none" />
+        <input name="price" value={carData.price || ''} onChange={onChange} placeholder="Preço *" type="number" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none" />
+        <input name="mileage" value={carData.mileage || ''} onChange={onChange} placeholder="Quilometragem *" type="number" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none" />
+        <select name="color" value={carData.color || ''} onChange={onChange} className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none"> <option value="">Cor *</option> {carOptions.colors.map(c => <option key={c} value={c}>{c}</option>)} </select>
+        <select name="fuel" value={carData.fuel || ''} onChange={onChange} className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none"> <option value="">Combustível *</option> {carOptions.fuels.map(f => <option key={f} value={f}>{f}</option>)} </select>
+        <select name="transmission" value={carData.transmission || ''} onChange={onChange} className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none"> <option value="">Câmbio *</option> {carOptions.transmissions.map(t => <option key={t} value={t}>{t}</option>)} </select>
+        <select name="body_type" value={carData.body_type || ''} onChange={onChange} className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none"> <option value="">Carroceria *</option> {carOptions.bodyTypes.map(b => <option key={b} value={b}>{b}</option>)} </select>
+        <div className="relative md:col-span-3"> <input name="youtube_link" value={carData.youtube_link || ''} onChange={onChange} placeholder="Link do Vídeo do YouTube" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none" /> </div>
+        <div className="relative md:col-span-3"> <textarea name="full_description" value={carData.full_description || ''} onChange={onChange} placeholder="Descrição detalhada..." rows={4} className="w-full bg-white border border-gray-300 rounded-lg p-3 resize-none text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none" /> </div>
+    </>
+));
+
 const AdminDashboard = () => {
+    // ESTADOS
     const [activeTab, setActiveTab] = useState('leads');
     const [cars, setCars] = useState([]);
     const [leads, setLeads] = useState([]);
@@ -42,30 +58,27 @@ const AdminDashboard = () => {
         colors: ['Preto', 'Branco', 'Prata', 'Cinza', 'Azul', 'Vermelho', 'Marrom', 'Verde', 'Outra']
     };
     const statusOptions = ['Novo', 'Contato Realizado', 'Em Negociação', 'Venda Concluída', 'Descartado'];
-
-    useEffect(() => {
-        const filters = {
-            status: leadStatusFilter,
-            startDate: date?.from,
-            endDate: date?.to,
-        };
-        const fetchAllData = async () => {
-            setLoading(true);
-            const [carsData, testimonialsData, leadsData] = await Promise.all([
-                getCars(), getTestimonials(), getLeads(filters)
-            ]);
-            setCars(carsData || []);
-            setTestimonials(testimonialsData || []);
-            setLeads(leadsData || []);
-            setLoading(false);
-        };
-        fetchAllData();
+    
+    const fetchAllData = useCallback(async () => {
+        setLoading(true);
+        const filters = { status: leadStatusFilter, startDate: date?.from, endDate: date?.to };
+        const [carsData, testimonialsData, leadsData] = await Promise.all([
+            getCars(), getTestimonials(), getLeads(filters)
+        ]);
+        setCars(carsData || []);
+        setTestimonials(testimonialsData || []);
+        setLeads(leadsData || []);
+        setLoading(false);
     }, [leadStatusFilter, date]);
 
+    useEffect(() => {
+        fetchAllData();
+    }, [fetchAllData]);
+    
     const handleStatusChange = async (leadId, newStatus) => {
         await updateLead(leadId, { status: newStatus });
         toast({ title: 'Status do lead atualizado!' });
-        setLeads(leads.map(lead => lead.id === leadId ? { ...lead, status: newStatus } : lead));
+        fetchAllData();
     };
 
     const leadsForCSV = (leadsData) => leadsData.map(lead => ({
@@ -80,16 +93,18 @@ const AdminDashboard = () => {
     
     const handleLogout = async () => { await supabase.auth.signOut(); navigate('/admin'); };
     const handleInputChange = (e, setStateFunc) => { const { name, value } = e.target; setStateFunc(prev => ({ ...prev, [name]: value }));};
-    const handleToggleFeatured = async (carId, currentStatus) => { await updateCar(carId, { is_featured: !currentStatus }); toast({ title: `Veículo ${!currentStatus ? 'adicionado aos' : 'removido dos'} destaques!` }); const data = await getCars(); setCars(data); };
-    const handleAddTestimonial = async (e) => { e.preventDefault(); await addTestimonial(newTestimonial); toast({ title: 'Depoimento adicionado!' }); setNewTestimonial({ client_name: '', testimonial_text: '', car_sold: '' }); const data = await getTestimonials(); setTestimonials(data); };
-    const handleDeleteTestimonial = async (id) => { await deleteTestimonial(id); toast({ title: 'Depoimento removido.' }); const data = await getTestimonials(); setTestimonials(data); };
+    const handleNewCarInputChange = useCallback((e) => handleInputChange(e, setNewCar), []);
+    const handleEditingCarInputChange = useCallback((e) => handleInputChange(e, setEditingCar), []);
+    const handleNewTestimonialInputChange = useCallback((e) => handleInputChange(e, setNewTestimonial), []);
+    const handleToggleFeatured = async (carId, currentStatus) => { await updateCar(carId, { is_featured: !currentStatus }); toast({ title: `Veículo ${!currentStatus ? 'adicionado aos' : 'removido dos'} destaques!` }); fetchAllData(); };
+    const handleAddTestimonial = async (e) => { e.preventDefault(); await addTestimonial(newTestimonial); toast({ title: 'Depoimento adicionado!' }); setNewTestimonial({ client_name: '', testimonial_text: '', car_sold: '' }); fetchAllData(); };
+    const handleDeleteTestimonial = async (id) => { await deleteTestimonial(id); toast({ title: 'Depoimento removido.' }); fetchAllData(); };
     const handlePhotoUpload = (e) => { const files = Array.from(e.target.files); setPhotosToUpload(prev => [...prev, ...files]);};
     const removePhoto = (index, isExisting = false) => { if (isExisting && editingCar) { const photoUrl = editingCar.photo_urls[index]; setPhotosToDelete(prev => [...prev, photoUrl]); setEditingCar(prev => ({ ...prev, photo_urls: prev.photo_urls.filter((_, i) => i !== index) })); } else { setPhotosToUpload(prev => prev.filter((_, i) => i !== index)); }};
     const handleAddCar = async (e) => { e.preventDefault(); setLoading(true); const photoUrls = []; for (const file of photosToUpload) { const fileName = `${newCar.brand}/${Date.now()}_${file.name}`; const { data, error } = await supabase.storage.from('car_photos').upload(fileName, file); if (error) { toast({ title: 'Erro no upload.', description: error.message, variant: 'destructive' }); setLoading(false); return; } const { data: { publicUrl } } = supabase.storage.from('car_photos').getPublicUrl(data.path); photoUrls.push(publicUrl); } const carData = { ...newCar, photo_urls: photoUrls, main_photo_url: photoUrls[mainPhotoIndex] || null, price: parseFloat(newCar.price) }; const { data: addedCar, error } = await addCar(carData); if (error) { toast({ title: 'Erro ao adicionar.', description: error.message, variant: 'destructive' }); } else { setCars(prevCars => [addedCar[0], ...prevCars]); setNewCar({ brand: '', model: '', year: '', price: '', mileage: '', fuel: '', photo_urls: [], youtube_link: '', full_description: '', transmission: '', body_type: '', color: '' }); setPhotosToUpload([]); setMainPhotoIndex(0); if (fileInputRef.current) fileInputRef.current.value = ""; toast({ title: 'Veículo adicionado!' }); } setLoading(false); };
     const handleEditCarClick = (car) => { setPhotosToUpload([]); setPhotosToDelete([]); setEditingCar(JSON.parse(JSON.stringify(car))); setIsEditDialogOpen(true); };
     const handleUpdateCar = async (e) => { e.preventDefault(); if (!editingCar) return; setLoading(true); let finalCarData = { ...editingCar }; if (photosToUpload.length > 0) { const newPhotoUrls = []; for (const file of photosToUpload) { const fileName = `${finalCarData.brand}/${Date.now()}_${file.name}`; const { data, error } = await supabase.storage.from('car_photos').upload(fileName, file); if (error) { toast({ title: 'Erro no upload.', description: error.message, variant: 'destructive' }); setLoading(false); return; } const { data: { publicUrl } } = supabase.storage.from('car_photos').getPublicUrl(data.path); newPhotoUrls.push(publicUrl); } finalCarData.photo_urls = [...finalCarData.photo_urls, ...newPhotoUrls]; } if (photosToDelete.length > 0) { const filePaths = photosToDelete.map(url => url.split('/car_photos/')[1]).filter(Boolean); if (filePaths.length > 0) { await supabase.storage.from('car_photos').remove(filePaths); } } if (!finalCarData.photo_urls.includes(finalCarData.main_photo_url)) { finalCarData.main_photo_url = finalCarData.photo_urls[0] || null; } const { error } = await updateCar(finalCarData.id, { ...finalCarData, price: parseFloat(finalCarData.price) }); if (error) { toast({ title: 'Erro ao atualizar.', description: error.message, variant: 'destructive' }); } else { setCars(cars.map(car => car.id === finalCarData.id ? finalCarData : car)); setIsEditDialogOpen(false); setEditingCar(null); toast({ title: 'Veículo atualizado!' }); } setLoading(false); };
     const handleDeleteCar = async (id) => { setLoading(true); const carToDeleteData = cars.find(car => car.id === id); if (carToDeleteData && carToDeleteData.photo_urls && carToDeleteData.photo_urls.length > 0) { const filePaths = carToDeleteData.photo_urls.map(url => url.split('/car_photos/')[1]).filter(Boolean); if(filePaths.length > 0) { await supabase.storage.from('car_photos').remove(filePaths); } } const { error } = await deleteCar(id); if (error) { toast({ title: 'Erro ao remover.', variant: 'destructive' }); } else { setCars(cars.filter(car => car.id !== id)); toast({ title: 'Veículo removido.' }); } setCarToDelete(null); setLoading(false); };
-    const FormFields = ({ carData, onChange }) => ( <> <Input name="brand" value={carData.brand || ''} onChange={onChange} placeholder="Marca *" /> <Input name="model" value={carData.model || ''} onChange={onChange} placeholder="Modelo *" /> <Input name="year" value={carData.year || ''} onChange={onChange} placeholder="Ano" type="number" /> <Input name="price" value={carData.price || ''} onChange={onChange} placeholder="Preço *" type="number" /> <Input name="mileage" value={carData.mileage || ''} onChange={onChange} placeholder="Quilometragem *" type="number" /> <select name="color" value={carData.color || ''} onChange={onChange} className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-yellow-500 focus:outline-none"> <option value="">Cor *</option> {carOptions.colors.map(c => <option key={c} value={c}>{c}</option>)} </select> <select name="fuel" value={carData.fuel || ''} onChange={onChange} className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-yellow-500 focus:outline-none"> <option value="">Combustível *</option> {carOptions.fuels.map(f => <option key={f} value={f}>{f}</option>)} </select> <select name="transmission" value={carData.transmission || ''} onChange={onChange} className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-yellow-500 focus:outline-none"> <option value="">Câmbio *</option> {carOptions.transmissions.map(t => <option key={t} value={t}>{t}</option>)} </select> <select name="body_type" value={carData.body_type || ''} onChange={onChange} className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-yellow-500 focus:outline-none"> <option value="">Carroceria *</option> {carOptions.bodyTypes.map(b => <option key={b} value={b}>{b}</option>)} </select> <div className="relative md:col-span-3"> <Input name="youtube_link" value={carData.youtube_link || ''} onChange={onChange} placeholder="Link do Vídeo do YouTube" /> </div> <div className="relative md:col-span-3"> <textarea name="full_description" value={carData.full_description || ''} onChange={onChange} placeholder="Descrição detalhada..." rows={4} className="w-full bg-white border border-gray-300 rounded-lg p-3 resize-none text-gray-900 focus:border-yellow-500 focus:ring-yellow-500 focus:outline-none" /> </div> </> );
     
     return (
         <div className="relative isolate min-h-screen bg-gray-50 text-gray-800 pt-28">
@@ -147,7 +162,7 @@ const AdminDashboard = () => {
                         <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-8 mb-12 shadow-xl border">
                             <h2 className="text-2xl font-semibold mb-6 flex items-center"><PlusCircle className="mr-3 text-yellow-500" /> Adicionar Novo Veículo</h2>
                             <form onSubmit={handleAddCar} className="space-y-6">
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6"><FormFields carData={newCar} onChange={(e) => handleInputChange(e, setNewCar)} /></div>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6"><FormFields carData={newCar} onChange={handleNewCarInputChange} carOptions={carOptions} /></div>
                                 <div>
                                     <Button type="button" onClick={() => fileInputRef.current && fileInputRef.current.click()}><ImageIcon className="mr-2 h-4 w-4" /> Adicionar Fotos</Button>
                                     <input type="file" ref={fileInputRef} onChange={handlePhotoUpload} multiple accept="image/*" className="hidden"/>
@@ -179,7 +194,12 @@ const AdminDashboard = () => {
                     {activeTab === 'testimonials' && ( <>
                         <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-8 mb-12 shadow-xl border">
                             <h2 className="text-2xl font-semibold mb-6 flex items-center"><PlusCircle className="mr-3 text-yellow-500" /> Adicionar Novo Depoimento</h2>
-                            <form onSubmit={handleAddTestimonial} className="space-y-6"><Input name="client_name" value={newTestimonial.client_name} onChange={(e) => handleInputChange(e, setNewTestimonial)} placeholder="Nome do Cliente *" /><Input name="car_sold" value={newTestimonial.car_sold} onChange={(e) => handleInputChange(e, setNewTestimonial)} placeholder="Carro (Ex: BMW X5 2021)" /><textarea name="testimonial_text" value={newTestimonial.testimonial_text} onChange={(e) => handleInputChange(e, setNewTestimonial)} placeholder="Texto do depoimento *" rows={4} className="w-full bg-gray-100 border-gray-300 rounded-lg p-3" /><Button type="submit" className="w-full bg-yellow-400 text-black hover:bg-yellow-500 font-bold py-3">Salvar Depoimento</Button></form>
+                            <form onSubmit={handleAddTestimonial} className="space-y-6">
+                                <input name="client_name" value={newTestimonial.client_name} onChange={handleNewTestimonialInputChange} placeholder="Nome do Cliente *" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none" />
+                                <input name="car_sold" value={newTestimonial.car_sold} onChange={handleNewTestimonialInputChange} placeholder="Carro (Ex: BMW X5 2021)" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none" />
+                                <textarea name="testimonial_text" value={newTestimonial.testimonial_text} onChange={handleNewTestimonialInputChange} placeholder="Texto do depoimento *" rows={4} className="w-full p-3 bg-white border border-gray-300 rounded-lg" />
+                                <Button type="submit" className="w-full bg-yellow-400 text-black hover:bg-yellow-500 font-bold py-3">Salvar Depoimento</Button>
+                            </form>
                         </div>
                         <div>
                             <h2 className="text-2xl font-semibold mb-6 flex items-center"><MessageSquare className="mr-3 text-yellow-500" /> Depoimentos Cadastrados ({testimonials.length})</h2>
@@ -194,9 +214,9 @@ const AdminDashboard = () => {
                     <DialogHeader><DialogTitle>Editar Veículo</DialogTitle></DialogHeader>
                     {editingCar && (
                         <form onSubmit={handleUpdateCar} className="space-y-4 max-h-[80vh] overflow-y-auto pr-4">
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4"><FormFields carData={editingCar} onChange={(e) => handleInputChange(e, setEditingCar)} /></div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4"><FormFields carData={editingCar} onChange={handleEditingCarInputChange} carOptions={carOptions} /></div>
                             <div className="space-y-2">
-                                <Label>Fotos</Label>
+                                <label className="font-medium">Fotos</label>
                                 <div className="flex flex-wrap gap-4 p-2 bg-gray-100 rounded-lg min-h-[112px]">
                                     {editingCar.photo_urls && editingCar.photo_urls.map((url, index) => ( <div key={url} className="relative"> <img src={url} alt={`Foto ${index + 1}`} className="h-24 w-24 object-cover rounded-md" /> <button type="button" onClick={() => removePhoto(index, true)} className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1"><Trash2 className="h-3 w-3" /></button> </div> ))}
                                     {photosToUpload.map((file, index) => ( <div key={index} className="relative"> <img src={URL.createObjectURL(file)} alt={`Preview ${index}`} className="h-24 w-24 object-cover rounded-lg" /> <button type="button" onClick={() => removePhoto(index)} className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1"><Trash2 className="h-3 w-3" /></button> </div> ))}

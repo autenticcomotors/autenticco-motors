@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { Helmet } from 'react-helmet';
 import { motion } from 'framer-motion';
-import { CheckCircle, Shield, Clock, Zap } from 'lucide-react';
+import { Shield, Clock, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
 import { FaWhatsapp } from 'react-icons/fa';
 import BackgroundShape from '@/components/BackgroundShape';
-import { addLead } from '@/lib/car-api'; // Importando a nova função
+import { addLead } from '@/lib/car-api';
 
 const SellCar = () => {
     const [formData, setFormData] = useState({
@@ -36,7 +36,6 @@ const SellCar = () => {
             return;
         }
 
-        // Prepara os dados para a tabela 'leads'
         const leadData = {
             client_name: formData.name,
             client_contact: `${formData.phone} | ${formData.email}`,
@@ -45,7 +44,6 @@ const SellCar = () => {
             notes: formData.observations
         };
 
-        // Envia os dados para a API
         const { error } = await addLead(leadData);
 
         if (!error) {

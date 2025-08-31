@@ -30,22 +30,36 @@ const InterestModal = ({ car, onClose }) => {
       car_details: `${car.brand} ${car.model}`
     };
 
-    const { error } = await addLead(leadData);
+    // 1. Salva o lead no banco
+    await addLead(leadData);
 
-    if (!error) {
-      toast({
-        title: "Interesse registrado com sucesso! 🎉",
-        description: "Entraremos em contato em breve."
-      });
-      onClose();
-    } else {
-      toast({
-        title: "Erro no envio",
-        description: "Ocorreu um problema. Por favor, tente novamente.",
-        variant: "destructive"
-      });
+    // 2. Envia o e-mail via FormSubmit
+    try {
+        const emailData = {
+            Nome: formData.name,
+            Contato: formData.contact,
+            Interesse: `${car.brand} ${car.model}`,
+            _subject: `Novo Interesse: ${car.brand} ${car.model}`
+        };
+        const formSubmitResponse = await fetch("https://formsubmit.co/ajax/contato@autenticcomotors.com", {
+            method: "POST",
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify(emailData)
+        });
+
+        if (!formSubmitResponse.ok) throw new Error("Falha no FormSubmit");
+
+        toast({
+            title: "Interesse registrado com sucesso! 🎉",
+            description: "Entraremos em contato em breve."
+        });
+        onClose();
+
+    } catch (emailError) {
+        toast({ title: "Erro no envio do e-mail", description: "Ocorreu um problema, mas seu interesse foi registrado. Tente o WhatsApp se preferir.", variant: "destructive" });
+    } finally {
+        setIsSubmitting(false);
     }
-    setIsSubmitting(false);
   };
 
   return (

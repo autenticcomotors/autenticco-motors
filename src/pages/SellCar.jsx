@@ -36,6 +36,7 @@ const SellCar = () => {
             return;
         }
 
+        // 1. Prepara os dados para a tabela de leads
         const leadData = {
             client_name: formData.name,
             client_contact: `${formData.phone} | ${formData.email}`,
@@ -43,23 +44,46 @@ const SellCar = () => {
             car_details: `${formData.brand} ${formData.model} ${formData.year}`,
             notes: formData.observations
         };
-
+        
+        // 2. Tenta salvar o lead no banco de dados
         const { error } = await addLead(leadData);
 
-        if (!error) {
+        if (error) {
+            toast({ title: "Erro ao salvar lead", description: "Apesar do erro, tentaremos enviar o e-mail.", variant: "destructive" });
+        }
+
+        // 3. Tenta enviar o e-mail via FormSubmit, independentemente do resultado do lead
+        try {
+            const formSubmitResponse = await fetch("https://formsubmit.co/ajax/contato@autenticcomotors.com", {
+                method: "POST",
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({
+                    ...formData,
+                    _subject: "Nova Proposta de Venda de Veículo!"
+                })
+            });
+
+            if (!formSubmitResponse.ok) throw new Error("Falha no FormSubmit");
+            
+            // Mensagem de sucesso apenas se tudo deu certo
             toast({
                 title: "Proposta enviada com sucesso! 🎉",
                 description: "Nossa equipe entrará em contato em breve."
             });
             setFormData({ name: '', phone: '', email: '', brand: '', model: '', year: '', observations: '' });
-        } else {
+
+        } catch (emailError) {
             toast({
-                title: "Erro no envio",
-                description: "Ocorreu um problema. Tente novamente ou entre em contato pelo WhatsApp.",
+                title: "Erro no envio do e-mail",
+                description: "Ocorreu um problema. Por favor, tente novamente ou entre em contato pelo WhatsApp.",
                 variant: "destructive"
             });
+        } finally {
+            setIsSubmitting(false);
         }
-        setIsSubmitting(false);
     };
 
     const benefits = [

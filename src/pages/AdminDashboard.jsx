@@ -1,5 +1,3 @@
-// CÓDIGO COMPLETO E FINAL DO ADMIN DASHBOARD, SUBSTITUA TODO O SEU ARQUIVO
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Helmet } from 'react-helmet';
 import { Link, useNavigate } from 'react-router-dom';
@@ -9,10 +7,9 @@ import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
 import { CSVLink } from 'react-csv';
 import { supabase } from '@/lib/supabase';
-import { getCars, addCar, deleteCar, updateCar, getTestimonials, addTestimonial, deleteTestimonial, getLeads, updateLead } from '@/lib/car-api';
+import { getCars, addCar, deleteCar, updateCar, getTestimonials, addTestimonial, deleteTestimonial, getLeads, updateLead, deleteLead } from '@/lib/car-api';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { DatePickerWithRange } from "@/components/ui/DatePickerWithRange";
 import BackgroundShape from '@/components/BackgroundShape';
 
 const FormFields = React.memo(({ carData, onChange, carOptions }) => (
@@ -32,14 +29,13 @@ const FormFields = React.memo(({ carData, onChange, carOptions }) => (
 ));
 
 const AdminDashboard = () => {
-    // ESTADOS
     const [activeTab, setActiveTab] = useState('leads');
     const [cars, setCars] = useState([]);
     const [leads, setLeads] = useState([]);
     const [testimonials, setTestimonials] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [date, setDate] = useState(undefined);
-    const [leadStatusFilter, setLeadStatusFilter] = useState('');
+    const [leadFilters, setLeadFilters] = useState({ status: '', startDate: '', endDate: '' });
+    const [leadToDelete, setLeadToDelete] = useState(null);
     const [newTestimonial, setNewTestimonial] = useState({ client_name: '', testimonial_text: '', car_sold: '' });
     const [newCar, setNewCar] = useState({ brand: '', model: '', year: '', price: '', mileage: '', fuel: '', photo_urls: [], youtube_link: '', full_description: '', transmission: '', body_type: '', color: '' });
     const [editingCar, setEditingCar] = useState(null);
@@ -52,45 +48,27 @@ const AdminDashboard = () => {
     const fileInputRef = useRef(null);
 
     const carOptions = {
-        transmissions: ['Automático', 'Manual'],
-        bodyTypes: ['SUV', 'Sedan', 'Hatch', 'Picape', 'Esportivo', 'Outro'],
-        fuels: ['Flex', 'Gasolina', 'Diesel', 'Elétrico', 'Híbrido'],
-        colors: ['Preto', 'Branco', 'Prata', 'Cinza', 'Azul', 'Vermelho', 'Marrom', 'Verde', 'Outra']
+        transmissions: ['Automático', 'Manual'], bodyTypes: ['SUV', 'Sedan', 'Hatch', 'Picape', 'Esportivo', 'Outro'],
+        fuels: ['Flex', 'Gasolina', 'Diesel', 'Elétrico', 'Híbrido'], colors: ['Preto', 'Branco', 'Prata', 'Cinza', 'Azul', 'Vermelho', 'Marrom', 'Verde', 'Outra']
     };
     const statusOptions = ['Novo', 'Contato Realizado', 'Em Negociação', 'Venda Concluída', 'Descartado'];
     
     const fetchAllData = useCallback(async () => {
         setLoading(true);
-        const filters = { status: leadStatusFilter, startDate: date?.from, endDate: date?.to };
         const [carsData, testimonialsData, leadsData] = await Promise.all([
-            getCars(), getTestimonials(), getLeads(filters)
+            getCars(), getTestimonials(), getLeads(leadFilters)
         ]);
         setCars(carsData || []);
         setTestimonials(testimonialsData || []);
         setLeads(leadsData || []);
         setLoading(false);
-    }, [leadStatusFilter, date]);
+    }, [leadFilters]);
 
-    useEffect(() => {
-        fetchAllData();
-    }, [fetchAllData]);
+    useEffect(() => { fetchAllData(); }, [fetchAllData]);
     
-    const handleStatusChange = async (leadId, newStatus) => {
-        await updateLead(leadId, { status: newStatus });
-        toast({ title: 'Status do lead atualizado!' });
-        fetchAllData();
-    };
-
-    const leadsForCSV = (leadsData) => leadsData.map(lead => ({
-        data_criacao: new Date(lead.created_at).toLocaleString('pt-BR'),
-        nome_cliente: lead.client_name,
-        contato_cliente: lead.client_contact,
-        tipo_lead: lead.lead_type,
-        status: lead.status,
-        veiculo: lead.cars ? `${lead.cars.brand} ${lead.cars.model}` : (lead.car_details || 'N/A'),
-        notas: lead.notes,
-    }));
-    
+    const handleStatusChange = async (leadId, newStatus) => { await updateLead(leadId, { status: newStatus }); toast({ title: 'Status do lead atualizado!' }); fetchAllData(); };
+    const handleDeleteLead = async () => { if (!leadToDelete) return; await deleteLead(leadToDelete); toast({ title: 'Lead removido com sucesso.' }); setLeadToDelete(null); fetchAllData(); };
+    const leadsForCSV = (leadsData) => leadsData.map(lead => ({ data_criacao: new Date(lead.created_at).toLocaleString('pt-BR'), nome_cliente: lead.client_name, contato_cliente: lead.client_contact, tipo_lead: lead.lead_type, status: lead.status, veiculo: lead.cars ? `${lead.cars.brand} ${lead.cars.model}` : (lead.car_details || 'N/A'), notas: lead.notes, }));
     const handleLogout = async () => { await supabase.auth.signOut(); navigate('/admin'); };
     const handleInputChange = (e, setStateFunc) => { const { name, value } = e.target; setStateFunc(prev => ({ ...prev, [name]: value }));};
     const handleNewCarInputChange = useCallback((e) => handleInputChange(e, setNewCar), []);
@@ -127,30 +105,46 @@ const AdminDashboard = () => {
                             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
                                 <div className="text-lg font-bold">Exibindo <span className="text-yellow-500">{leads.length}</span> lead(s)</div>
                                 <div className="flex flex-wrap items-center justify-center gap-4">
-                                    <DatePickerWithRange date={date} setDate={setDate} />
-                                    <select value={leadStatusFilter} onChange={(e) => setLeadStatusFilter(e.target.value)} className="bg-white border-gray-300 rounded-md p-2 h-10 text-sm">
+                                    <div className='flex gap-2 items-center'>
+                                        <label htmlFor="startDate" className='text-sm font-medium'>De:</label>
+                                        <input type="date" id="startDate" name="startDate" value={leadFilters.startDate} onChange={(e) => setLeadFilters(f => ({...f, startDate: e.target.value}))} className="bg-white border-gray-300 rounded-md p-2 h-10 text-sm" />
+                                    </div>
+                                    <div className='flex gap-2 items-center'>
+                                        <label htmlFor="endDate" className='text-sm font-medium'>Até:</label>
+                                        <input type="date" id="endDate" name="endDate" value={leadFilters.endDate} onChange={(e) => setLeadFilters(f => ({...f, endDate: e.target.value}))} className="bg-white border-gray-300 rounded-md p-2 h-10 text-sm" />
+                                    </div>
+                                    <select value={leadFilters.status} onChange={(e) => setLeadFilters(f => ({...f, status: e.target.value}))} className="bg-white border-gray-300 rounded-md p-2 h-10 text-sm">
                                         <option value="">Filtrar por Status</option>
                                         {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
                                     </select>
-                                    <Button variant="outline" size="sm" asChild>
-                                        <CSVLink data={leadsForCSV(leads)} filename={"leads-autenticco.csv"} className="flex items-center">
-                                            <Download className="mr-2 h-4 w-4" /> Exportar
-                                        </CSVLink>
-                                    </Button>
+                                    <Button variant="outline" size="sm" asChild><CSVLink data={leadsForCSV(leads)} filename={"leads-autenticco.csv"} className="flex items-center"><Download className="mr-2 h-4 w-4" /> Exportar</CSVLink></Button>
                                 </div>
                             </div>
                             <div className="space-y-4">
                                 {leads.map(lead => (
                                     <motion.div key={lead.id} layout className="bg-white rounded-lg p-4 shadow border">
                                         <div className="flex justify-between items-start gap-4">
-                                            <div>
-                                                <p className="font-bold text-lg text-gray-900">{lead.client_name} - <span className="text-yellow-500 text-sm font-normal">{lead.lead_type}</span></p>
-                                                <p className="text-gray-600">{lead.client_contact}</p>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="font-bold text-lg text-gray-900 truncate">{lead.client_name} - <span className="text-yellow-500 text-sm font-normal">{lead.lead_type}</span></p>
+                                                <p className="text-gray-600 truncate">{lead.client_contact}</p>
                                                 {lead.cars && lead.cars.slug && <p className="text-sm mt-2">Interesse: <Link to={`/carro/${lead.cars.slug}`} target="_blank" className="text-blue-600 hover:underline">{lead.cars.brand} {lead.cars.model}</Link></p>}
                                             </div>
-                                            <select value={lead.status} onChange={(e) => handleStatusChange(lead.id, e.target.value)} className="bg-gray-100 border-gray-300 rounded p-2 text-sm flex-shrink-0">
-                                                {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                                            </select>
+                                            <div className="flex items-center gap-1">
+                                                <select value={lead.status} onChange={(e) => handleStatusChange(lead.id, e.target.value)} className="bg-gray-100 border-gray-300 rounded p-2 text-sm flex-shrink-0">
+                                                    {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                                                </select>
+                                                <AlertDialog open={leadToDelete === lead.id} onOpenChange={(isOpen) => !isOpen && setLeadToDelete(null)}>
+                                                    <AlertDialogTrigger asChild>
+                                                        <Button variant="ghost" size="icon" onClick={() => setLeadToDelete(lead.id)}>
+                                                            <Trash2 className="h-5 w-5 text-red-500 hover:text-red-400" />
+                                                        </Button>
+                                                    </AlertDialogTrigger>
+                                                    <AlertDialogContent className="bg-white">
+                                                        <AlertDialogHeader><AlertDialogTitle>Tem certeza?</AlertDialogTitle><AlertDialogDescription>Esta ação removerá o lead permanentemente.</AlertDialogDescription></AlertDialogHeader>
+                                                        <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={handleDeleteLead}>Sim, Excluir</AlertDialogAction></AlertDialogFooter>
+                                                    </AlertDialogContent>
+                                                </AlertDialog>
+                                            </div>
                                         </div>
                                     </motion.div>
                                 ))}
@@ -194,12 +188,7 @@ const AdminDashboard = () => {
                     {activeTab === 'testimonials' && ( <>
                         <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-8 mb-12 shadow-xl border">
                             <h2 className="text-2xl font-semibold mb-6 flex items-center"><PlusCircle className="mr-3 text-yellow-500" /> Adicionar Novo Depoimento</h2>
-                            <form onSubmit={handleAddTestimonial} className="space-y-6">
-                                <input name="client_name" value={newTestimonial.client_name} onChange={handleNewTestimonialInputChange} placeholder="Nome do Cliente *" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none" />
-                                <input name="car_sold" value={newTestimonial.car_sold} onChange={handleNewTestimonialInputChange} placeholder="Carro (Ex: BMW X5 2021)" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none" />
-                                <textarea name="testimonial_text" value={newTestimonial.testimonial_text} onChange={handleNewTestimonialInputChange} placeholder="Texto do depoimento *" rows={4} className="w-full p-3 bg-white border border-gray-300 rounded-lg" />
-                                <Button type="submit" className="w-full bg-yellow-400 text-black hover:bg-yellow-500 font-bold py-3">Salvar Depoimento</Button>
-                            </form>
+                            <form onSubmit={handleAddTestimonial} className="space-y-6"><input name="client_name" value={newTestimonial.client_name} onChange={handleNewTestimonialInputChange} placeholder="Nome do Cliente *" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none" /><input name="car_sold" value={newTestimonial.car_sold} onChange={handleNewTestimonialInputChange} placeholder="Carro (Ex: BMW X5 2021)" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none" /><textarea name="testimonial_text" value={newTestimonial.testimonial_text} onChange={handleNewTestimonialInputChange} placeholder="Texto do depoimento *" rows={4} className="w-full p-3 bg-white border border-gray-300 rounded-lg" /><Button type="submit" className="w-full bg-yellow-400 text-black hover:bg-yellow-500 font-bold py-3">Salvar Depoimento</Button></form>
                         </div>
                         <div>
                             <h2 className="text-2xl font-semibold mb-6 flex items-center"><MessageSquare className="mr-3 text-yellow-500" /> Depoimentos Cadastrados ({testimonials.length})</h2>
@@ -216,7 +205,7 @@ const AdminDashboard = () => {
                         <form onSubmit={handleUpdateCar} className="space-y-4 max-h-[80vh] overflow-y-auto pr-4">
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4"><FormFields carData={editingCar} onChange={handleEditingCarInputChange} carOptions={carOptions} /></div>
                             <div className="space-y-2">
-                                <label className="font-medium">Fotos</label>
+                                <label className="font-medium text-sm text-gray-700">Fotos</label>
                                 <div className="flex flex-wrap gap-4 p-2 bg-gray-100 rounded-lg min-h-[112px]">
                                     {editingCar.photo_urls && editingCar.photo_urls.map((url, index) => ( <div key={url} className="relative"> <img src={url} alt={`Foto ${index + 1}`} className="h-24 w-24 object-cover rounded-md" /> <button type="button" onClick={() => removePhoto(index, true)} className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1"><Trash2 className="h-3 w-3" /></button> </div> ))}
                                     {photosToUpload.map((file, index) => ( <div key={index} className="relative"> <img src={URL.createObjectURL(file)} alt={`Preview ${index}`} className="h-24 w-24 object-cover rounded-lg" /> <button type="button" onClick={() => removePhoto(index)} className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1"><Trash2 className="h-3 w-3" /></button> </div> ))}

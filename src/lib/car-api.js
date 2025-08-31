@@ -64,13 +64,19 @@ export const getLeads = async (filters = {}) => {
     if (filters.status) {
         query = query.eq('status', filters.status);
     }
+    
+    // Lógica de data robusta que respeita o fuso horário
     if (filters.startDate) {
-        query = query.gte('created_at', filters.startDate);
+        // Converte a data de início para o início do dia (00:00:00) no fuso local
+        const startDate = new Date(filters.startDate);
+        startDate.setUTCHours(0, 0, 0, 0); // Usa UTC para consistência
+        query = query.gte('created_at', startDate.toISOString());
     }
     if (filters.endDate) {
+        // Converte a data de fim para o final do dia (23:59:59) no fuso local
         const endDate = new Date(filters.endDate);
-        endDate.setDate(endDate.getDate() + 1);
-        query = query.lt('created_at', endDate.toISOString());
+        endDate.setUTCHours(23, 59, 59, 999); // Usa UTC para consistência
+        query = query.lte('created_at', endDate.toISOString());
     }
 
     const { data, error } = await query;
@@ -80,4 +86,8 @@ export const getLeads = async (filters = {}) => {
 
 export const updateLead = async (id, leadData) => {
     return await supabase.from('leads').update(leadData).eq('id', id);
+};
+
+export const deleteLead = async (id) => {
+    return await supabase.from('leads').delete().eq('id', id);
 };

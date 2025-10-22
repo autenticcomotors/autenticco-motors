@@ -25,10 +25,10 @@ const Home = () => {
   }, []);
 
   const timelineSteps = [
-    { num: 1, title: 'Primeiro Contato', description: 'Você nos conta qual carro deseja comprar ou vender.' },
-    { num: 2, title: 'Nossa Atuação', description: 'Cuidamos de toda a busca, avaliação, fotos e anúncios.' },
-    { num: 3, title: 'Negociação Segura', description: 'Intermediamos o contato e a burocracia com total segurança.' },
-    { num: 4, title: 'Conquista Realizada', description: 'Você fecha o melhor negócio sem sair de casa.' },
+    { num: 1, title: 'Vocẽ envia as informações do seu carro', description: 'Realizamos um estudo de mercado e sugerimos um valor de venda ideal para o anúncio.' },
+    { num: 2, title: 'Iremos até você tirar as fotos e videos do carro', description: 'Anunciamos seu carro em diversas plataformas automiotivas e redes sociais, alcançando um publico amplo e diversificado.' },
+    { num: 3, title: 'Agendamos e acompanhamos as visitas', description: 'Agendamos e acompanhamos as visitas de todos os potencias compradores, garantindo segurança e transparencia na negociação.' },
+    { num: 4, title: 'Auxiliamos na documentação e pronto, seu carro está vendido', description: 'Cuidamos de todo o processo de documentação e pagamento garantindo que tudo seja simples e claro para vocẽ e o comprador.' },
   ];
 
   const TEXT_LIMIT = 20;
@@ -117,8 +117,8 @@ const Home = () => {
         <section className="py-24 bg-gray-50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center">
-              <h2 className="text-3xl md:text-4xl font-extrabold text-gray-900">Como Funciona a Nossa Assessoria</h2>
-              <p className="mt-4 text-lg text-gray-600">Um processo simples e transparente em 4 passos.</p>
+              <h2 className="text-3xl md:text-4xl font-extrabold text-gray-900">Quer vender seu carro ?</h2>
+              <p className="mt-4 text-lg text-gray-600">Venda seu carro sem sair de casa, com comodidade, transparencia e segurança</p>
             </div>
             <div className="mt-16 grid grid-cols-1 md:grid-cols-4 gap-8">
               {timelineSteps.map((step, index) => (

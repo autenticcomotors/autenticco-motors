@@ -27,22 +27,26 @@ const Navbar = () => {
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-black/95 backdrop-blur-sm shadow-lg">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* aumentei a altura da barra (h-24) */}
-        <div className="flex items-center justify-between h-24">
-          {/* logo maior */}
+        {/* altura aumentada para dar mais espaço */}
+        <div className="flex items-center justify-between h-28">
+          {/* logo bem maior */}
           <Link to="/" className="flex-shrink-0 flex items-center gap-3">
-            <img className="h-14 md:h-20 w-auto" src={logo} alt="AutenTicco Motors Logo" />
+            <img
+              className="h-20 md:h-28 lg:h-32 w-auto"
+              src={logo}
+              alt="AutenTicco Motors Logo"
+            />
             {/* título removido conforme pedido */}
           </Link>
 
           <div className="hidden md:flex md:items-center">
-            <div className="flex items-center space-x-6">
+            <div className="flex items-center space-x-8">
                 {navLinks.map((link) => (
                 <NavLink
                     key={link.title}
                     to={link.path}
                     className={({ isActive }) =>
-                    `text-sm font-semibold transition-colors duration-300 ${
+                    `text-base md:text-lg font-semibold transition-colors duration-300 ${
                         isActive ? 'text-yellow-400' : 'text-white hover:text-yellow-300'
                     }`
                     }
@@ -53,42 +57,41 @@ const Navbar = () => {
             </div>
           </div>
 
-          <div className="hidden md:flex items-center gap-6">
+          <div className="hidden md:flex items-center gap-8">
             <Button asChild>
-              {/* Botão verde WhatsApp */}
+              {/* Botão verde WhatsApp (mantido, com padding levemente maior) */}
               <a
                 href={socialLinks.whatsapp}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="bg-[#25D366] text-white font-bold hover:bg-[#1ebe54] transition-transform hover:scale-105 text-sm px-5 py-2.5 flex items-center justify-center rounded-md"
+                className="bg-[#25D366] text-white font-bold hover:bg-[#1ebe54] transition-transform hover:scale-105 text-sm px-6 py-2.5 flex items-center justify-center rounded-md"
                 aria-label="Fale Conosco via WhatsApp"
               >
-                <FaWhatsapp className="w-4 h-4 mr-2" />
+                <FaWhatsapp className="w-5 h-5 mr-2" />
                 <span>Fale Conosco</span>
               </a>
             </Button>
 
-            <div className="flex items-center space-x-4 pl-6 border-l border-gray-700">
-                {/* ícones com cores originais */}
+            <div className="flex items-center space-x-6 pl-6 border-l border-gray-700">
+                {/* ícones com cores originais e tamanho maior */}
                 <a href={socialLinks.instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="transition-transform hover:scale-110">
-                  <FaInstagram size={22} style={{ color: '#E4405F' }} />
+                  <FaInstagram size={26} style={{ color: '#E4405F' }} />
                 </a>
                 <a href={socialLinks.facebook} target="_blank" rel="noopener noreferrer" aria-label="Facebook" className="transition-transform hover:scale-110">
-                  <FaFacebook size={22} style={{ color: '#1877F2' }} />
+                  <FaFacebook size={26} style={{ color: '#1877F2' }} />
                 </a>
                 <a href={socialLinks.youtube} target="_blank" rel="noopener noreferrer" aria-label="YouTube" className="transition-transform hover:scale-110">
-                  <FaYoutube size={22} style={{ color: '#FF0000' }} />
+                  <FaYoutube size={26} style={{ color: '#FF0000' }} />
                 </a>
                 <a href={socialLinks.tiktok} target="_blank" rel="noopener noreferrer" aria-label="TikTok" className="transition-transform hover:scale-110">
-                  {/* TikTok uses cyan/pink/black; choose cyan for visibility */}
-                  <FaTiktok size={22} style={{ color: '#69C9D0' }} />
+                  <FaTiktok size={26} style={{ color: '#69C9D0' }} />
                 </a>
             </div>
           </div>
 
           <div className="md:hidden">
             <button onClick={() => setIsOpen(!isOpen)} aria-label="Abrir menu">
-              {isOpen ? <X className="h-6 w-6 text-white" /> : <Menu className="h-6 w-6 text-white" />}
+              {isOpen ? <X className="h-8 w-8 text-white" /> : <Menu className="h-8 w-8 text-white" />}
             </button>
           </div>
         </div>
@@ -103,21 +106,21 @@ const Navbar = () => {
         >
           <div className="flex flex-col items-center space-y-4">
             {navLinks.map((link) => (
-              <NavLink key={link.title} to={link.path} onClick={() => setIsOpen(false)} className="text-white hover:text-yellow-400 font-medium">
+              <NavLink key={link.title} to={link.path} onClick={() => setIsOpen(false)} className="text-white hover:text-yellow-400 font-medium text-lg">
                 {link.title}
               </NavLink>
             ))}
             <Button asChild>
-              <a href={socialLinks.whatsapp} target="_blank" rel="noopener noreferrer" className="bg-[#25D366] text-white font-bold mt-2 flex items-center justify-center px-5 py-2.5 rounded-md">
-                <FaWhatsapp className="w-4 h-4 mr-2" />
+              <a href={socialLinks.whatsapp} target="_blank" rel="noopener noreferrer" className="bg-[#25D366] text-white font-bold mt-2 flex items-center justify-center px-6 py-2.5 rounded-md">
+                <FaWhatsapp className="w-5 h-5 mr-2" />
                 <span>Fale Conosco</span>
               </a>
             </Button>
             <div className="flex items-center space-x-6 pt-4">
-                <a href={socialLinks.instagram} target="_blank" rel="noopener noreferrer" className="transition-transform hover:scale-110"><FaInstagram size={24} style={{ color: '#E4405F' }} /></a>
-                <a href={socialLinks.facebook} target="_blank" rel="noopener noreferrer" className="transition-transform hover:scale-110"><FaFacebook size={24} style={{ color: '#1877F2' }} /></a>
-                <a href={socialLinks.youtube} target="_blank" rel="noopener noreferrer" className="transition-transform hover:scale-110"><FaYoutube size={24} style={{ color: '#FF0000' }} /></a>
-                <a href={socialLinks.tiktok} target="_blank" rel="noopener noreferrer" className="transition-transform hover:scale-110"><FaTiktok size={24} style={{ color: '#69C9D0' }} /></a>
+                <a href={socialLinks.instagram} target="_blank" rel="noopener noreferrer" className="transition-transform hover:scale-110"><FaInstagram size={28} style={{ color: '#E4405F' }} /></a>
+                <a href={socialLinks.facebook} target="_blank" rel="noopener noreferrer" className="transition-transform hover:scale-110"><FaFacebook size={28} style={{ color: '#1877F2' }} /></a>
+                <a href={socialLinks.youtube} target="_blank" rel="noopener noreferrer" className="transition-transform hover:scale-110"><FaYoutube size={28} style={{ color: '#FF0000' }} /></a>
+                <a href={socialLinks.tiktok} target="_blank" rel="noopener noreferrer" className="transition-transform hover:scale-110"><FaTiktok size={28} style={{ color: '#69C9D0' }} /></a>
             </div>
           </div>
         </motion.div>

@@ -46,33 +46,38 @@ const Home = () => {
       <div className="bg-white">
         <BackgroundShape />
 
-        {/* =========================
-            HERO: mais largo, fundo sem blur (imagem em alta resolução),
-            overlay leve apenas para contraste, texto com pontos finais.
-            ========================= */}
+        {/* HERO atualizado: background-image CSS + overlay leve + texto com shadow */}
         <section
           className="relative flex items-center justify-center text-left text-white overflow-hidden"
           style={{ height: '75vh' }}
         >
-          {/* fundo (imagem em alta-res; sem blur aplicado na imagem) */}
-          <div className="absolute inset-0 z-0">
-            <img src={heroBackground} alt="Fundo hero" className="w-full h-full object-cover" />
-            {/* overlay leve para contraste (quase transparente) */}
-            <div className="absolute inset-0 bg-black/10" />
-          </div>
+          {/* fundo via CSS background (cobre todo o hero e escala corretamente) */}
+          <div
+            className="absolute inset-0 z-0 bg-center bg-no-repeat bg-cover"
+            style={{
+              backgroundImage: `url(${heroBackground})`,
+              backgroundPosition: 'center right', // ajusta onde a imagem "foca"
+              backgroundSize: 'cover',
+              // backgroundAttachment: 'scroll' // scroll é padrão; evita 'fixed'
+            }}
+          />
+          {/* overlay leve para contraste */}
+          <div className="absolute inset-0 z-5 bg-black/6" />
 
-          {/* conteúdo (z-10) - container mais largo: max-w-8xl */}
+          {/* conteúdo (z-10) */}
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8 }}
             className="relative z-10 w-full px-6 sm:px-8 lg:px-12"
           >
-            {/* centraliza e aumenta largura disponível (max-w-8xl) */}
             <div className="mx-auto max-w-8xl flex items-center justify-between h-full">
-              {/* texto à esquerda: md:w-7/12 ocupa mais espaço; padding-left empurra o conteúdo para a direita dentro do bloco */}
+              {/* bloco esquerdo deslocado para a direita dentro do seu espaço (pl aumenta) */}
               <div className="w-full md:w-7/12 flex flex-col justify-center py-12 pl-8 md:pl-16 lg:pl-24">
-                <h2 className="text-3xl md:text-4xl lg:text-5xl font-extrabold leading-tight text-white">
+                <h2
+                  className="text-3xl md:text-4xl lg:text-5xl font-extrabold leading-tight text-white"
+                  style={{ textShadow: '0 2px 8px rgba(0,0,0,0.45)' }}
+                >
                   <span className="block">Venda com segurança.</span>
                   <span className="block text-yellow-400">Compre com confiança.</span>
                 </h2>
@@ -100,14 +105,14 @@ const Home = () => {
                 </div>
               </div>
 
-              {/* espaço direito mantido apenas para equilíbrio visual (imagem background mostra o carro) */}
+              {/* espaço direito (imagem já está no background) */}
               <div className="hidden md:block md:w-5/12 h-full" />
             </div>
           </motion.div>
         </section>
 
         {/* =========================
-            RESTANTE DA PÁGINA (mantive seu conteúdo original)
+            RESTANTE DA PÁGINA (seu conteúdo original abaixo)
             ========================= */}
         <section className="py-24 bg-gray-50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

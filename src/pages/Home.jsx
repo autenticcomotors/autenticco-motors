@@ -3,12 +3,11 @@ import { Helmet } from 'react-helmet';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { Star, ArrowRight } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import heroBackground from '@/assets/ponte.jpg'; // já apontando para a ponte (alta-res)
 import { getFeaturedCars, getTestimonials } from '@/lib/car-api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import ReactMarkdown from 'react-markdown';
 import BackgroundShape from '@/components/BackgroundShape';
+import heroBackground from '@/assets/ponte.jpg'; // já apontando para a ponte (alta-res)
 
 const Home = () => {
   const [featuredCars, setFeaturedCars] = useState([]);
@@ -46,12 +45,12 @@ const Home = () => {
       <div className="bg-white">
         <BackgroundShape />
 
-        {/* HERO: imagem via <img> (escala com zoom do navegador) + card semi-transparente atrás do texto */}
+        {/* HERO: imagem via <img> (acompanha zoom) + card */}
         <section
           className="relative flex items-center justify-center text-left text-white overflow-hidden"
           style={{ height: '75vh' }}
         >
-          {/* imagem como elemento normal para acompanhar zoom */}
+          {/* imagem como elemento normal para acompanhar zoom do navegador */}
           <div className="absolute inset-0 z-0">
             <img
               src={heroBackground}
@@ -59,8 +58,8 @@ const Home = () => {
               className="w-full h-full object-cover"
               style={{ display: 'block' }}
             />
-            {/* overlay bem leve - imagem quase visível */}
-            <div className="absolute inset-0 bg-black/8" />
+            {/* overlay leve: pouca opacidade (imagem quase visível) */}
+            <div className="absolute inset-0 bg-black/10" />
           </div>
 
           {/* conteúdo */}
@@ -71,62 +70,59 @@ const Home = () => {
             className="relative z-10 w-full px-6 sm:px-8 lg:px-12"
           >
             <div className="mx-auto max-w-8xl flex items-center justify-between h-full">
-              {/* bloco esquerdo mais fino para não sobrepor o carro */}
+              {/* bloco esquerdo (ocupa ~40-45% para evitar sobrepor o carro) */}
               <div className="w-full md:w-5/12 flex flex-col justify-center py-12 pl-6 md:pl-12 lg:pl-20">
-                {/* card mais "quadrado" e menor (evita cobrir o carro) */}
+                {/* card quadrado/compacto */}
                 <div
                   className="rounded-2xl p-6 md:p-8"
                   style={{
                     background: 'linear-gradient(rgba(3,3,3,0.48), rgba(3,3,3,0.44))',
                     backdropFilter: 'saturate(120%) blur(2px)',
                     border: '1px solid rgba(255,255,255,0.04)',
-                    boxShadow: '0 8px 30px rgba(0,0,0,0.45)',
-                    maxWidth: '520px',            // mais quadrado / menor largura
+                    boxShadow: '0 12px 40px rgba(0,0,0,0.45)',
+                    maxWidth: '520px',
                     width: '100%',
                   }}
                 >
+                  {/* título com sombra leve para melhor leitura */}
                   <h2
-                    className="text-3xl md:text-4xl lg:text-5xl font-extrabold leading-tight text-white"
-                    style={{ textShadow: '0 6px 24px rgba(0,0,0,0.45)' }}
+                    className="text-3xl md:text-4xl lg:text-4xl font-extrabold leading-tight"
+                    style={{ color: '#fff', textShadow: '0 6px 18px rgba(0,0,0,0.45)' }}
                   >
                     <span className="block">Venda com segurança.</span>
-                    <span className="block text-yellow-400">Compre com confiança.</span>
+                    <span className="block" style={{ color: '#F7C93C' }}>Compre com confiança.</span>
                   </h2>
 
-                  <p className="mt-4 text-sm md:text-lg text-gray-200 max-w-2xl">
+                  <p className="mt-4 text-sm md:text-base text-gray-200 max-w-2xl">
                     Assessoria completa, negociação transparente e garantia de melhor valor.
                   </p>
 
+                  {/* botões: primeiro amarelo, segundo preto com borda amarela */}
                   <div className="mt-6 flex flex-col sm:flex-row gap-4">
-                    {/* Botões maiores, cantos arredondados e sombra 3D */}
-                    <Button
-                      asChild
-                      size="lg"
-                      className="px-8 py-4 rounded-xl text-lg font-bold shadow-2xl transform transition-all duration-200 hover:-translate-y-1"
+                    <Link
+                      to="/estoque"
+                      className="inline-block bg-yellow-400 text-black px-6 py-3 rounded-xl text-lg font-semibold shadow-2xl transform transition-all duration-200 hover:-translate-y-1"
                     >
-                      <Link to="/estoque" className="inline-block bg-yellow-400 text-black px-6 py-2 rounded-xl">Quero Comprar</Link>
-                    </Button>
+                      Quero Comprar
+                    </Link>
 
-                    <Button
-                      asChild
-                      size="lg"
-                      className="px-8 py-4 rounded-xl text-lg font-bold shadow-lg transform transition-all duration-200 hover:-translate-y-1"
+                    <Link
+                      to="/vender"
+                      className="inline-block bg-black text-yellow-400 px-6 py-3 rounded-xl text-lg font-semibold shadow-md border-2 border-yellow-400 transition-all duration-200 hover:bg-yellow-400 hover:text-black"
                     >
-                      <Link to="/vender" className="inline-block bg-black text-yellow-400 px-6 py-2 rounded-xl border border-transparent">Quero Vender</Link>
-                    </Button>
+                      Quero Vender
+                    </Link>
                   </div>
                 </div>
               </div>
 
-              {/* espaço direito maior (imagem já ocupa o fundo) */}
+              {/* espaço direito maior (imagem ocupa o fundo) */}
               <div className="hidden md:block md:w-7/12 h-full" />
             </div>
           </motion.div>
         </section>
 
-        {/* =========================
-            RESTANTE DA PÁGINA (mantive seu conteúdo original)
-            ========================= */}
+        {/* ========================= RESTANTE DA PÁGINA ========================= */}
         <section className="py-24 bg-gray-50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center">
@@ -228,12 +224,8 @@ const Home = () => {
             <h2 className="text-3xl md:text-4xl font-extrabold">Pronto para dar o próximo passo?</h2>
             <p className="mt-4 text-lg text-gray-300">Seja para comprar ou vender, a experiência AutenTicco está a um clique de distância.</p>
             <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center">
-              <Button asChild size="lg" className="bg-yellow-400 text-black font-bold text-lg px-8 py-6 hover:bg-yellow-500 transition-transform hover:scale-105">
-                <Link to="/estoque">Quero Comprar</Link>
-              </Button>
-              <Button asChild size="lg" className="bg-black border-2 border-yellow-400 text-yellow-400 font-bold text-lg px-8 py-6 hover:bg-yellow-400 hover:text-black transition-transform hover:scale-105">
-                <Link to="/vender">Quero Vender</Link>
-              </Button>
+              <Link to="/estoque" className="bg-yellow-400 text-black font-bold text-lg px-8 py-6 rounded-md hover:bg-yellow-500 transition-transform hover:scale-105">Quero Comprar</Link>
+              <Link to="/vender" className="bg-black border-2 border-yellow-400 text-yellow-400 font-bold text-lg px-8 py-6 rounded-md hover:bg-yellow-400 hover:text-black transition-transform hover:scale-105">Quero Vender</Link>
             </div>
           </div>
         </section>

@@ -59,8 +59,8 @@ const Home = () => {
               className="w-full h-full object-cover"
               style={{ display: 'block' }}
             />
-            {/* overlay leve (quase visível) - sem blur pesado */}
-            <div className="absolute inset-0 bg-black/10" />
+            {/* overlay bem leve - imagem quase visível */}
+            <div className="absolute inset-0 bg-black/8" />
           </div>
 
           {/* conteúdo */}
@@ -71,21 +71,23 @@ const Home = () => {
             className="relative z-10 w-full px-6 sm:px-8 lg:px-12"
           >
             <div className="mx-auto max-w-8xl flex items-center justify-between h-full">
-              {/* bloco esquerdo (ocupando ~7/12) deslocado para direita no seu espaço */}
-              <div className="w-full md:w-7/12 flex flex-col justify-center py-12 pl-6 md:pl-16 lg:pl-24">
-                {/* card semi-transparente por trás do texto para leitura */}
+              {/* bloco esquerdo mais fino para não sobrepor o carro */}
+              <div className="w-full md:w-5/12 flex flex-col justify-center py-12 pl-6 md:pl-12 lg:pl-20">
+                {/* card mais "quadrado" e menor (evita cobrir o carro) */}
                 <div
                   className="rounded-2xl p-6 md:p-8"
                   style={{
-                    background: 'rgba(0,0,0,0.46)', // preta semi-transparente (boa leitura)
+                    background: 'linear-gradient(rgba(3,3,3,0.48), rgba(3,3,3,0.44))',
                     backdropFilter: 'saturate(120%) blur(2px)',
                     border: '1px solid rgba(255,255,255,0.04)',
-                    maxWidth: '860px',
+                    boxShadow: '0 8px 30px rgba(0,0,0,0.45)',
+                    maxWidth: '520px',            // mais quadrado / menor largura
+                    width: '100%',
                   }}
                 >
                   <h2
                     className="text-3xl md:text-4xl lg:text-5xl font-extrabold leading-tight text-white"
-                    style={{ textShadow: '0 2px 8px rgba(0,0,0,0.45)' }}
+                    style={{ textShadow: '0 6px 24px rgba(0,0,0,0.45)' }}
                   >
                     <span className="block">Venda com segurança.</span>
                     <span className="block text-yellow-400">Compre com confiança.</span>
@@ -96,27 +98,28 @@ const Home = () => {
                   </p>
 
                   <div className="mt-6 flex flex-col sm:flex-row gap-4">
+                    {/* Botões maiores, cantos arredondados e sombra 3D */}
                     <Button
                       asChild
                       size="lg"
-                      className="bg-yellow-400 text-black font-bold text-lg px-6 py-3 hover:bg-yellow-500 transition-transform hover:scale-105"
+                      className="px-8 py-4 rounded-xl text-lg font-bold shadow-2xl transform transition-all duration-200 hover:-translate-y-1"
                     >
-                      <Link to="/estoque">Quero Comprar</Link>
+                      <Link to="/estoque" className="inline-block bg-yellow-400 text-black px-6 py-2 rounded-xl">Quero Comprar</Link>
                     </Button>
 
                     <Button
                       asChild
                       size="lg"
-                      className="bg-black text-yellow-400 font-bold text-lg px-6 py-3 hover:bg-gray-800 transition-transform hover:scale-105"
+                      className="px-8 py-4 rounded-xl text-lg font-bold shadow-lg transform transition-all duration-200 hover:-translate-y-1"
                     >
-                      <Link to="/vender">Quero Vender</Link>
+                      <Link to="/vender" className="inline-block bg-black text-yellow-400 px-6 py-2 rounded-xl border border-transparent">Quero Vender</Link>
                     </Button>
                   </div>
                 </div>
               </div>
 
-              {/* espaço direito (vazio - apenas para equilíbrio, imagem já ocupa o fundo) */}
-              <div className="hidden md:block md:w-5/12 h-full" />
+              {/* espaço direito maior (imagem já ocupa o fundo) */}
+              <div className="hidden md:block md:w-7/12 h-full" />
             </div>
           </motion.div>
         </section>

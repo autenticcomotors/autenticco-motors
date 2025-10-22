@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { supabase } from '@/lib/supabase'; // Importação corrigida
+import { supabase } from '@/lib/supabase'; // Importação correta
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
 import { FaUser, FaLock } from 'react-icons/fa';
+import logo from '@/assets/logo.png'; // <-- usa logo local (mesma import do Home)
 
 const AdminLogin = () => {
   const [email, setEmail] = useState('');
@@ -60,10 +61,15 @@ const AdminLogin = () => {
           transition={{ duration: 0.5 }}
           className="glass-effect rounded-2xl p-8 max-w-sm w-full text-center"
         >
-          <img 
-            src="https://horizons-cdn.hostinger.com/658e15d6-90a3-489b-9359-6db98ae64202/c41758bb4f122fc5c7f566d37de84f3e.png" 
-            alt="AutenTicco Motors Logo" 
+          <img
+            src={logo}
+            alt="AutenTicco Motors Logo"
             className="h-24 w-auto mx-auto mb-6"
+            onError={(e) => {
+              // fallback: oculta a imagem se não carregar pra não mostrar ícone quebrado
+              e.currentTarget.style.display = 'none';
+              e.currentTarget.onerror = null;
+            }}
           />
           <h1 className="text-2xl font-bold mb-8">Login Admin</h1>
           <form onSubmit={handleLogin} className="space-y-6">
@@ -104,3 +110,4 @@ const AdminLogin = () => {
 };
 
 export default AdminLogin;
+

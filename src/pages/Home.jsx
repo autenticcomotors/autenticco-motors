@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { Star, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import heroBackground from '@/assets/ponte.jpg'; // troque aqui para a imagem da ponte quando quiser (ex: '@/assets/ponte.jpg')
+import heroBackground from '@/assets/familia-conquista.jpg'; // troque aqui para a imagem da ponte quando quiser (ex: '@/assets/ponte.jpg')
 import { getFeaturedCars, getTestimonials } from '@/lib/car-api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import ReactMarkdown from 'react-markdown';
@@ -47,7 +47,7 @@ const Home = () => {
         <BackgroundShape />
 
         {/* =========================
-            HERO (texto à esquerda, fundo com overlay)
+            HERO (texto à esquerda, fundo mais visível)
             ========================= */}
         <section
           className="relative flex items-center justify-center text-left text-white overflow-hidden"
@@ -56,26 +56,27 @@ const Home = () => {
           {/* fundo */}
           <div className="absolute inset-0 z-0">
             <img src={heroBackground} alt="Fundo hero" className="w-full h-full object-cover" />
-            <div className="absolute inset-0 bg-black/45 backdrop-blur-sm" />
+            {/* overlay bem leve para deixar a imagem quase visível */}
+            <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" />
           </div>
 
           {/* conteúdo textual */}
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8 }}
+            transition={{ duration: 0.9 }}
             className="relative z-10 max-w-7xl w-full px-4 sm:px-6 lg:px-8"
           >
             <div className="mx-auto flex items-center justify-between h-full">
               {/* texto à esquerda */}
               <div className="w-full md:w-1/2 flex flex-col justify-center py-12">
                 <h2 className="text-3xl md:text-4xl lg:text-5xl font-extrabold leading-tight text-white">
-                  <span className="block">Venda com segurança,</span>
-                  <span className="block">compre com confiança</span>
+                  <span className="block">Venda com segurança,.</span>
+                  <span className="block text-yellow-400">compre com confiança.</span>
                 </h2>
 
                 <p className="mt-4 text-sm md:text-lg text-gray-200 max-w-xl">
-                  Assessoria completa, negociação transparente e garantia de melhor valor
+                  Assessoria completa, negociação transparente e garantia de melhor valor.
                 </p>
 
                 <div className="mt-8 flex flex-col sm:flex-row gap-4">

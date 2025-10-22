@@ -110,9 +110,14 @@ const SellCar = () => {
                     <h1 className="text-4xl md:text-6xl font-extrabold text-gray-900 tracking-tight">
                         Venda seu carro com <span className="text-yellow-500">segurança e sem esforço</span>
                     </h1>
-                    <p className="mt-6 text-lg text-gray-600 max-w-3xl mx-auto">
-                        Cuidamos de tudo para você, da avaliação profissional à documentação. Preencha o formulário e receba uma proposta.
-                    </p>
+
+                    {/* === ALTERAÇÃO AQUI: wrapper flex para alinhar a segunda linha embaixo === */}
+                    <div className="mt-6 text-lg text-gray-600 max-w-3xl mx-auto h-16 md:h-20 lg:h-24 flex flex-col justify-end">
+                        <span className="block">Cuidamos de tudo para você, da avaliação profissional à documentação.</span>
+                        <span className="block mt-1">Preencha o formulário e receba uma proposta.</span>
+                    </div>
+                    {/* ================================================================ */}
+
                 </motion.div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-start">
@@ -200,3 +205,4 @@ const SellCar = () => {
 };
 
 export default SellCar;
+

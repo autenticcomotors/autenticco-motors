@@ -30,20 +30,13 @@ const Navbar = () => {
         {/* altura menor (h-24) conforme pedido */}
         <div className="flex items-center justify-between h-24">
           {/* logo maior via scale-110 (mantém responsividade e aumenta 10%) */}
-<Link to="/" className="flex-shrink-0 flex items-center h-24">
-  <div className="h-full flex items-center">
-    <img
-      src={logo}
-      alt="AutenTicco Motors Logo"
-      className="h-20 md:h-24 lg:h-28 w-auto mx-auto"
-      style={{ transform: 'translateY(6px) scale(1.10)' }} // ajuste o 6px até ficar perfeito
-      onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.onerror = null; }}
-    />
-  </div>
-</Link>
-
-
-
+          <Link to="/" className="flex-shrink-0 flex items-center gap-3">
+            <img
+              className="h-20 md:h-28 lg:h-32 w-auto transform scale-110"
+              src={logo}
+              alt="AutenTicco Motors Logo"
+            />
+          </Link>
 
           <div className="hidden md:flex md:items-center">
             <div className="flex items-center space-x-8">

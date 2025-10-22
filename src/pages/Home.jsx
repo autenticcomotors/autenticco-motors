@@ -70,8 +70,8 @@ const Home = () => {
           >
             {/* centraliza e aumenta largura disponível (max-w-8xl) */}
             <div className="mx-auto max-w-8xl flex items-center justify-between h-full">
-              {/* texto à esquerda: deixei md:w-7/12 para ocupar mais largura do "card" */}
-              <div className="w-full md:w-7/12 flex flex-col justify-center py-12">
+              {/* texto à esquerda: md:w-7/12 ocupa mais espaço; padding-left empurra o conteúdo para a direita dentro do bloco */}
+              <div className="w-full md:w-7/12 flex flex-col justify-center py-12 pl-8 md:pl-16 lg:pl-24">
                 <h2 className="text-3xl md:text-4xl lg:text-5xl font-extrabold leading-tight text-white">
                   <span className="block">Venda com segurança.</span>
                   <span className="block text-yellow-400">Compre com confiança.</span>

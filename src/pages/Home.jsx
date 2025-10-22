@@ -46,25 +46,24 @@ const Home = () => {
       <div className="bg-white">
         <BackgroundShape />
 
-        {/* HERO atualizado: background-image CSS + overlay leve + texto com shadow */}
+        {/* HERO: imagem via <img> (escala com zoom do navegador) + card semi-transparente atrás do texto */}
         <section
           className="relative flex items-center justify-center text-left text-white overflow-hidden"
           style={{ height: '75vh' }}
         >
-          {/* fundo via CSS background (cobre todo o hero e escala corretamente) */}
-          <div
-            className="absolute inset-0 z-0 bg-center bg-no-repeat bg-cover"
-            style={{
-              backgroundImage: `url(${heroBackground})`,
-              backgroundPosition: 'center right', // ajusta onde a imagem "foca"
-              backgroundSize: 'cover',
-              // backgroundAttachment: 'scroll' // scroll é padrão; evita 'fixed'
-            }}
-          />
-          {/* overlay leve para contraste */}
-          <div className="absolute inset-0 z-5 bg-black/6" />
+          {/* imagem como elemento normal para acompanhar zoom */}
+          <div className="absolute inset-0 z-0">
+            <img
+              src={heroBackground}
+              alt="Fundo hero"
+              className="w-full h-full object-cover"
+              style={{ display: 'block' }}
+            />
+            {/* overlay leve (quase visível) - sem blur pesado */}
+            <div className="absolute inset-0 bg-black/10" />
+          </div>
 
-          {/* conteúdo (z-10) */}
+          {/* conteúdo */}
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -72,47 +71,58 @@ const Home = () => {
             className="relative z-10 w-full px-6 sm:px-8 lg:px-12"
           >
             <div className="mx-auto max-w-8xl flex items-center justify-between h-full">
-              {/* bloco esquerdo deslocado para a direita dentro do seu espaço (pl aumenta) */}
-              <div className="w-full md:w-7/12 flex flex-col justify-center py-12 pl-8 md:pl-16 lg:pl-24">
-                <h2
-                  className="text-3xl md:text-4xl lg:text-5xl font-extrabold leading-tight text-white"
-                  style={{ textShadow: '0 2px 8px rgba(0,0,0,0.45)' }}
+              {/* bloco esquerdo (ocupando ~7/12) deslocado para direita no seu espaço */}
+              <div className="w-full md:w-7/12 flex flex-col justify-center py-12 pl-6 md:pl-16 lg:pl-24">
+                {/* card semi-transparente por trás do texto para leitura */}
+                <div
+                  className="rounded-2xl p-6 md:p-8"
+                  style={{
+                    background: 'rgba(0,0,0,0.46)', // preta semi-transparente (boa leitura)
+                    backdropFilter: 'saturate(120%) blur(2px)',
+                    border: '1px solid rgba(255,255,255,0.04)',
+                    maxWidth: '860px',
+                  }}
                 >
-                  <span className="block">Venda com segurança.</span>
-                  <span className="block text-yellow-400">Compre com confiança.</span>
-                </h2>
-
-                <p className="mt-4 text-sm md:text-lg text-gray-100 max-w-2xl">
-                  Assessoria completa, negociação transparente e garantia de melhor valor.
-                </p>
-
-                <div className="mt-8 flex flex-col sm:flex-row gap-4">
-                  <Button
-                    asChild
-                    size="lg"
-                    className="bg-yellow-400 text-black font-bold text-lg px-6 py-3 hover:bg-yellow-500 transition-transform hover:scale-105"
+                  <h2
+                    className="text-3xl md:text-4xl lg:text-5xl font-extrabold leading-tight text-white"
+                    style={{ textShadow: '0 2px 8px rgba(0,0,0,0.45)' }}
                   >
-                    <Link to="/estoque">Quero Comprar</Link>
-                  </Button>
+                    <span className="block">Venda com segurança.</span>
+                    <span className="block text-yellow-400">Compre com confiança.</span>
+                  </h2>
 
-                  <Button
-                    asChild
-                    size="lg"
-                    className="bg-black text-yellow-400 font-bold text-lg px-6 py-3 hover:bg-gray-800 transition-transform hover:scale-105"
-                  >
-                    <Link to="/vender">Quero Vender</Link>
-                  </Button>
+                  <p className="mt-4 text-sm md:text-lg text-gray-200 max-w-2xl">
+                    Assessoria completa, negociação transparente e garantia de melhor valor.
+                  </p>
+
+                  <div className="mt-6 flex flex-col sm:flex-row gap-4">
+                    <Button
+                      asChild
+                      size="lg"
+                      className="bg-yellow-400 text-black font-bold text-lg px-6 py-3 hover:bg-yellow-500 transition-transform hover:scale-105"
+                    >
+                      <Link to="/estoque">Quero Comprar</Link>
+                    </Button>
+
+                    <Button
+                      asChild
+                      size="lg"
+                      className="bg-black text-yellow-400 font-bold text-lg px-6 py-3 hover:bg-gray-800 transition-transform hover:scale-105"
+                    >
+                      <Link to="/vender">Quero Vender</Link>
+                    </Button>
+                  </div>
                 </div>
               </div>
 
-              {/* espaço direito (imagem já está no background) */}
+              {/* espaço direito (vazio - apenas para equilíbrio, imagem já ocupa o fundo) */}
               <div className="hidden md:block md:w-5/12 h-full" />
             </div>
           </motion.div>
         </section>
 
         {/* =========================
-            RESTANTE DA PÁGINA (seu conteúdo original abaixo)
+            RESTANTE DA PÁGINA (mantive seu conteúdo original)
             ========================= */}
         <section className="py-24 bg-gray-50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

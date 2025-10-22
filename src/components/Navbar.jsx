@@ -27,15 +27,19 @@ const Navbar = () => {
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-black/95 backdrop-blur-sm shadow-lg">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* altura menor (h-24) conforme pedido */}
+        {/* barra com altura h-24 */}
         <div className="flex items-center justify-between h-24">
-          {/* logo maior via scale-110 (mantém responsividade e aumenta 10%) */}
-          <Link to="/" className="flex-shrink-0 flex items-center gap-3">
-            <img
-              className="h-20 md:h-28 lg:h-32 w-auto transform scale-110"
-              src={logo}
-              alt="AutenTicco Motors Logo"
-            />
+          {/* wrapper que garante centralização vertical dentro da barra */}
+          <Link to="/" className="flex-shrink-0 flex items-center h-full">
+            <div className="h-full flex items-center">
+              {/* LOGO: menor e centralizado */}
+              <img
+                src={logo}
+                alt="AutenTicco Motors Logo"
+                className="h-16 md:h-20 lg:h-24 w-auto mx-auto"
+                onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.onerror = null; }}
+              />
+            </div>
           </Link>
 
           <div className="hidden md:flex md:items-center">
@@ -58,7 +62,7 @@ const Navbar = () => {
 
           <div className="hidden md:flex items-center gap-8">
             <Button asChild>
-              {/* Botão verde WhatsApp (mantido) */}
+              {/* Botão verde WhatsApp */}
               <a
                 href={socialLinks.whatsapp}
                 target="_blank"
@@ -72,7 +76,6 @@ const Navbar = () => {
             </Button>
 
             <div className="flex items-center space-x-6 pl-6 border-l border-gray-700">
-                {/* ícones com cores originais e tamanho mantido */}
                 <a href={socialLinks.instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="transition-transform hover:scale-110">
                   <FaInstagram size={26} style={{ color: '#E4405F' }} />
                 </a>

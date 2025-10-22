@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { Star, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import heroBackground from '@/assets/familia-conquista.jpg'; // troque aqui para a imagem da ponte quando quiser (ex: '@/assets/ponte.jpg')
+import heroBackground from '@/assets/ponte.jpg'; // troque aqui para a imagem da ponte quando quiser (ex: '@/assets/ponte.jpg')
 import { getFeaturedCars, getTestimonials } from '@/lib/car-api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import ReactMarkdown from 'react-markdown';
@@ -71,8 +71,8 @@ const Home = () => {
               {/* texto à esquerda */}
               <div className="w-full md:w-1/2 flex flex-col justify-center py-12">
                 <h2 className="text-3xl md:text-4xl lg:text-5xl font-extrabold leading-tight text-white">
-                  <span className="block">Venda com segurança,.</span>
-                  <span className="block text-yellow-400">compre com confiança.</span>
+                  <span className="block">Venda com segurança.</span>
+                  <span className="block text-yellow-400">Compre com confiança.</span>
                 </h2>
 
                 <p className="mt-4 text-sm md:text-lg text-gray-200 max-w-xl">

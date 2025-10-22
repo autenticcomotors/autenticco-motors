@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { Star, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import heroBackground from '@/assets/ponte.jpg'; // troque aqui para a imagem da ponte quando quiser (ex: '@/assets/ponte.jpg')
+import heroBackground from '@/assets/ponte.jpg'; // já apontando para a ponte (alta-res)
 import { getFeaturedCars, getTestimonials } from '@/lib/car-api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import ReactMarkdown from 'react-markdown';
@@ -47,35 +47,37 @@ const Home = () => {
         <BackgroundShape />
 
         {/* =========================
-            HERO (texto à esquerda, fundo mais visível)
+            HERO: mais largo, fundo sem blur (imagem em alta resolução),
+            overlay leve apenas para contraste, texto com pontos finais.
             ========================= */}
         <section
           className="relative flex items-center justify-center text-left text-white overflow-hidden"
           style={{ height: '75vh' }}
         >
-          {/* fundo */}
+          {/* fundo (imagem em alta-res; sem blur aplicado na imagem) */}
           <div className="absolute inset-0 z-0">
             <img src={heroBackground} alt="Fundo hero" className="w-full h-full object-cover" />
-            {/* overlay bem leve para deixar a imagem quase visível */}
-            <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" />
+            {/* overlay leve para contraste (quase transparente) */}
+            <div className="absolute inset-0 bg-black/10" />
           </div>
 
-          {/* conteúdo textual */}
+          {/* conteúdo (z-10) - container mais largo: max-w-8xl */}
           <motion.div
-            initial={{ opacity: 0, y: 12 }}
+            initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.9 }}
-            className="relative z-10 max-w-7xl w-full px-4 sm:px-6 lg:px-8"
+            transition={{ duration: 0.8 }}
+            className="relative z-10 w-full px-6 sm:px-8 lg:px-12"
           >
-            <div className="mx-auto flex items-center justify-between h-full">
-              {/* texto à esquerda */}
-              <div className="w-full md:w-1/2 flex flex-col justify-center py-12">
+            {/* centraliza e aumenta largura disponível (max-w-8xl) */}
+            <div className="mx-auto max-w-8xl flex items-center justify-between h-full">
+              {/* texto à esquerda: deixei md:w-7/12 para ocupar mais largura do "card" */}
+              <div className="w-full md:w-7/12 flex flex-col justify-center py-12">
                 <h2 className="text-3xl md:text-4xl lg:text-5xl font-extrabold leading-tight text-white">
                   <span className="block">Venda com segurança.</span>
                   <span className="block text-yellow-400">Compre com confiança.</span>
                 </h2>
 
-                <p className="mt-4 text-sm md:text-lg text-gray-200 max-w-xl">
+                <p className="mt-4 text-sm md:text-lg text-gray-100 max-w-2xl">
                   Assessoria completa, negociação transparente e garantia de melhor valor.
                 </p>
 
@@ -98,8 +100,8 @@ const Home = () => {
                 </div>
               </div>
 
-              {/* espaço reservado à direita (vazio) */}
-              <div className="hidden md:block w-1/2 h-full" />
+              {/* espaço direito mantido apenas para equilíbrio visual (imagem background mostra o carro) */}
+              <div className="hidden md:block md:w-5/12 h-full" />
             </div>
           </motion.div>
         </section>

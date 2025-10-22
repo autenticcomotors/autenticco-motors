@@ -1,3 +1,4 @@
+// src/pages/Stock.jsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { Helmet } from 'react-helmet';
 import { Link } from 'react-router-dom';
@@ -18,26 +19,38 @@ const Stock = () => {
 
     useEffect(() => {
         const fetchCars = async () => {
-            setLoading(true);
-            const carsData = await getCars();
-            setAllCars(carsData);
-            setFilteredCars(carsData);
-            setLoading(false);
+            try {
+                setLoading(true);
+                const carsData = await getCars();
+                // defensive: garante array
+                const safeCars = Array.isArray(carsData) ? carsData : [];
+                setAllCars(safeCars);
+                setFilteredCars(safeCars);
+            } catch (err) {
+                console.error('Erro ao buscar carros:', err);
+                setAllCars([]);
+                setFilteredCars([]);
+            } finally {
+                setLoading(false);
+            }
         };
         fetchCars();
     }, []);
 
     const filterOptions = useMemo(() => {
-        const years = [...new Set(allCars.map(car => car.year))].sort((a, b) => b - a);
-        const fuels = [...new Set(allCars.map(car => car.fuel).filter(Boolean))];
-        const colors = [...new Set(allCars.map(car => car.color).filter(Boolean))];
-        const transmissions = [...new Set(allCars.map(car => car.transmission).filter(Boolean))];
-        const bodyTypes = [...new Set(allCars.map(car => car.body_type).filter(Boolean))];
+        // use sempre um array seguro para evitar .map em null
+        const safeCars = Array.isArray(allCars) ? allCars : [];
+        const years = [...new Set(safeCars.map(car => car.year))].sort((a, b) => b - a);
+        const fuels = [...new Set(safeCars.map(car => car.fuel).filter(Boolean))];
+        const colors = [...new Set(safeCars.map(car => car.color).filter(Boolean))];
+        const transmissions = [...new Set(safeCars.map(car => car.transmission).filter(Boolean))];
+        const bodyTypes = [...new Set(safeCars.map(car => car.body_type).filter(Boolean))];
         return { years, fuels, colors, transmissions, bodyTypes };
     }, [allCars]);
 
     useEffect(() => {
-        let carsToFilter = [...allCars];
+        const safeAll = Array.isArray(allCars) ? allCars : [];
+        let carsToFilter = [...safeAll];
 
         if (filters.model) {
             carsToFilter = carsToFilter.filter(car =>
@@ -48,12 +61,18 @@ const Stock = () => {
 
         if (filters.price) {
             const [min, max] = filters.price.split('-').map(Number);
-            carsToFilter = carsToFilter.filter(car => car.price >= min && (max ? car.price <= max : true));
+            carsToFilter = carsToFilter.filter(car => {
+                const price = Number(car.price) || 0;
+                return price >= (min || 0) && (max ? price <= max : true);
+            });
         }
         
         if (filters.mileage) {
             const [min, max] = filters.mileage.split('-').map(Number);
-            carsToFilter = carsToFilter.filter(car => car.mileage >= min && (max ? car.mileage <= max : true));
+            carsToFilter = carsToFilter.filter(car => {
+                const mileage = Number(car.mileage) || 0;
+                return mileage >= (min || 0) && (max ? mileage <= max : true);
+            });
         }
 
         ['year', 'fuel', 'color', 'transmission'].forEach(key => {
@@ -115,7 +134,7 @@ const Stock = () => {
                     onClear={handleClearFilters}
                 />
                 
-                <p className="mb-6 text-gray-600 font-medium">{filteredCars.length} veículo(s) encontrado(s)</p>
+                <p className="mb-6 text-gray-600 font-medium">{Array.isArray(filteredCars) ? filteredCars.length : 0} veículo(s) encontrado(s)</p>
 
                 <motion.div
                     className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8"
@@ -123,7 +142,7 @@ const Stock = () => {
                     initial="hidden"
                     animate="visible"
                 >
-                    {filteredCars.map(car => (
+                    {(Array.isArray(filteredCars) ? filteredCars : []).map(car => (
                         <motion.div
                             key={car.id}
                             className="bg-white rounded-2xl overflow-hidden shadow-lg border flex flex-col transition-transform duration-300 hover:-translate-y-2"
@@ -139,9 +158,8 @@ const Stock = () => {
                             </div>
                             <div className="p-6 flex flex-col flex-grow">
                                 <h2 className="text-xl font-bold text-gray-900">{car.brand} {car.model}</h2>
-                                <p className="text-2xl font-bold text-gray-800 my-2">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(car.price)}</p>
+                                <p className="text-2xl font-bold text-gray-800 my-2">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(car.price) || 0)}</p>
                                 
-                                {/* LAYOUT AJUSTADO PARA FONTE MAIOR E ESPAÇAMENTO OTIMIZADO */}
                                 <div className="grid grid-cols-3 gap-3 text-sm text-gray-600 my-4 border-t border-b py-4">
                                     <div className="flex items-center gap-1.5">
                                         <Calendar size={16} className="text-yellow-500 flex-shrink-0" /> 
@@ -149,7 +167,7 @@ const Stock = () => {
                                     </div>
                                     <div className="flex items-center gap-1.5">
                                         <Gauge size={16} className="text-yellow-500 flex-shrink-0" /> 
-                                        <span className="truncate">{new Intl.NumberFormat('pt-BR').format(car.mileage)} km</span>
+                                        <span className="truncate">{new Intl.NumberFormat('pt-BR').format(Number(car.mileage) || 0)} km</span>
                                     </div>
                                     <div className="flex items-center gap-1.5">
                                         <Cog size={16} className="text-yellow-500 flex-shrink-0" /> 
@@ -168,7 +186,7 @@ const Stock = () => {
                     ))}
                 </motion.div>
                 
-                {filteredCars.length === 0 && !loading && (
+                {Array.isArray(filteredCars) && filteredCars.length === 0 && !loading && (
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-16">
                         <h3 className="text-2xl font-bold text-gray-800">Nenhum veículo encontrado</h3>
                         <p className="text-gray-600 mt-2">Tente ajustar os filtros ou clique em "Limpar Filtros" para ver todo o nosso estoque.</p>
@@ -180,3 +198,4 @@ const Stock = () => {
 };
 
 export default Stock;
+

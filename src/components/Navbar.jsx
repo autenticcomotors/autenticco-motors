@@ -30,13 +30,18 @@ const Navbar = () => {
         {/* altura menor (h-24) conforme pedido */}
         <div className="flex items-center justify-between h-24">
           {/* logo maior via scale-110 (mantém responsividade e aumenta 10%) */}
-          <Link to="/" className="flex-shrink-0 flex items-center gap-3">
-           <img
-  className="h-20 md:h-28 lg:h-32 w-auto transform scale-110 -translate-y-1 md:-translate-y-3 lg:-translate-y-5"
-  src={logo}
-  alt="AutenTicco Motors Logo"
-/>
-          </Link>
+<Link to="/" className="flex-shrink-0 flex items-center gap-3 h-full">
+  <div className="flex items-center h-full">
+    <img
+      src={logo}
+      alt="AutenTicco Motors Logo"
+      className="h-20 md:h-28 lg:h-32 w-auto transform scale-110 translate-y-2 md:translate-y-4 lg:translate-y-6"
+      // fallback opcional (esconde se não carregar)
+      onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.onerror = null; }}
+    />
+  </div>
+</Link>
+
 
           <div className="hidden md:flex md:items-center">
             <div className="flex items-center space-x-8">

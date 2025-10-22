@@ -47,72 +47,83 @@ const Home = () => {
       <div className="bg-white">
         <BackgroundShape />
 
-        {/* =========================
-            HERO (novo)
-            ========================= */}
-        <section
-          className="relative flex items-center justify-center text-left text-white overflow-hidden"
-          style={{ height: '75vh' }}
-        >
-          {/* fundo */}
-          <div className="absolute inset-0 z-0">
-            <img src={heroBackground} alt="Fundo hero" className="w-full h-full object-cover" />
-            <div className="absolute inset-0 bg-black/45 backdrop-blur-sm" />
-          </div>
+        {/* HERO - substitua pela versão abaixo */}
+<section
+  className="relative flex items-center justify-center text-left text-white overflow-hidden"
+  style={{ height: '75vh' }}
+>
+  {/* fundo */}
+  <div className="absolute inset-0 z-0">
+    <img src={heroBackground} alt="Fundo hero" className="w-full h-full object-cover" />
+    <div className="absolute inset-0 bg-black/45 backdrop-blur-sm" />
+  </div>
 
-          {/* conteúdo principal */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8 }}
-            className="relative z-10 max-w-7xl w-full px-4 sm:px-6 lg:px-8"
+  {/* conteúdo textual (z-10) */}
+  <motion.div
+    initial={{ opacity: 0, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.8 }}
+    className="relative z-10 max-w-7xl w-full px-4 sm:px-6 lg:px-8"
+  >
+    <div className="mx-auto flex items-center justify-between h-full">
+      {/* texto à esquerda */}
+      <div className="w-full md:w-1/2 flex flex-col justify-center py-12">
+        <h2 className="text-3xl md:text-4xl lg:text-5xl font-extrabold leading-tight text-white">
+          Compre com transparência.
+          <br />
+          <span className="text-yellow-400">Venda com segurança.</span>
+        </h2>
+
+        <p className="mt-4 text-sm md:text-lg text-gray-200 max-w-xl">
+          Segurança total, assessoria completa e zero burocracia — apoio em todas as etapas do negócio.
+        </p>
+
+        <div className="mt-8 flex flex-col sm:flex-row gap-4">
+          <Button
+            asChild
+            size="lg"
+            className="bg-yellow-400 text-black font-bold text-lg px-6 py-3 hover:bg-yellow-500 transition-transform hover:scale-105"
           >
-            <div className="mx-auto flex items-center justify-between h-full">
-              {/* texto à esquerda */}
-              <div className="w-full md:w-1/2 flex flex-col justify-center py-12">
-                <h2 className="text-3xl md:text-4xl lg:text-5xl font-extrabold leading-tight text-white">
-                  Compre com transparência.
-                  <br />
-                  <span className="text-yellow-400">Venda com segurança.</span>
-                </h2>
+            <Link to="/estoque">Quero Comprar</Link>
+          </Button>
 
-                <p className="mt-4 text-sm md:text-lg text-gray-200 max-w-xl">
-                  Segurança total, assessoria completa e zero burocracia — apoio em todas as etapas do negócio.
-                </p>
+          <Button
+            asChild
+            size="lg"
+            className="bg-black text-yellow-400 font-bold text-lg px-6 py-3 hover:bg-gray-800 transition-transform hover:scale-105"
+          >
+            <Link to="/vender">Quero Vender</Link>
+          </Button>
+        </div>
+      </div>
 
-                <div className="mt-8 flex flex-col sm:flex-row gap-4">
-                  <Button
-                    asChild
-                    size="lg"
-                    className="bg-yellow-400 text-black font-bold text-lg px-6 py-3 hover:bg-yellow-500 transition-transform hover:scale-105"
-                  >
-                    <Link to="/estoque">Quero Comprar</Link>
-                  </Button>
+      {/* espaço reservado à direita (vazio) — o carro será colocado como elemento absoluto acima */}
+      <div className="hidden md:block w-1/2 h-full" />
+    </div>
+  </motion.div>
 
-                  <Button
-                    asChild
-                    size="lg"
-                    className="bg-black text-yellow-400 font-bold text-lg px-6 py-3 hover:bg-gray-800 transition-transform hover:scale-105"
-                  >
-                    <Link to="/vender">Quero Vender</Link>
-                  </Button>
-                </div>
-              </div>
+  {/* CARRO: elemento absoluto com z mais alto para garantir visibilidade */}
+  <div className="hidden md:flex absolute inset-y-0 right-0 z-20 pointer-events-none items-end">
+    <div className="relative h-full w-[55%] overflow-hidden">
+      {/* máscara de fade para a esquerda -> transição suave */}
+      <div
+        className="absolute inset-0"
+        style={{
+          WebkitMaskImage: 'linear-gradient(90deg, rgba(0,0,0,0) 0%, rgba(0,0,0,1) 30%)',
+          maskImage: 'linear-gradient(90deg, rgba(0,0,0,0) 0%, rgba(0,0,0,1) 30%)',
+        }}
+      >
+        <img
+          src={carHero}
+          alt="Veículo em destaque"
+          className="absolute right-[-6%] bottom-0 h-auto max-h-[94%] w-auto object-contain drop-shadow-2xl"
+          style={{ transform: 'translateX(2%)' }}
+        />
+      </div>
+    </div>
+  </div>
+</section>
 
-              {/* carro à direita (apenas md+) */}
-              <div className="hidden md:block w-1/2 h-full relative">
-                <div className="absolute right-0 bottom-0 top-6 w-[60%] overflow-hidden pointer-events-none">
-                  <img
-                    src={carHero}
-                    alt="Veículo em destaque"
-                    className="absolute right-[-8%] bottom-0 h-auto max-h-[92%] w-auto object-contain drop-shadow-2xl opacity-95"
-                    style={{ transform: 'translateX(6%)' }}
-                  />
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        </section>
 
         {/* =========================
             RESTANTE DA PÁGINA (mantive seu conteúdo original)

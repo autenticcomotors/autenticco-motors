@@ -34,11 +34,11 @@ const Navbar = () => {
             <div className="h-full flex items-center">
               {/* LOGO: menor e centralizado */}
               <img
-                src={logo}
-                alt="AutenTicco Motors Logo"
-                className="h-16 md:h-20 lg:h-24 w-auto mx-auto"
-                onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.onerror = null; }}
-              />
+  src={logo}
+  alt="AutenTicco Motors Logo"
+  className="h-14 md:h-16 lg:h-20 w-auto mx-auto"
+  onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.onerror = null; }}
+/>
             </div>
           </Link>
 

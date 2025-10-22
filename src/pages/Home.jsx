@@ -59,8 +59,20 @@ const Home = () => {
             className="relative z-10 p-4"
           >
             <div className="flex justify-center items-center gap-4 md:gap-6 mb-8">
-              <img src={logo} alt="AutenTicco Motors Logo" className="h-28 md:h-40 w-auto" style={{ filter: 'drop-shadow(0 0 10px rgba(0,0,0,0.6))' }} />
-              <span className="text-4xl md:text-6xl font-bold text-gray-900" style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.6)' }}>AutenTicco Motors</span>
+              <img
+                src={logo}
+                alt="AutenTicco Motors Logo"
+                className="h-28 md:h-40 w-auto"
+                // sombra do logo muito sutil
+                style={{ filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.08))' }}
+              />
+              <span
+                className="text-4xl md:text-6xl font-bold text-gray-900"
+                // sombra do texto muito sutil (mantenho contraste leve)
+                style={{ textShadow: '1px 1px 4px rgba(0,0,0,0.08)' }}
+              >
+                AutenTicco Motors
+              </span>
             </div>
             <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight">
               A evolução na compra e venda de veículos
@@ -98,8 +110,6 @@ const Home = () => {
             </div>
           </div>
         </section>
-
-        {/* Seção de vídeos removida conforme solicitado */}
 
         <section className="py-24 bg-gray-50">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Helmet } from 'react-helmet';
 import { motion } from 'framer-motion';
-import { Shield, Users, Award, Star, Check } from 'lucide-react';
+import { Shield, Users, Award, Star, Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import familyCarImage from '@/assets/familia-carro.png';
 import { getTestimonials } from '@/lib/car-api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -11,11 +11,17 @@ import BackgroundShape from '@/components/BackgroundShape';
 const About = () => {
     const [testimonials, setTestimonials] = useState([]);
     const [selectedTestimonial, setSelectedTestimonial] = useState(null);
+    const [currentIndex, setCurrentIndex] = useState(0);
+
+    // touch/swipe
+    const touchStartX = useRef(null);
+    const touchEndX = useRef(null);
 
     useEffect(() => {
         const fetchTestimonials = async () => {
             const data = await getTestimonials();
             setTestimonials(data || []);
+            setCurrentIndex(0);
         };
         fetchTestimonials();
     }, []);
@@ -39,6 +45,35 @@ const About = () => {
     };
 
     const TEXT_LIMIT = 30;
+
+    const prev = () => {
+        setCurrentIndex((idx) => (idx - 1 + testimonials.length) % testimonials.length);
+    };
+
+    const next = () => {
+        setCurrentIndex((idx) => (idx + 1) % testimonials.length);
+    };
+
+    const goTo = (idx) => {
+        setCurrentIndex(idx);
+    };
+
+    // swipe handlers
+    const onTouchStart = (e) => {
+        touchStartX.current = e.touches[0].clientX;
+    };
+    const onTouchMove = (e) => {
+        touchEndX.current = e.touches[0].clientX;
+    };
+    const onTouchEnd = () => {
+        if (touchStartX.current === null || touchEndX.current === null) return;
+        const diff = touchStartX.current - touchEndX.current;
+        const threshold = 50;
+        if (diff > threshold) next();
+        else if (diff < -threshold) prev();
+        touchStartX.current = null;
+        touchEndX.current = null;
+    };
 
     return (
         <div className="bg-white pt-28">
@@ -128,39 +163,82 @@ const About = () => {
                             <h2 className="text-3xl font-bold tracking-tight text-gray-900">Histórias de Sucesso</h2>
                             <p className="mt-4 text-lg text-gray-600">Experiências reais de quem confia na AutenTicco Motors.</p>
                         </div>
+
                         {testimonials.length > 0 ? (
-                            <motion.div
-                                className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
-                                initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.3 }}
-                                variants={{ visible: { transition: { staggerChildren: 0.1 } } }}
-                            >
-                                {testimonials.map((testimonial) => (
-                                    <motion.div
-                                        key={testimonial.id}
-                                        variants={itemVariants}
-                                        className="bg-gray-50 p-8 rounded-2xl shadow-lg border flex flex-col justify-between h-full"
-                                    >
-                                        <div className="flex-grow">
-                                            <Star className="w-5 h-5 text-yellow-500 fill-yellow-500 mb-4" />
-                                            <p className="italic text-gray-700 mb-4 line-clamp-4">
-                                                {testimonial.testimonial_text}
-                                            </p>
-                                            {testimonial.testimonial_text.split(' ').length > TEXT_LIMIT && (
-                                                <button
-                                                    onClick={() => setSelectedTestimonial(testimonial)}
-                                                    className="text-yellow-500 hover:text-yellow-600 font-semibold text-sm mb-4"
+                            <div className="relative">
+                                {/* Carousel viewport */}
+                                <div
+                                    className="overflow-hidden"
+                                    onTouchStart={onTouchStart}
+                                    onTouchMove={onTouchMove}
+                                    onTouchEnd={onTouchEnd}
+                                >
+                                    <div className="flex items-stretch justify-center">
+                                        {testimonials.map((testimonial, idx) => {
+                                            const isActive = idx === currentIndex;
+                                            return (
+                                                <motion.div
+                                                    key={testimonial.id}
+                                                    initial={{ opacity: 0, scale: 0.98 }}
+                                                    animate={isActive ? { opacity: 1, scale: 1, x: 0 } : { opacity: 0, scale: 0.98, x: (idx < currentIndex ? -40 : 40) }}
+                                                    transition={{ duration: 0.35 }}
+                                                    className={`w-full max-w-2xl mx-4 flex-shrink-0 ${isActive ? '' : 'pointer-events-none'}`}
+                                                    style={{ display: isActive ? 'block' : 'none' }}
                                                 >
-                                                    Ler mais...
-                                                </button>
-                                            )}
-                                        </div>
-                                        <div className="border-t pt-4 mt-auto">
-                                            <p className="font-bold text-gray-900">{testimonial.client_name}</p>
-                                            {testimonial.car_sold && <p className="text-sm text-gray-500">Cliente {testimonial.car_sold}</p>}
-                                        </div>
-                                    </motion.div>
-                                ))}
-                            </motion.div>
+                                                    <div className="bg-gray-50 p-8 rounded-2xl shadow-lg border flex flex-col justify-between h-full">
+                                                        <div className="flex-grow">
+                                                            <Star className="w-5 h-5 text-yellow-500 fill-yellow-500 mb-4" />
+                                                            <p className="italic text-gray-700 mb-4 line-clamp-6">
+                                                                {testimonial.testimonial_text}
+                                                            </p>
+                                                            {testimonial.testimonial_text.split(' ').length > TEXT_LIMIT && (
+                                                                <button
+                                                                    onClick={() => setSelectedTestimonial(testimonial)}
+                                                                    className="text-yellow-500 hover:text-yellow-600 font-semibold text-sm mb-4"
+                                                                >
+                                                                    Ler mais...
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                        <div className="border-t pt-4 mt-auto">
+                                                            <p className="font-bold text-gray-900">{testimonial.client_name}</p>
+                                                            {testimonial.car_sold && <p className="text-sm text-gray-500">Cliente {testimonial.car_sold}</p>}
+                                                        </div>
+                                                    </div>
+                                                </motion.div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* Arrows */}
+                                <button
+                                    onClick={prev}
+                                    aria-label="Anterior"
+                                    className="absolute left-0 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white p-2 rounded-full shadow-md -ml-2 flex items-center justify-center"
+                                >
+                                    <ChevronLeft className="w-6 h-6 text-gray-700" />
+                                </button>
+                                <button
+                                    onClick={next}
+                                    aria-label="Próximo"
+                                    className="absolute right-0 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white p-2 rounded-full shadow-md -mr-2 flex items-center justify-center"
+                                >
+                                    <ChevronRight className="w-6 h-6 text-gray-700" />
+                                </button>
+
+                                {/* Dots */}
+                                <div className="mt-6 flex justify-center gap-2">
+                                    {testimonials.map((_, idx) => (
+                                        <button
+                                            key={idx}
+                                            onClick={() => goTo(idx)}
+                                            aria-label={`Ir para depoimento ${idx + 1}`}
+                                            className={`w-3 h-3 rounded-full ${idx === currentIndex ? 'bg-yellow-500' : 'bg-gray-300'}`}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
                         ) : (
                             <p className="text-center text-gray-600 text-lg">Nenhum depoimento disponível ainda.</p>
                         )}
@@ -184,3 +262,4 @@ const About = () => {
 };
 
 export default About;
+

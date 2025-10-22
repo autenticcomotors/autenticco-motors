@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'; // Importação correta
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
 import { FaUser, FaLock } from 'react-icons/fa';
-import logo from '@/assets/logo.png'; // <-- usa logo local (mesma import do Home)
+import logo from '@/assets/logo.png'; // usa logo local
 
 const AdminLogin = () => {
   const [email, setEmail] = useState('');
@@ -64,14 +64,14 @@ const AdminLogin = () => {
           <img
             src={logo}
             alt="AutenTicco Motors Logo"
-            className="h-24 w-auto mx-auto mb-6"
+            className="h-36 md:h-44 w-auto mx-auto mb-6"  // <- logo maior
             onError={(e) => {
               // fallback: oculta a imagem se não carregar pra não mostrar ícone quebrado
               e.currentTarget.style.display = 'none';
               e.currentTarget.onerror = null;
             }}
           />
-          <h1 className="text-2xl font-bold mb-8">Login Admin</h1>
+          <h1 className="text-2xl font-bold mb-8 text-yellow-400">Login Admin</h1> {/* título amarelo */}
           <form onSubmit={handleLogin} className="space-y-6">
             <div className="relative">
               <FaUser className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />

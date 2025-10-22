@@ -35,11 +35,13 @@ const Navbar = () => {
     <img
       src={logo}
       alt="AutenTicco Motors Logo"
-      className="h-20 md:h-24 lg:h-28 w-auto mx-auto transform scale-110 translate-y-1 md:translate-y-2 lg:translate-y-3"
+      className="h-20 md:h-24 lg:h-28 w-auto mx-auto"
+      style={{ transform: 'translateY(6px) scale(1.10)' }} // ajuste o 6px até ficar perfeito
       onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.onerror = null; }}
     />
   </div>
 </Link>
+
 
 
 

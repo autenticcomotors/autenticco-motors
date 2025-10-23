@@ -262,70 +262,71 @@ const Stock = () => {
                             <p className="text-gray-600 mt-2 mb-8">Preencha o formulário abaixo com os dados do veículo que você procura — nós encontraremos para você e vamos entrar em contato.</p>
 
                             {/* cartão clean e centralizado com o formulário simplificado */}
-                            <div className="mx-auto bg-white/6 backdrop-blur-md rounded-2xl p-6 md:p-8 shadow-lg max-w-2xl">
-                                <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-3">
+                            <div className="mx-auto bg-white rounded-2xl p-6 md:p-8 shadow-lg max-w-2xl">
+                                <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4">
                                     <div>
-                                        <label className="text-sm text-gray-100 block mb-1">Nome (opcional)</label>
+                                        <label className="text-sm text-gray-700 block mb-1">Nome (opcional)</label>
                                         <input
                                             value={name}
                                             onChange={(e) => setName(e.target.value)}
                                             placeholder="Seu nome"
-                                            className="w-full rounded-md px-3 py-2 border border-gray-700 bg-transparent text-white placeholder-gray-400"
+                                            className="w-full rounded-md px-3 py-2 border border-gray-300 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-yellow-400"
                                         />
                                     </div>
 
                                     <div>
-                                        <label className="text-sm text-gray-100 block mb-1">Telefone</label>
+                                        <label className="text-sm text-gray-700 block mb-1">Telefone</label>
                                         <input
                                             value={phone}
                                             onChange={(e) => setPhone(e.target.value)}
                                             placeholder="+55 (11) 9xxxx-xxxx"
-                                            className="w-full rounded-md px-3 py-2 border border-gray-700 bg-transparent text-white placeholder-gray-400"
+                                            className="w-full rounded-md px-3 py-2 border border-gray-300 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-yellow-400"
                                             required
+                                            type="tel"
                                         />
                                     </div>
 
                                     <div className="grid grid-cols-2 gap-3">
                                         <div>
-                                            <label className="text-sm text-gray-100 block mb-1">Marca</label>
+                                            <label className="text-sm text-gray-700 block mb-1">Marca</label>
                                             <input
                                                 value={brand}
                                                 onChange={(e) => setBrand(e.target.value)}
                                                 placeholder="Ex: Fiat"
-                                                className="w-full rounded-md px-3 py-2 border border-gray-700 bg-transparent text-white placeholder-gray-400"
+                                                className="w-full rounded-md px-3 py-2 border border-gray-300 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-yellow-400"
                                                 required
                                             />
                                         </div>
                                         <div>
-                                            <label className="text-sm text-gray-100 block mb-1">Modelo</label>
+                                            <label className="text-sm text-gray-700 block mb-1">Modelo</label>
                                             <input
                                                 value={modelRequest}
                                                 onChange={(e) => setModelRequest(e.target.value)}
                                                 placeholder="Ex: Uno"
-                                                className="w-full rounded-md px-3 py-2 border border-gray-700 bg-transparent text-white placeholder-gray-400"
+                                                className="w-full rounded-md px-3 py-2 border border-gray-300 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-yellow-400"
                                                 required
                                             />
                                         </div>
                                     </div>
 
                                     <div>
-                                        <label className="text-sm text-gray-100 block mb-1">Ano (opcional)</label>
+                                        <label className="text-sm text-gray-700 block mb-1">Ano (opcional)</label>
                                         <input
                                             value={yearRequest}
                                             onChange={(e) => setYearRequest(e.target.value)}
                                             placeholder="Ex: 2016"
-                                            className="w-full rounded-md px-3 py-2 border border-gray-700 bg-transparent text-white placeholder-gray-400"
+                                            className="w-full rounded-md px-3 py-2 border border-gray-300 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-yellow-400"
                                         />
                                     </div>
 
-                                    {errorMsg && <div className="text-sm text-red-300">{errorMsg}</div>}
-                                    {sent && <div className="text-sm text-green-300">Abrindo WhatsApp — verifique seu aplicativo.</div>}
+                                    {errorMsg && <div className="text-sm text-red-600">{errorMsg}</div>}
+                                    {sent && <div className="text-sm text-green-600">Abrindo WhatsApp — verifique seu aplicativo.</div>}
 
                                     <div className="flex items-center justify-start gap-3 mt-2">
                                         <button
                                             type="submit"
                                             disabled={submitting}
-                                            className="inline-block bg-yellow-400 hover:bg-yellow-500 text-black font-semibold px-6 py-2.5 rounded-md shadow-sm transition disabled:opacity-60"
+                                            className="inline-block bg-yellow-400 hover:bg-yellow-500 text-black font-semibold px-6 py-2.5 rounded-md shadow transition disabled:opacity-60"
                                             aria-label="Enviar pedido de busca"
                                         >
                                             {submitting ? 'Enviando...' : 'Enviar'}
@@ -342,7 +343,7 @@ const Stock = () => {
                                                 setErrorMsg('');
                                                 setSent(false);
                                             }}
-                                            className="inline-block border border-gray-600 text-gray-200 px-4 py-2.5 rounded-md hover:bg-white/5 transition"
+                                            className="inline-block border border-gray-300 text-gray-700 px-4 py-2.5 rounded-md hover:bg-gray-50 transition"
                                         >
                                             Limpar
                                         </button>

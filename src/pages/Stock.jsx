@@ -8,7 +8,7 @@ import { ArrowRight, Gauge, Droplet, Calendar, Cog } from 'lucide-react';
 import BackgroundShape from '@/components/BackgroundShape';
 import CarFilter from '@/components/CarFilter';
 
-const WHATSAPP_NUMBER = '5511975071300'; // número usado para enviar as mensagens via wa.me
+const WHATSAPP_NUMBER = '5511975071300'; // número em formato internacional (sem +, sem espaços)
 
 const Stock = () => {
     const [allCars, setAllCars] = useState([]);
@@ -19,22 +19,24 @@ const Stock = () => {
         transmission: '', bodyType: '', mileage: ''
     });
 
-    // estado para o formulário "não encontrou"
-    const [leadName, setLeadName] = useState('');
-    const [leadPhone, setLeadPhone] = useState('');
-    const [leadVehicle, setLeadVehicle] = useState('');
-    const [leadSubmitting, setLeadSubmitting] = useState(false);
-    const [leadSent, setLeadSent] = useState(false);
-    const [leadError, setLeadError] = useState('');
+    // estados do formulário simplificado (quando nada é encontrado)
+    const [name, setName] = useState('');
+    const [phone, setPhone] = useState('');
+    const [brand, setBrand] = useState('');
+    const [modelRequest, setModelRequest] = useState('');
+    const [yearRequest, setYearRequest] = useState('');
+    const [submitting, setSubmitting] = useState(false);
+    const [errorMsg, setErrorMsg] = useState('');
+    const [sent, setSent] = useState(false);
 
     useEffect(() => {
         const fetchCars = async () => {
             try {
                 setLoading(true);
-                const carsData = await getCars();
-                const safeCars = Array.isArray(carsData) ? carsData : [];
-                setAllCars(safeCars);
-                setFilteredCars(safeCars);
+                const data = await getCars();
+                const safe = Array.isArray(data) ? data : [];
+                setAllCars(safe);
+                setFilteredCars(safe);
             } catch (err) {
                 console.error('Erro ao buscar carros:', err);
                 setAllCars([]);
@@ -121,44 +123,62 @@ const Stock = () => {
         );
     }
 
-    // abre o whatsapp com mensagem pronta (usado tanto pelo botão direto quanto pelo form)
+    // abre WhatsApp com mensagem pronta
     const openWhatsApp = (message) => {
-        const text = encodeURIComponent(message);
-        const url = `https://wa.me/${WHATSAPP_NUMBER}?text=${text}`;
+        const encoded = encodeURIComponent(message);
+        const url = `https://wa.me/${WHATSAPP_NUMBER}?text=${encoded}`;
         window.open(url, '_blank');
     };
 
-    // handler do formulário (construí mensagem e abro o whatsapp)
-    const handleLeadSubmit = (e) => {
+    // validação simples do telefone (mínimo 8 dígitos numéricos)
+    const isPhoneValid = (p) => {
+        if (!p) return false;
+        const digits = p.replace(/\D/g, '');
+        return digits.length >= 8;
+    };
+
+    // handler do envio do formulário clean
+    const handleSubmit = (e) => {
         e.preventDefault();
-        setLeadError('');
-        if (!leadVehicle || leadVehicle.trim().length < 2) {
-            setLeadError('Descreva o veículo que procura (ex: modelo, ano, cor).');
-            return;
-        }
-        // simples validação de telefone (mínimo)
-        if (!leadPhone || leadPhone.replace(/\D/g, '').length < 8) {
-            setLeadError('Informe um telefone válido para que possamos te contatar.');
+        setErrorMsg('');
+        setSent(false);
+
+        if (!brand.trim() || !modelRequest.trim()) {
+            setErrorMsg('Por favor informe a marca e o modelo do veículo que procura.');
             return;
         }
 
-        setLeadSubmitting(true);
-        const message = `Olá, meu nome é ${leadName || '[sem nome]'}.\nEstou procurando: ${leadVehicle}.\nTelefone: ${leadPhone}.\nPor favor, entrem em contato.`;
-        // abre o WhatsApp
+        if (!isPhoneValid(phone)) {
+            setErrorMsg('Informe um telefone válido para contato (mínimo 8 dígitos).');
+            return;
+        }
+
+        setSubmitting(true);
+
+        const messageLines = [
+            `Olá, sou ${name.trim() || 'Cliente'}.`,
+            `Procuro: ${brand.trim()} ${modelRequest.trim()}${yearRequest ? `, ${yearRequest}` : ''}.`,
+            `Telefone: ${phone.trim()}.`,
+            `Favor entrar em contato, por favor.`
+        ];
+        const finalMessage = messageLines.join('\n');
+
         try {
-            openWhatsApp(message);
-            setLeadSent(true);
-            // mantém um pequeno delay para resetar o formulário se quiser
+            openWhatsApp(finalMessage);
+            setSent(true);
+            // limpando (opcional) após abertura
             setTimeout(() => {
-                setLeadSubmitting(false);
-                setLeadName('');
-                setLeadPhone('');
-                setLeadVehicle('');
+                setSubmitting(false);
+                setName('');
+                setPhone('');
+                setBrand('');
+                setModelRequest('');
+                setYearRequest('');
             }, 600);
         } catch (err) {
             console.error(err);
-            setLeadError('Erro ao abrir o WhatsApp. Tente novamente.');
-            setLeadSubmitting(false);
+            setErrorMsg('Erro ao abrir o WhatsApp. Tente novamente.');
+            setSubmitting(false);
         }
     };
 
@@ -239,96 +259,90 @@ const Stock = () => {
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="py-16">
                         <div className="max-w-3xl mx-auto text-center">
                             <h3 className="text-2xl font-bold text-gray-800">Nenhum veículo encontrado</h3>
-                            <p className="text-gray-600 mt-2 mb-8">Entre em contato conosco ou preencha o formulário abaixo com o veículo que você procura — nós encontraremos para você.</p>
+                            <p className="text-gray-600 mt-2 mb-8">Preencha o formulário abaixo com os dados do veículo que você procura — nós encontraremos para você e vamos entrar em contato.</p>
 
-                            {/* cartão profissional com formulário + botão whatsapp */}
-                            <div className="bg-gradient-to-br from-gray-800/60 to-gray-900/60 rounded-2xl p-6 md:p-8 shadow-xl flex flex-col md:flex-row items-start gap-6">
-                                {/* esquerda: texto + botão whatsapp */}
-                                <div className="flex-1 text-left">
-                                    <h4 className="text-lg font-semibold text-white mb-2">Não encontrou? Chame a gente no WhatsApp</h4>
-                                    <p className="text-gray-200 mb-4">Clique para abrir um chat com nossa equipe e informe o veículo desejado.</p>
-                                    <div className="flex gap-3">
-                                        <button
-                                          onClick={() => openWhatsApp('Olá! Estou procurando um veículo. Podem me ajudar?')}
-                                          className="inline-flex items-center gap-3 bg-green-500 hover:bg-green-600 text-white font-semibold px-4 py-3 rounded-lg shadow-md transition"
-                                        >
-                                            {/* ícone simples */}
-                                            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M17.472 14.382a3.54 3.54 0 0 0-.99-1.34l-.07-.06a1.11 1.11 0 0 0-1.19 0c-.36.23-1.05.64-1.6.9-.55.27-1.02.41-1.6.11-.58-.3-1.98-.61-3.76-2.38-1.78-1.77-2.09-3.17-2.38-3.75-.3-.59-.16-1.05.11-1.6.27-.55.67-1.24.9-1.6.17-.24.12-.55-.12-.75l-.07-.06a3.52 3.52 0 0 0-1.34-.99A2.85 2.85 0 0 0 3 6.28c-.06 2.76 1.2 5.36 3.47 7.62 2.27 2.27 4.87 3.53 7.62 3.47.24 0 .47-.01.7-.03a2.85 2.85 0 0 0 1.98-.98z" fill="white"/></svg>
-                                            Fale no WhatsApp
-                                        </button>
-                                        <button
-                                          onClick={() => {
-                                              // scroll para o form
-                                              const el = document.getElementById('stock-lead-form');
-                                              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                          }}
-                                          className="inline-flex items-center gap-2 bg-yellow-400 hover:bg-yellow-500 text-black font-semibold px-4 py-3 rounded-lg shadow-md transition"
-                                        >
-                                          Preencher formulário
-                                        </button>
-                                    </div>
-                                </div>
-
-                                {/* direita: formulário */}
-                                <form id="stock-lead-form" onSubmit={handleLeadSubmit} className="w-full md:w-1/2 bg-white/6 p-4 rounded-xl" style={{ backdropFilter: 'blur(6px)' }}>
-                                    <div className="mb-3">
-                                        <label className="text-sm text-gray-200 block mb-1">Nome (opcional)</label>
+                            {/* cartão clean e centralizado com o formulário simplificado */}
+                            <div className="mx-auto bg-white/6 backdrop-blur-md rounded-2xl p-6 md:p-8 shadow-lg max-w-2xl">
+                                <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-3">
+                                    <div>
+                                        <label className="text-sm text-gray-100 block mb-1">Nome (opcional)</label>
                                         <input
-                                            value={leadName}
-                                            onChange={(e) => setLeadName(e.target.value)}
-                                            type="text"
+                                            value={name}
+                                            onChange={(e) => setName(e.target.value)}
                                             placeholder="Seu nome"
                                             className="w-full rounded-md px-3 py-2 border border-gray-700 bg-transparent text-white placeholder-gray-400"
                                         />
                                     </div>
 
-                                    <div className="mb-3">
-                                        <label className="text-sm text-gray-200 block mb-1">Veículo que procura</label>
+                                    <div>
+                                        <label className="text-sm text-gray-100 block mb-1">Telefone</label>
                                         <input
-                                            value={leadVehicle}
-                                            onChange={(e) => setLeadVehicle(e.target.value)}
-                                            type="text"
-                                            placeholder="Ex: Fiat Uno 2016, prata"
-                                            required
-                                            className="w-full rounded-md px-3 py-2 border border-gray-700 bg-transparent text-white placeholder-gray-400"
-                                        />
-                                    </div>
-
-                                    <div className="mb-3">
-                                        <label className="text-sm text-gray-200 block mb-1">Telefone</label>
-                                        <input
-                                            value={leadPhone}
-                                            onChange={(e) => setLeadPhone(e.target.value)}
-                                            type="tel"
+                                            value={phone}
+                                            onChange={(e) => setPhone(e.target.value)}
                                             placeholder="+55 (11) 9xxxx-xxxx"
+                                            className="w-full rounded-md px-3 py-2 border border-gray-700 bg-transparent text-white placeholder-gray-400"
                                             required
+                                        />
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="text-sm text-gray-100 block mb-1">Marca</label>
+                                            <input
+                                                value={brand}
+                                                onChange={(e) => setBrand(e.target.value)}
+                                                placeholder="Ex: Fiat"
+                                                className="w-full rounded-md px-3 py-2 border border-gray-700 bg-transparent text-white placeholder-gray-400"
+                                                required
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-sm text-gray-100 block mb-1">Modelo</label>
+                                            <input
+                                                value={modelRequest}
+                                                onChange={(e) => setModelRequest(e.target.value)}
+                                                placeholder="Ex: Uno"
+                                                className="w-full rounded-md px-3 py-2 border border-gray-700 bg-transparent text-white placeholder-gray-400"
+                                                required
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="text-sm text-gray-100 block mb-1">Ano (opcional)</label>
+                                        <input
+                                            value={yearRequest}
+                                            onChange={(e) => setYearRequest(e.target.value)}
+                                            placeholder="Ex: 2016"
                                             className="w-full rounded-md px-3 py-2 border border-gray-700 bg-transparent text-white placeholder-gray-400"
                                         />
                                     </div>
 
-                                    {leadError && <p className="text-sm text-red-300 mb-2">{leadError}</p>}
-                                    {leadSent && <p className="text-sm text-green-300 mb-2">Enviando... o WhatsApp foi aberto. Em breve entraremos em contato.</p>}
+                                    {errorMsg && <div className="text-sm text-red-300">{errorMsg}</div>}
+                                    {sent && <div className="text-sm text-green-300">Abrindo WhatsApp — verifique seu aplicativo.</div>}
 
-                                    <div className="flex gap-3">
+                                    <div className="flex items-center justify-start gap-3 mt-2">
                                         <button
                                             type="submit"
-                                            disabled={leadSubmitting}
-                                            className="flex-1 bg-yellow-400 hover:bg-yellow-500 text-black font-semibold px-4 py-2 rounded-lg shadow-md transition disabled:opacity-60"
+                                            disabled={submitting}
+                                            className="inline-block bg-yellow-400 hover:bg-yellow-500 text-black font-semibold px-6 py-2.5 rounded-md shadow-sm transition disabled:opacity-60"
+                                            aria-label="Enviar pedido de busca"
                                         >
-                                            {leadSubmitting ? 'Aguarde...' : 'Enviar pedido'}
+                                            {submitting ? 'Enviando...' : 'Enviar'}
                                         </button>
 
                                         <button
                                             type="button"
                                             onClick={() => {
-                                                // limpar form
-                                                setLeadName('');
-                                                setLeadPhone('');
-                                                setLeadVehicle('');
-                                                setLeadError('');
-                                                setLeadSent(false);
+                                                setName('');
+                                                setPhone('');
+                                                setBrand('');
+                                                setModelRequest('');
+                                                setYearRequest('');
+                                                setErrorMsg('');
+                                                setSent(false);
                                             }}
-                                            className="flex-1 bg-transparent border border-yellow-400 text-yellow-400 font-semibold px-4 py-2 rounded-lg transition hover:bg-yellow-400 hover:text-black"
+                                            className="inline-block border border-gray-600 text-gray-200 px-4 py-2.5 rounded-md hover:bg-white/5 transition"
                                         >
                                             Limpar
                                         </button>

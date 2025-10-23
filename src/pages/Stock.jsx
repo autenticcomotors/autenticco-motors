@@ -8,6 +8,8 @@ import { ArrowRight, Gauge, Droplet, Calendar, Cog } from 'lucide-react';
 import BackgroundShape from '@/components/BackgroundShape';
 import CarFilter from '@/components/CarFilter';
 
+const WHATSAPP_NUMBER = '5511975071300'; // número usado para enviar as mensagens via wa.me
+
 const Stock = () => {
     const [allCars, setAllCars] = useState([]);
     const [filteredCars, setFilteredCars] = useState([]);
@@ -17,12 +19,19 @@ const Stock = () => {
         transmission: '', bodyType: '', mileage: ''
     });
 
+    // estado para o formulário "não encontrou"
+    const [leadName, setLeadName] = useState('');
+    const [leadPhone, setLeadPhone] = useState('');
+    const [leadVehicle, setLeadVehicle] = useState('');
+    const [leadSubmitting, setLeadSubmitting] = useState(false);
+    const [leadSent, setLeadSent] = useState(false);
+    const [leadError, setLeadError] = useState('');
+
     useEffect(() => {
         const fetchCars = async () => {
             try {
                 setLoading(true);
                 const carsData = await getCars();
-                // defensive: garante array
                 const safeCars = Array.isArray(carsData) ? carsData : [];
                 setAllCars(safeCars);
                 setFilteredCars(safeCars);
@@ -38,7 +47,6 @@ const Stock = () => {
     }, []);
 
     const filterOptions = useMemo(() => {
-        // use sempre um array seguro para evitar .map em null
         const safeCars = Array.isArray(allCars) ? allCars : [];
         const years = [...new Set(safeCars.map(car => car.year))].sort((a, b) => b - a);
         const fuels = [...new Set(safeCars.map(car => car.fuel).filter(Boolean))];
@@ -66,7 +74,7 @@ const Stock = () => {
                 return price >= (min || 0) && (max ? price <= max : true);
             });
         }
-        
+
         if (filters.mileage) {
             const [min, max] = filters.mileage.split('-').map(Number);
             carsToFilter = carsToFilter.filter(car => {
@@ -80,7 +88,7 @@ const Stock = () => {
                 carsToFilter = carsToFilter.filter(car => String(car[key]) === filters[key]);
             }
         });
-        
+
         if (filters.bodyType) {
             carsToFilter = carsToFilter.filter(car => car.body_type === filters.bodyType);
         }
@@ -112,6 +120,47 @@ const Stock = () => {
             </div>
         );
     }
+
+    // abre o whatsapp com mensagem pronta (usado tanto pelo botão direto quanto pelo form)
+    const openWhatsApp = (message) => {
+        const text = encodeURIComponent(message);
+        const url = `https://wa.me/${WHATSAPP_NUMBER}?text=${text}`;
+        window.open(url, '_blank');
+    };
+
+    // handler do formulário (construí mensagem e abro o whatsapp)
+    const handleLeadSubmit = (e) => {
+        e.preventDefault();
+        setLeadError('');
+        if (!leadVehicle || leadVehicle.trim().length < 2) {
+            setLeadError('Descreva o veículo que procura (ex: modelo, ano, cor).');
+            return;
+        }
+        // simples validação de telefone (mínimo)
+        if (!leadPhone || leadPhone.replace(/\D/g, '').length < 8) {
+            setLeadError('Informe um telefone válido para que possamos te contatar.');
+            return;
+        }
+
+        setLeadSubmitting(true);
+        const message = `Olá, meu nome é ${leadName || '[sem nome]'}.\nEstou procurando: ${leadVehicle}.\nTelefone: ${leadPhone}.\nPor favor, entrem em contato.`;
+        // abre o WhatsApp
+        try {
+            openWhatsApp(message);
+            setLeadSent(true);
+            // mantém um pequeno delay para resetar o formulário se quiser
+            setTimeout(() => {
+                setLeadSubmitting(false);
+                setLeadName('');
+                setLeadPhone('');
+                setLeadVehicle('');
+            }, 600);
+        } catch (err) {
+            console.error(err);
+            setLeadError('Erro ao abrir o WhatsApp. Tente novamente.');
+            setLeadSubmitting(false);
+        }
+    };
 
     return (
         <div className="relative isolate min-h-screen bg-gray-50 text-gray-800 pt-28">
@@ -187,9 +236,106 @@ const Stock = () => {
                 </motion.div>
                 
                 {Array.isArray(filteredCars) && filteredCars.length === 0 && !loading && (
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-16">
-                        <h3 className="text-2xl font-bold text-gray-800">Nenhum veículo encontrado</h3>
-                        <p className="text-gray-600 mt-2">Tente ajustar os filtros ou clique em "Limpar Filtros" para ver todo o nosso estoque.</p>
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="py-16">
+                        <div className="max-w-3xl mx-auto text-center">
+                            <h3 className="text-2xl font-bold text-gray-800">Nenhum veículo encontrado</h3>
+                            <p className="text-gray-600 mt-2 mb-8">Entre em contato conosco ou preencha o formulário abaixo com o veículo que você procura — nós encontraremos para você.</p>
+
+                            {/* cartão profissional com formulário + botão whatsapp */}
+                            <div className="bg-gradient-to-br from-gray-800/60 to-gray-900/60 rounded-2xl p-6 md:p-8 shadow-xl flex flex-col md:flex-row items-start gap-6">
+                                {/* esquerda: texto + botão whatsapp */}
+                                <div className="flex-1 text-left">
+                                    <h4 className="text-lg font-semibold text-white mb-2">Não encontrou? Chame a gente no WhatsApp</h4>
+                                    <p className="text-gray-200 mb-4">Clique para abrir um chat com nossa equipe e informe o veículo desejado.</p>
+                                    <div className="flex gap-3">
+                                        <button
+                                          onClick={() => openWhatsApp('Olá! Estou procurando um veículo. Podem me ajudar?')}
+                                          className="inline-flex items-center gap-3 bg-green-500 hover:bg-green-600 text-white font-semibold px-4 py-3 rounded-lg shadow-md transition"
+                                        >
+                                            {/* ícone simples */}
+                                            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M17.472 14.382a3.54 3.54 0 0 0-.99-1.34l-.07-.06a1.11 1.11 0 0 0-1.19 0c-.36.23-1.05.64-1.6.9-.55.27-1.02.41-1.6.11-.58-.3-1.98-.61-3.76-2.38-1.78-1.77-2.09-3.17-2.38-3.75-.3-.59-.16-1.05.11-1.6.27-.55.67-1.24.9-1.6.17-.24.12-.55-.12-.75l-.07-.06a3.52 3.52 0 0 0-1.34-.99A2.85 2.85 0 0 0 3 6.28c-.06 2.76 1.2 5.36 3.47 7.62 2.27 2.27 4.87 3.53 7.62 3.47.24 0 .47-.01.7-.03a2.85 2.85 0 0 0 1.98-.98z" fill="white"/></svg>
+                                            Fale no WhatsApp
+                                        </button>
+                                        <button
+                                          onClick={() => {
+                                              // scroll para o form
+                                              const el = document.getElementById('stock-lead-form');
+                                              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                          }}
+                                          className="inline-flex items-center gap-2 bg-yellow-400 hover:bg-yellow-500 text-black font-semibold px-4 py-3 rounded-lg shadow-md transition"
+                                        >
+                                          Preencher formulário
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* direita: formulário */}
+                                <form id="stock-lead-form" onSubmit={handleLeadSubmit} className="w-full md:w-1/2 bg-white/6 p-4 rounded-xl" style={{ backdropFilter: 'blur(6px)' }}>
+                                    <div className="mb-3">
+                                        <label className="text-sm text-gray-200 block mb-1">Nome (opcional)</label>
+                                        <input
+                                            value={leadName}
+                                            onChange={(e) => setLeadName(e.target.value)}
+                                            type="text"
+                                            placeholder="Seu nome"
+                                            className="w-full rounded-md px-3 py-2 border border-gray-700 bg-transparent text-white placeholder-gray-400"
+                                        />
+                                    </div>
+
+                                    <div className="mb-3">
+                                        <label className="text-sm text-gray-200 block mb-1">Veículo que procura</label>
+                                        <input
+                                            value={leadVehicle}
+                                            onChange={(e) => setLeadVehicle(e.target.value)}
+                                            type="text"
+                                            placeholder="Ex: Fiat Uno 2016, prata"
+                                            required
+                                            className="w-full rounded-md px-3 py-2 border border-gray-700 bg-transparent text-white placeholder-gray-400"
+                                        />
+                                    </div>
+
+                                    <div className="mb-3">
+                                        <label className="text-sm text-gray-200 block mb-1">Telefone</label>
+                                        <input
+                                            value={leadPhone}
+                                            onChange={(e) => setLeadPhone(e.target.value)}
+                                            type="tel"
+                                            placeholder="+55 (11) 9xxxx-xxxx"
+                                            required
+                                            className="w-full rounded-md px-3 py-2 border border-gray-700 bg-transparent text-white placeholder-gray-400"
+                                        />
+                                    </div>
+
+                                    {leadError && <p className="text-sm text-red-300 mb-2">{leadError}</p>}
+                                    {leadSent && <p className="text-sm text-green-300 mb-2">Enviando... o WhatsApp foi aberto. Em breve entraremos em contato.</p>}
+
+                                    <div className="flex gap-3">
+                                        <button
+                                            type="submit"
+                                            disabled={leadSubmitting}
+                                            className="flex-1 bg-yellow-400 hover:bg-yellow-500 text-black font-semibold px-4 py-2 rounded-lg shadow-md transition disabled:opacity-60"
+                                        >
+                                            {leadSubmitting ? 'Aguarde...' : 'Enviar pedido'}
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                // limpar form
+                                                setLeadName('');
+                                                setLeadPhone('');
+                                                setLeadVehicle('');
+                                                setLeadError('');
+                                                setLeadSent(false);
+                                            }}
+                                            className="flex-1 bg-transparent border border-yellow-400 text-yellow-400 font-semibold px-4 py-2 rounded-lg transition hover:bg-yellow-400 hover:text-black"
+                                        >
+                                            Limpar
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
                     </motion.div>
                 )}
             </div>

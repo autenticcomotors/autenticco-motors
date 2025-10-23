@@ -123,7 +123,10 @@ const Home = () => {
         </section>
 
         {/* ========================= RESTANTE DA PÁGINA ========================= */}
-        <section className="py-24 bg-gray-50">
+
+        {/* <-- ALTERAÇÃO: deixar esta section BRANCA (antes era bg-gray-50) -->
+            Section "Quer vender seu carro ?" agora tem fundo branco para diferenciar */}
+        <section className="py-24 bg-white">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center">
               <h2 className="text-3xl md:text-4xl font-extrabold text-gray-900">Quer vender seu carro ?</h2>

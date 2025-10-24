@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { Helmet } from 'react-helmet';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getCarBySlug } from '@/lib/car-api';
@@ -7,6 +6,7 @@ import { Calendar, Gauge, Droplet, Video, ArrowRight, Cog, Palette } from 'lucid
 import { Button } from '@/components/ui/button';
 import BackgroundShape from '@/components/BackgroundShape';
 import InterestModal from '@/components/InterestModal';
+import Seo from '@/components/Seo'; // ▶️ nosso componente SEO
 
 // FUNÇÃO 100% CORRIGIDA E FINAL
 const getYouTubeEmbedUrl = (url) => {
@@ -21,10 +21,20 @@ const getYouTubeEmbedUrl = (url) => {
     }
 
     if (videoId) {
-        // Este é o formato de embed correto que não dará mais erro 404
         return `https://www.youtube.com/embed/${videoId}`;
     }
     return null;
+};
+
+const makeAbsoluteUrl = (path) => {
+    if (!path) return null;
+    if (path.startsWith('http://') || path.startsWith('https://')) return path;
+    // usa origem do navegador para construir URL absoluta
+    try {
+        return `${window.location.origin}${path.startsWith('/') ? '' : '/'}${path}`;
+    } catch (e) {
+        return path; // fallback
+    }
 };
 
 const CarDetail = () => {
@@ -51,7 +61,13 @@ const CarDetail = () => {
         fetchCar();
     }, [slug, navigate]);
 
-    if (loading) { return ( <div className="min-h-screen bg-gray-50 flex justify-center items-center"><div className="text-yellow-500 text-xl">Carregando...</div></div> ); }
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-gray-50 flex justify-center items-center">
+                <div className="text-yellow-500 text-xl">Carregando...</div>
+            </div>
+        );
+    }
     if (!car) return null;
 
     const youtubeEmbedUrl = getYouTubeEmbedUrl(car.youtube_link);
@@ -64,16 +80,24 @@ const CarDetail = () => {
         { icon: Palette, label: "Cor", value: car.color },
     ];
 
+    // Dados SEO simples e prontos
+    const seoTitle = `${car.brand} ${car.model} - AutenTicco Motors`;
+    const priceFormatted = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(car.price);
+    const seoDescription = `${car.brand} ${car.model} ${car.year} • ${formattedMileage} km • ${priceFormatted}. Reserve com depósito ou agende test-drive.`;
+    const seoImage = makeAbsoluteUrl(selectedImage || car.main_photo_url || (car.photo_urls && car.photo_urls[0]) || '');
+    const seoUrl = `${window.location.origin}/veiculo/${car.slug || slug}`;
+
     return (
         <>
-            <Helmet><title>{`${car.brand} ${car.model} - AutenTicco Motors`}</title></Helmet>
+            <Seo title={seoTitle} description={seoDescription} image={seoImage} url={seoUrl} />
+
             <div className="relative isolate min-h-screen bg-white text-gray-800 pt-28">
                 <BackgroundShape />
                 <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
                     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
                         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
                             <h1 className="text-4xl md:text-5xl font-extrabold text-gray-900 tracking-tight">{car.brand} <span className="font-light">{car.model}</span></h1>
-                            <span className="text-3xl md:text-4xl font-bold text-gray-900 mt-2 md:mt-0">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(car.price)}</span>
+                            <span className="text-3xl md:text-4xl font-bold text-gray-900 mt-2 md:mt-0">{priceFormatted}</span>
                         </div>
                         <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 items-start">
                             <div className="lg:col-span-3">
@@ -122,3 +146,4 @@ const CarDetail = () => {
     );
 };
 export default CarDetail;
+

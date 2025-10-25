@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://www.autenticcomotors.com.br/</loc>
+    <changefreq>daily</changefreq>
+  </url>
+  <url>
+    <loc>https://www.autenticcomotors.com.br/estoque</loc>
+    <changefreq>daily</changefreq>
+  </url>
+  <url>
+    <loc>https://www.autenticcomotors.com.br/vender</loc>
+    <changefreq>weekly</changefreq>
+  </url>
+  <url>
+    <loc>https://www.autenticcomotors.com.br/contato</loc>
+    <changefreq>weekly</changefreq>
+  </url>
+ <url>
+    <loc>https://www.autenticcomotors.com.br/sobre</loc>
+    <changefreq>weekly</changefreq>
+  </url>
+ 
+</urlset>
+

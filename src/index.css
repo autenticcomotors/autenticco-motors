@@ -1,3 +1,5 @@
+/* src/index.css */
+
 /* Importa a fonte Inter do Google Fonts */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
@@ -31,3 +33,81 @@
     -moz-osx-font-smoothing: grayscale;
   }
 }
+
+/* ---------------------------
+   Seu APP.CSS incorporado
+   --------------------------- */
+#root {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+}
+
+.logo {
+  height: 6em;
+  padding: 1.5em;
+  will-change: filter;
+  transition: filter 300ms;
+}
+.logo:hover {
+  filter: drop-shadow(0 0 2em #646cffaa);
+}
+.logo.react:hover {
+  filter: drop-shadow(0 0 2em #61dafbaa);
+}
+
+@keyframes logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  a:nth-of-type(2) .logo {
+    animation: logo-spin infinite 20s linear;
+  }
+}
+
+.card {
+  padding: 2em;
+}
+
+.read-the-docs {
+  color: #888;
+}
+
+/* ---------------------------
+   Estilos do BackToTop (simples)
+   --------------------------- */
+
+/* Classe usada no botão; a maior parte do estilo usa Tailwind inline na classe do componente,
+   mas deixamos aqui ajustes finos e acessibilidade. */
+.back-to-top {
+  /* fallback caso Tailwind não carregue imediatamente */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* animação sutil quando aparece */
+@keyframes back-to-top-entrance {
+  from { transform: translateY(8px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.back-to-top {
+  animation: back-to-top-entrance 200ms ease-out;
+  transition: background-color 120ms ease, transform 120ms ease;
+}
+
+/* reduzir movimento para usuários que preferem isso */
+@media (prefers-reduced-motion: reduce) {
+  .back-to-top, .logo {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+

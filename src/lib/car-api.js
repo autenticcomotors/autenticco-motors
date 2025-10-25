@@ -199,6 +199,59 @@ export const addPlatform = async (name) => {
   -----------------------------
 */
 
+/**
+ * Insere um registro na tabela `sales`.
+ * Esta função apenas cria a entrada em sales e retorna o resultado.
+ * (Não altera o registro em `cars` — use markCarAsSold se quiser inserir e atualizar o carro)
+ */
+export const addSale = async (sale) => {
+  // sale: { car_id, platform_id, sale_price, sale_date, notes }
+  try {
+    const payload = {
+      ...sale,
+      sale_date: sale.sale_date || new Date().toISOString()
+    };
+    const { data, error } = await supabase
+      .from('sales')
+      .insert([payload])
+      .select()
+      .single();
+    if (error) {
+      console.error('Erro ao inserir sale:', error);
+      return { data: null, error };
+    }
+    return { data, error: null };
+  } catch (err) {
+    console.error('Erro em addSale:', err);
+    return { data: null, error: err };
+  }
+};
+
+/**
+ * Deleta todas as sales associadas a um car_id.
+ * Útil para reverter vendas em massa daquele veículo.
+ */
+export const deleteSalesByCar = async (carId) => {
+  try {
+    const { data, error } = await supabase
+      .from('sales')
+      .delete()
+      .eq('car_id', carId);
+    if (error) {
+      console.error('Erro ao deletar sales por carro:', error);
+      return { data: null, error };
+    }
+    return { data, error: null };
+  } catch (err) {
+    console.error('Erro em deleteSalesByCar:', err);
+    return { data: null, error: err };
+  }
+};
+
+/**
+ * Marca carro como vendido: cria sale e atualiza o carro (is_available = false).
+ * Mantive esta função caso você queira um único passo que insere e atualiza.
+ */
 export const markCarAsSold = async ({ car_id, platform_id = null, sale_price = null, sale_date = null, notes = null }) => {
   try {
     const { data: saleData, error: saleError } = await supabase
@@ -218,12 +271,13 @@ export const markCarAsSold = async ({ car_id, platform_id = null, sale_price = n
       return { error: saleError };
     }
 
+    // Atualiza o carro para ficar fora do estoque (is_available = false)
     const { data: updatedCar, error: carUpdateError } = await supabase
       .from('cars')
       .update({
-        is_sold: true,
-        sold_at: saleData.sale_date,
-        sold_platform_id: platform_id || null,
+        is_available: false,
+        sale_date: saleData.sale_date,
+        sale_platform_id: platform_id || null,
         sale_price: sale_price || null
       })
       .eq('id', car_id)
@@ -242,14 +296,17 @@ export const markCarAsSold = async ({ car_id, platform_id = null, sale_price = n
   }
 };
 
+/**
+ * Desmarca carro como vendido: atualiza o carro (is_available = true) e opcionalmente remove a última sale
+ */
 export const unmarkCarAsSold = async (carId, { deleteLastSale = false } = {}) => {
   try {
     const { data: updatedCar, error: carErr } = await supabase
       .from('cars')
       .update({
-        is_sold: false,
-        sold_at: null,
-        sold_platform_id: null,
+        is_available: true,
+        sale_date: null,
+        sale_platform_id: null,
         sale_price: null
       })
       .eq('id', carId)

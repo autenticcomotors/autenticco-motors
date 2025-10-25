@@ -10,7 +10,8 @@ import { CSVLink } from 'react-csv';
 import { supabase } from '@/lib/supabase';
 import {
   getCars, addCar, deleteCar, updateCar, getTestimonials, addTestimonial, deleteTestimonial,
-  getLeads, updateLead, deleteLead
+  getLeads, updateLead, deleteLead,
+  getPlatforms, addSale, deleteSalesByCar
 } from '@/lib/car-api';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -27,19 +28,19 @@ const FormFields = React.memo(({ carData, onChange, carOptions }) => (
     <input name="mileage" value={carData.mileage || ''} onChange={onChange} placeholder="Quilometragem *" type="number" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none" />
     <select name="color" value={carData.color || ''} onChange={onChange} className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none">
       <option value="">Cor *</option>
-      {carOptions.colors.map(c => <option key={c} value={c}>{c}</option>)}
+      {[ 'Preto','Branco','Prata','Cinza','Azul','Vermelho','Marrom','Verde','Outra' ].map(c => <option key={c} value={c}>{c}</option>)}
     </select>
     <select name="fuel" value={carData.fuel || ''} onChange={onChange} className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none">
       <option value="">Combustível *</option>
-      {carOptions.fuels.map(f => <option key={f} value={f}>{f}</option>)}
+      {['Flex','Gasolina','Diesel','Elétrico','Híbrido'].map(f => <option key={f} value={f}>{f}</option>)}
     </select>
     <select name="transmission" value={carData.transmission || ''} onChange={onChange} className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none">
       <option value="">Câmbio *</option>
-      {carOptions.transmissions.map(t => <option key={t} value={t}>{t}</option>)}
+      {['Automático','Manual'].map(t => <option key={t} value={t}>{t}</option>)}
     </select>
     <select name="body_type" value={carData.body_type || ''} onChange={onChange} className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none">
       <option value="">Carroceria *</option>
-      {carOptions.bodyTypes.map(b => <option key={b} value={b}>{b}</option>)}
+      {['SUV','Sedan','Hatch','Picape','Esportivo','Outro'].map(b => <option key={b} value={b}>{b}</option>)}
     </select>
     <div className="relative md:col-span-3">
       <input name="youtube_link" value={carData.youtube_link || ''} onChange={onChange} placeholder="Link do Vídeo do YouTube" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none" />
@@ -51,8 +52,9 @@ const FormFields = React.memo(({ carData, onChange, carOptions }) => (
 ));
 
 const AdminDashboard = () => {
-  const [activeTab, setActiveTab] = useState('leads');
+  const [activeTab, setActiveTab] = useState('leads'); // default
   const [cars, setCars] = useState([]);
+  const [platforms, setPlatforms] = useState([]);
   const [leads, setLeads] = useState([]);
   const [testimonials, setTestimonials] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -66,31 +68,27 @@ const AdminDashboard = () => {
   const [mainPhotoIndex, setMainPhotoIndex] = useState(0);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [carToDelete, setCarToDelete] = useState(null);
+  const [sellDialogOpen, setSellDialogOpen] = useState(false);
+  const [carToSell, setCarToSell] = useState(null);
+  const [sellDetails, setSellDetails] = useState({ platform_id: '', sale_price: '', sale_date: new Date().toISOString().slice(0,10) });
   const fileInputRef = useRef(null);
   const navigate = useNavigate();
 
-  const carOptions = {
-    transmissions: ['Automático', 'Manual'],
-    bodyTypes: ['SUV', 'Sedan', 'Hatch', 'Picape', 'Esportivo', 'Outro'],
-    fuels: ['Flex', 'Gasolina', 'Diesel', 'Elétrico', 'Híbrido'],
-    colors: ['Preto', 'Branco', 'Prata', 'Cinza', 'Azul', 'Vermelho', 'Marrom', 'Verde', 'Outra']
-  };
-  const statusOptions = ['Novo', 'Contato Realizado', 'Em Negociação', 'Venda Concluída', 'Descartado'];
+  const statusOptions = ['Novo','Contato Realizado','Em Negociação','Venda Concluída','Descartado'];
 
   const fetchAllData = useCallback(async () => {
     setLoading(true);
     try {
-      const [carsData, testimonialsData, leadsData] = await Promise.all([
-        getCars(), getTestimonials(), getLeads(leadFilters)
+      const [carsData, platformsData, testimonialsData, leadsData] = await Promise.all([
+        getCars(), getPlatforms(), getTestimonials(), getLeads(leadFilters)
       ]);
-      setCars(carsData || []);
-      setTestimonials(testimonialsData || []);
-      setLeads(leadsData || []);
+      setCars(Array.isArray(carsData) ? carsData : []);
+      setPlatforms(Array.isArray(platformsData) ? platformsData : []);
+      setTestimonials(Array.isArray(testimonialsData) ? testimonialsData : []);
+      setLeads(Array.isArray(leadsData) ? leadsData : []);
     } catch (err) {
       console.error('Erro fetchAllData:', err);
-      setCars([]);
-      setTestimonials([]);
-      setLeads([]);
+      setCars([]); setPlatforms([]); setTestimonials([]); setLeads([]);
     } finally {
       setLoading(false);
     }
@@ -98,29 +96,10 @@ const AdminDashboard = () => {
 
   useEffect(() => { fetchAllData(); }, [fetchAllData]);
 
-  const handleStatusChange = async (leadId, newStatus) => {
-    await updateLead(leadId, { status: newStatus });
-    toast({ title: 'Status do lead atualizado!' });
-    fetchAllData();
-  };
-
-  const handleDeleteLead = async () => {
-    if (!leadToDelete) return;
-    await deleteLead(leadToDelete);
-    toast({ title: 'Lead removido com sucesso.' });
-    setLeadToDelete(null);
-    fetchAllData();
-  };
-
-  const leadsForCSV = (leadsData) => (leadsData || []).map(lead => ({
-    data_criacao: new Date(lead.created_at).toLocaleString('pt-BR'),
-    nome_cliente: lead.client_name,
-    contato_cliente: lead.client_contact,
-    tipo_lead: lead.lead_type,
-    status: lead.status,
-    veiculo: lead.cars ? `${lead.cars.brand} ${lead.cars.model}` : (lead.car_details || 'N/A'),
-    notas: lead.notes,
-  }));
+  // leads handlers (sem alteração)
+  const handleStatusChange = async (leadId, newStatus) => { await updateLead(leadId, { status: newStatus }); toast({ title: 'Status do lead atualizado!' }); fetchAllData(); };
+  const handleDeleteLead = async () => { if (!leadToDelete) return; await deleteLead(leadToDelete); toast({ title: 'Lead removido com sucesso.' }); setLeadToDelete(null); fetchAllData(); };
+  const leadsForCSV = (leadsData) => (leadsData || []).map(lead => ({ data_criacao: new Date(lead.created_at).toLocaleString('pt-BR'), nome_cliente: lead.client_name, contato_cliente: lead.client_contact, tipo_lead: lead.lead_type, status: lead.status, veiculo: lead.cars ? `${lead.cars.brand} ${lead.cars.model}` : (lead.car_details || 'N/A'), notas: lead.notes }));
 
   const handleLogout = async () => { await supabase.auth.signOut(); navigate('/admin'); };
 
@@ -132,21 +111,10 @@ const AdminDashboard = () => {
   const handleEditingCarInputChange = useCallback((e) => handleInputChange(e, setEditingCar), []);
   const handleNewTestimonialInputChange = useCallback((e) => handleInputChange(e, setNewTestimonial), []);
 
-  const handleToggleFeatured = async (carId, currentStatus) => {
-    await updateCar(carId, { is_featured: !currentStatus });
-    toast({ title: `Veículo ${!currentStatus ? 'adicionado aos' : 'removido dos'} destaques!` });
-    fetchAllData();
-  };
+  // featured
+  const handleToggleFeatured = async (carId, currentStatus) => { await updateCar(carId, { is_featured: !currentStatus }); toast({ title: `Veículo ${!currentStatus ? 'adicionado aos' : 'removido dos'} destaques!` }); fetchAllData(); };
 
-  const handleAddTestimonial = async (e) => {
-    e.preventDefault();
-    await addTestimonial(newTestimonial);
-    toast({ title: 'Depoimento adicionado!' });
-    setNewTestimonial({ client_name: '', testimonial_text: '', car_sold: '' });
-    fetchAllData();
-  };
-  const handleDeleteTestimonial = async (id) => { await deleteTestimonial(id); toast({ title: 'Depoimento removido.' }); fetchAllData(); };
-
+  // photos / add / edit / delete (sem alteração grande)
   const handlePhotoUpload = (e) => { const files = Array.from(e.target.files || []); setPhotosToUpload(prev => [...prev, ...files]); };
   const removePhoto = (index, isExisting = false) => {
     if (isExisting && editingCar) {
@@ -158,6 +126,7 @@ const AdminDashboard = () => {
     }
   };
 
+  // add car
   const handleAddCar = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -173,20 +142,11 @@ const AdminDashboard = () => {
       const carData = { ...newCar, photo_urls: photoUrls, main_photo_url: photoUrls[mainPhotoIndex] || null, price: parseFloat(newCar.price || 0) };
       const { data: addedCar, error } = await addCar(carData);
       if (error) { toast({ title: 'Erro ao adicionar.', description: error.message, variant: 'destructive' }); }
-      else {
-        setCars(prevCars => [addedCar, ...prevCars]);
-        setNewCar({ brand: '', model: '', year: '', price: '', mileage: '', fuel: '', photo_urls: [], youtube_link: '', full_description: '', transmission: '', body_type: '', color: '' });
-        setPhotosToUpload([]);
-        setMainPhotoIndex(0);
-        if (fileInputRef.current) fileInputRef.current.value = "";
-        toast({ title: 'Veículo adicionado!' });
-      }
+      else { setCars(prevCars => [addedCar, ...prevCars]); setNewCar({ brand:'',model:'',year:'',price:'',mileage:'',fuel:'',photo_urls:[],youtube_link:'',full_description:'',transmission:'',body_type:'',color:'' }); setPhotosToUpload([]); setMainPhotoIndex(0); if (fileInputRef.current) fileInputRef.current.value = ""; toast({ title: 'Veículo adicionado!' }); }
     } catch (err) {
       console.error('Erro handleAddCar:', err);
       toast({ title: 'Erro ao adicionar veículo', description: err.message || String(err), variant: 'destructive' });
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   const handleEditCarClick = (car) => { setPhotosToUpload([]); setPhotosToDelete([]); setEditingCar(JSON.parse(JSON.stringify(car))); setIsEditDialogOpen(true); };
@@ -217,18 +177,11 @@ const AdminDashboard = () => {
       }
       const { error } = await updateCar(finalCarData.id, { ...finalCarData, price: parseFloat(finalCarData.price || 0) });
       if (error) { toast({ title: 'Erro ao atualizar.', description: error.message, variant: 'destructive' }); }
-      else {
-        setCars(prev => prev.map(c => c.id === finalCarData.id ? finalCarData : c));
-        setIsEditDialogOpen(false);
-        setEditingCar(null);
-        toast({ title: 'Veículo atualizado!' });
-      }
+      else { setCars(prev => prev.map(c => c.id === finalCarData.id ? finalCarData : c)); setIsEditDialogOpen(false); setEditingCar(null); toast({ title: 'Veículo atualizado!' }); }
     } catch (err) {
       console.error('Erro handleUpdateCar:', err);
       toast({ title: 'Erro ao atualizar veículo', description: err.message || String(err), variant: 'destructive' });
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   const handleDeleteCar = async (id) => {
@@ -245,10 +198,63 @@ const AdminDashboard = () => {
     } catch (err) {
       console.error('Erro handleDeleteCar:', err);
       toast({ title: 'Erro ao remover veículo', description: err.message || String(err), variant: 'destructive' });
-    } finally {
-      setCarToDelete(null);
-      setLoading(false);
+    } finally { setCarToDelete(null); setLoading(false); }
+  };
+
+  // --- VENDAS: abrir modal para marcar vendido ---
+  const openSellDialog = (car) => {
+    setCarToSell(car);
+    setSellDetails({ platform_id: '', sale_price: car.sale_price || '', sale_date: new Date().toISOString().slice(0,10) });
+    setSellDialogOpen(true);
+  };
+
+  const handleConfirmSell = async () => {
+    if (!carToSell) return;
+    const price = Number(sellDetails.sale_price || 0);
+    if (!price || price <= 0) {
+      toast({ title: 'Informe o valor final de venda', variant: 'destructive' });
+      return;
     }
+    setLoading(true);
+    try {
+      // 1) criar registro em sales
+      const salePayload = {
+        car_id: carToSell.id,
+        platform_id: sellDetails.platform_id || null,
+        sale_price: price,
+        sale_date: sellDetails.sale_date || new Date().toISOString(),
+      };
+      const { data: saleData, error: saleError } = await addSale(salePayload);
+      if (saleError) {
+        toast({ title: 'Erro ao registrar venda', description: saleError.message, variant: 'destructive' });
+        setLoading(false);
+        return;
+      }
+      // 2) atualizar carro -> is_available false + campos de venda (para consulta rápida)
+      await updateCar(carToSell.id, { is_available: false, sale_price: price, sale_date: salePayload.sale_date, sale_platform_id: sellDetails.platform_id || null });
+      toast({ title: 'Veículo marcado como VENDIDO!' });
+      setSellDialogOpen(false);
+      setCarToSell(null);
+      fetchAllData();
+    } catch (err) {
+      console.error('Erro handleConfirmSell:', err);
+      toast({ title: 'Erro ao marcar vendido', description: err.message || String(err), variant: 'destructive' });
+    } finally { setLoading(false); }
+  };
+
+  // reverte venda: apaga vendas do carro (no DB) e atualiza carro para disponível
+  const handleRevertSale = async (car) => {
+    if (!car) return;
+    setLoading(true);
+    try {
+      await deleteSalesByCar(car.id);
+      await updateCar(car.id, { is_available: true, sale_price: null, sale_date: null, sale_platform_id: null });
+      toast({ title: 'Venda revertida — veículo retornou ao estoque.' });
+      fetchAllData();
+    } catch (err) {
+      console.error('Erro handleRevertSale:', err);
+      toast({ title: 'Erro ao reverter venda', description: err.message || String(err), variant: 'destructive' });
+    } finally { setLoading(false); }
   };
 
   if (loading) {
@@ -258,6 +264,13 @@ const AdminDashboard = () => {
       </div>
     );
   }
+
+  // organize cars: ativos primeiro, vendidos por último (para enviar vendidos ao fim)
+  const sortedCars = Array.isArray(cars) ? [...cars].sort((a,b) => {
+    const aAvailable = (a.is_available === false) ? 1 : 0;
+    const bAvailable = (b.is_available === false) ? 1 : 0;
+    return aAvailable - bAvailable || new Date(b.created_at) - new Date(a.created_at);
+  }) : [];
 
   return (
     <div className="relative isolate min-h-screen bg-gray-50 text-gray-800 pt-28">
@@ -270,17 +283,24 @@ const AdminDashboard = () => {
             <Button onClick={handleLogout} variant="destructive"><LogOut className="mr-2 h-4 w-4" /> Sair</Button>
           </div>
 
+          {/* REORGANIZEI A ORDEM: Leads, Veículos, Depoimentos, Gestão, Relatórios */}
           <div className="flex space-x-4 mb-8 border-b">
             <button className={`px-4 py-2 font-semibold ${activeTab === 'leads' ? 'border-b-2 border-yellow-500 text-yellow-500' : 'text-gray-500 hover:text-gray-900'}`} onClick={() => setActiveTab('leads')}><Users className="inline mr-2" /> Leads</button>
+
             <button className={`px-4 py-2 font-semibold ${activeTab === 'cars' ? 'border-b-2 border-yellow-500 text-yellow-500' : 'text-gray-500 hover:text-gray-900'}`} onClick={() => setActiveTab('cars')}><Car className="inline mr-2" /> Veículos</button>
-            <button className={`px-4 py-2 font-semibold ${activeTab === 'gestao' ? 'border-b-2 border-yellow-500 text-yellow-500' : 'text-gray-500 hover:text-gray-900'}`} onClick={() => setActiveTab('gestao')}><FileText className="inline mr-2" /> Gestão</button>
+
             <button className={`px-4 py-2 font-semibold ${activeTab === 'testimonials' ? 'border-b-2 border-yellow-500 text-yellow-500' : 'text-gray-500 hover:text-gray-900'}`} onClick={() => setActiveTab('testimonials')}><MessageSquare className="inline mr-2" /> Depoimentos</button>
+
+            <button className={`px-4 py-2 font-semibold ${activeTab === 'gestao' ? 'border-b-2 border-yellow-500 text-yellow-500' : 'text-gray-500 hover:text-gray-900'}`} onClick={() => setActiveTab('gestao')}><FileText className="inline mr-2" /> Gestão</button>
+
             <button className={`px-4 py-2 font-semibold ${activeTab === 'reports' ? 'border-b-2 border-yellow-500 text-yellow-500' : 'text-gray-500 hover:text-gray-900'}`} onClick={() => setActiveTab('reports')}><BarChart2 className="inline mr-2" /> Relatórios</button>
           </div>
 
-          {/* LEADS */}
+          {/* --- (Tabs content unchanged para leads, cars etc) --- */}
+
           {activeTab === 'leads' && (
             <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-xl border">
+              {/* ... (conteúdo leads idêntico) */}
               <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
                 <div className="text-lg font-bold">Exibindo <span className="text-yellow-500">{leads.length}</span> lead(s)</div>
                 <div className="flex flex-wrap items-center justify-center gap-4">
@@ -315,14 +335,9 @@ const AdminDashboard = () => {
                         </select>
                         <AlertDialog open={leadToDelete === lead.id} onOpenChange={(isOpen) => !isOpen && setLeadToDelete(null)}>
                           <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={() => setLeadToDelete(lead.id)}>
-                              <Trash2 className="h-5 w-5 text-red-500 hover:text-red-400" />
-                            </Button>
+                            <Button variant="ghost" size="icon" onClick={() => setLeadToDelete(lead.id)}><Trash2 className="h-5 w-5 text-red-500 hover:text-red-400" /></Button>
                           </AlertDialogTrigger>
-                          <AlertDialogContent className="bg-white">
-                            <AlertDialogHeader><AlertDialogTitle>Tem certeza?</AlertDialogTitle><AlertDialogDescription>Esta ação removerá o lead permanentemente.</AlertDialogDescription></AlertDialogHeader>
-                            <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={handleDeleteLead}>Sim, Excluir</AlertDialogAction></AlertDialogFooter>
-                          </AlertDialogContent>
+                          <AlertDialogContent className="bg-white"><AlertDialogHeader><AlertDialogTitle>Tem certeza?</AlertDialogTitle><AlertDialogDescription>Esta ação removerá o lead permanentemente.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={handleDeleteLead}>Sim, Excluir</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
                         </AlertDialog>
                       </div>
                     </div>
@@ -332,13 +347,12 @@ const AdminDashboard = () => {
             </div>
           )}
 
-          {/* VEÍCULOS */}
           {activeTab === 'cars' && (
             <>
               <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-8 mb-12 shadow-xl border">
                 <h2 className="text-2xl font-semibold mb-6 flex items-center"><PlusCircle className="mr-3 text-yellow-500" /> Adicionar Novo Veículo</h2>
                 <form onSubmit={handleAddCar} className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6"><FormFields carData={newCar} onChange={handleNewCarInputChange} carOptions={carOptions} /></div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6"><FormFields carData={newCar} onChange={handleNewCarInputChange} /></div>
                   <div>
                     <Button type="button" onClick={() => fileInputRef.current && fileInputRef.current.click()}><ImageIcon className="mr-2 h-4 w-4" /> Adicionar Fotos</Button>
                     <input type="file" ref={fileInputRef} onChange={handlePhotoUpload} multiple accept="image/*" className="hidden"/>
@@ -360,48 +374,60 @@ const AdminDashboard = () => {
                   <Button variant="outline" size="sm" asChild><CSVLink data={cars} filename={"estoque-autenticco.csv"} className="flex items-center"><Download className="mr-2 h-4 w-4" /> Exportar para CSV</CSVLink></Button>
                 </div>
                 <div className="space-y-4">
-                  {cars && cars.map(car => (
-                    <motion.div key={car.id} layout className="bg-white rounded-2xl p-4 flex items-center justify-between shadow border">
-                      <div className="flex items-center gap-4">
-                        <img src={car.main_photo_url || 'https://placehold.co/96x64/e2e8f0/4a5568?text=Sem+Foto'} alt={`${car.brand} ${car.model}`} className="h-16 w-24 object-cover rounded-md" />
-                        <div>
-                          <h3 className="font-bold text-lg text-gray-900">{car.brand} {car.model} ({car.year})</h3>
-                          <p className="text-gray-800 font-semibold">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(car.price || 0)}</p>
+                  {sortedCars.map(car => {
+                    const isSold = car.is_available === false;
+                    return (
+                      <motion.div key={car.id} layout className={`bg-white rounded-2xl p-4 flex items-center justify-between shadow border ${isSold ? 'opacity-80 grayscale' : ''}`}>
+                        <div className="flex items-center gap-4">
+                          <img src={car.main_photo_url || 'https://placehold.co/96x64/e2e8f0/4a5568?text=Sem+Foto'} alt={`${car.brand} ${car.model}`} className="h-16 w-24 object-cover rounded-md" />
+                          <div>
+                            <h3 className="font-bold text-lg text-gray-900">{car.brand} {car.model} ({car.year})</h3>
+                            <p className="text-gray-800 font-semibold">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(car.price || 0)}</p>
+                            {isSold && <div className="text-sm text-red-600 font-semibold mt-1">VENDIDO</div>}
+                          </div>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button variant="ghost" size="icon" onClick={() => handleToggleFeatured(car.id, car.is_featured)} title={car.is_featured ? 'Remover dos destaques' : 'Adicionar aos destaques'}><Star className={`h-5 w-5 transition-colors ${car.is_featured ? 'text-yellow-500 fill-yellow-500' : 'text-gray-400 hover:text-yellow-500'}`} /></Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleEditCarClick(car)}><Edit className="h-5 w-5 text-blue-500 hover:text-blue-400" /></Button>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={() => setCarToDelete(car)}><Trash2 className="h-5 w-5 text-red-500 hover:text-red-400" /></Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent className="bg-white">
-                            <AlertDialogHeader><AlertDialogTitle>Tem certeza?</AlertDialogTitle><AlertDialogDescription>Esta ação removerá o veículo.</AlertDialogDescription></AlertDialogHeader>
-                            <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteCar(carToDelete.id)}>Excluir</AlertDialogAction></AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </div>
-                    </motion.div>
-                  ))}
+
+                        <div className="flex items-center gap-2">
+                          <Button variant="ghost" size="icon" onClick={() => handleToggleFeatured(car.id, car.is_featured)} title={car.is_featured ? 'Remover dos destaques' : 'Adicionar aos destaques'}><Star className={`h-5 w-5 transition-colors ${car.is_featured ? 'text-yellow-500 fill-yellow-500' : 'text-gray-400 hover:text-yellow-500'}`} /></Button>
+
+                          {!isSold ? (
+                            // botão para abrir modal de venda
+                            <Button variant="ghost" size="icon" onClick={() => openSellDialog(car)} title="Marcar como vendido">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>
+                            </Button>
+                          ) : (
+                            // botão para reverter venda
+                            <Button variant="ghost" size="icon" onClick={() => handleRevertSale(car)} title="Reverter venda"><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg></Button>
+                          )}
+
+                          <Button variant="ghost" size="icon" onClick={() => handleEditCarClick(car)}><Edit className="h-5 w-5 text-blue-500 hover:text-blue-400" /></Button>
+
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="ghost" size="icon" onClick={() => setCarToDelete(car)}><Trash2 className="h-5 w-5 text-red-500 hover:text-red-400" /></Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent className="bg-white"><AlertDialogHeader><AlertDialogTitle>Tem certeza?</AlertDialogTitle><AlertDialogDescription>Esta ação removerá o veículo.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteCar(carToDelete.id)}>Excluir</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
                 </div>
               </div>
             </>
           )}
 
-          {/* GESTÃO (VehicleManager) */}
           {activeTab === 'gestao' && (
             <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-xl border">
               <VehicleManager cars={cars} refreshAll={fetchAllData} />
             </div>
           )}
 
-          {/* DEPOIMENTOS */}
           {activeTab === 'testimonials' && (
             <>
               <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-8 mb-12 shadow-xl border">
                 <h2 className="text-2xl font-semibold mb-6 flex items-center"><PlusCircle className="mr-3 text-yellow-500" /> Adicionar Novo Depoimento</h2>
-                <form onSubmit={handleAddTestimonial} className="space-y-6">
+                <form onSubmit={async (e) => { e.preventDefault(); await addTestimonial(newTestimonial); toast({ title: 'Depoimento adicionado!' }); setNewTestimonial({ client_name: '', testimonial_text: '', car_sold: '' }); fetchAllData(); }} className="space-y-6">
                   <input name="client_name" value={newTestimonial.client_name} onChange={handleNewTestimonialInputChange} placeholder="Nome do Cliente *" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none" />
                   <input name="car_sold" value={newTestimonial.car_sold} onChange={handleNewTestimonialInputChange} placeholder="Carro (Ex: BMW X5 2021)" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none" />
                   <textarea name="testimonial_text" value={newTestimonial.testimonial_text} onChange={handleNewTestimonialInputChange} placeholder="Texto do depoimento *" rows={4} className="w-full p-3 bg-white border border-gray-300 rounded-lg" />
@@ -418,7 +444,7 @@ const AdminDashboard = () => {
                         <p className="italic text-gray-600">"{item.testimonial_text}"</p>
                         <p className="font-bold mt-2 text-gray-800">{item.client_name} - <span className="text-sm font-normal text-gray-500">{item.car_sold}</span></p>
                       </div>
-                      <Button variant="ghost" size="icon" onClick={() => handleDeleteTestimonial(item.id)}><Trash2 className="h-5 w-5 text-red-500" /></Button>
+                      <Button variant="ghost" size="icon" onClick={async () => { await deleteTestimonial(item.id); toast({ title: 'Depoimento removido.' }); fetchAllData(); }}><Trash2 className="h-5 w-5 text-red-500" /></Button>
                     </motion.div>
                   ))}
                 </div>
@@ -426,44 +452,61 @@ const AdminDashboard = () => {
             </>
           )}
 
-          {/* RELATÓRIOS */}
           {activeTab === 'reports' && (
             <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-xl border">
-              {/* Render the Reports page inside the dashboard tab */}
               <Reports />
             </div>
           )}
+
         </motion.div>
       </div>
 
-      {/* EDIT DIALOG */}
+      {/* EDIT DIALOG (sem alteração) */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="bg-white text-gray-900">
           <DialogHeader><DialogTitle>Editar Veículo</DialogTitle></DialogHeader>
           {editingCar && (
             <form onSubmit={handleUpdateCar} className="space-y-4 max-h-[80vh] overflow-y-auto pr-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4"><FormFields carData={editingCar} onChange={handleEditingCarInputChange} carOptions={carOptions} /></div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4"><FormFields carData={editingCar} onChange={handleEditingCarInputChange} /></div>
               <div className="space-y-2">
                 <label className="font-medium text-sm text-gray-700">Fotos</label>
                 <div className="flex flex-wrap gap-4 p-2 bg-gray-100 rounded-lg min-h-[112px]">
-                  {editingCar.photo_urls && editingCar.photo_urls.map((url, index) => (
-                    <div key={url} className="relative">
-                      <img src={url} alt={`Foto ${index + 1}`} className="h-24 w-24 object-cover rounded-md" />
-                      <button type="button" onClick={() => removePhoto(index, true)} className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1"><Trash2 className="h-3 w-3" /></button>
-                    </div>
+                  {editingCar.photo_urls && (editingCar.photo_urls || []).map((url, index) => (
+                    <div key={url} className="relative"><img src={url} alt={`Foto ${index + 1}`} className="h-24 w-24 object-cover rounded-md" /><button type="button" onClick={() => removePhoto(index, true)} className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1"><Trash2 className="h-3 w-3" /></button></div>
                   ))}
-                  {photosToUpload.map((file, index) => (
-                    <div key={index} className="relative">
-                      <img src={URL.createObjectURL(file)} alt={`Preview ${index}`} className="h-24 w-24 object-cover rounded-lg" />
-                      <button type="button" onClick={() => removePhoto(index)} className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1"><Trash2 className="h-3 w-3" /></button>
-                    </div>
-                  ))}
+                  {photosToUpload.map((file, index) => (<div key={index} className="relative"><img src={URL.createObjectURL(file)} alt={`Preview ${index}`} className="h-24 w-24 object-cover rounded-lg" /><button type="button" onClick={() => removePhoto(index)} className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1"><Trash2 className="h-3 w-3" /></button></div>))}
                 </div>
                 <Button type="button" onClick={() => fileInputRef.current && fileInputRef.current.click()} className="bg-transparent border border-yellow-500 text-yellow-500 hover:bg-yellow-500 hover:text-black text-xs px-3 py-1.5 h-auto"><ImageIcon className="mr-2 h-4 w-4" /> Adicionar</Button>
               </div>
               <DialogFooter className="pt-4"><Button type="button" variant="ghost" onClick={() => setIsEditDialogOpen(false)}>Cancelar</Button><Button type="submit" className="bg-yellow-400 text-black hover:bg-yellow-500" disabled={loading}>{loading ? 'Salvando...' : 'Salvar Alterações'}</Button></DialogFooter>
             </form>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* SELL DIALOG */}
+      <Dialog open={sellDialogOpen} onOpenChange={setSellDialogOpen}>
+        <DialogContent className="bg-white text-gray-900">
+          <DialogHeader><DialogTitle>Registrar Venda</DialogTitle><DialogDescription>Informe a plataforma e o valor final vendido.</DialogDescription></DialogHeader>
+          <div className="space-y-3">
+            <div className="text-sm text-gray-700">Veículo: <strong>{carToSell ? `${carToSell.brand} ${carToSell.model}` : '-'}</strong></div>
+            <div>
+              <label className="text-sm block mb-1">Plataforma</label>
+              <select className="w-full border rounded p-2" value={sellDetails.platform_id} onChange={(e) => setSellDetails(d => ({ ...d, platform_id: e.target.value }))}>
+                <option value="">(Indicação / Outro)</option>
+                {platforms.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-sm block mb-1">Valor final vendido</label>
+              <input type="number" value={sellDetails.sale_price} onChange={(e) => setSellDetails(d => ({ ...d, sale_price: e.target.value }))} className="w-full border rounded p-2" />
+            </div>
+            <div>
+              <label className="text-sm block mb-1">Data da venda</label>
+              <input type="date" value={sellDetails.sale_date} onChange={(e) => setSellDetails(d => ({ ...d, sale_date: e.target.value }))} className="w-full border rounded p-2" />
+            </div>
+          </div>
+          <DialogFooter className="pt-4"><Button type="button" variant="ghost" onClick={() => { setSellDialogOpen(false); setCarToSell(null); }}>Cancelar</Button><Button onClick={handleConfirmSell} className="bg-green-600 text-white">Confirmar Venda</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

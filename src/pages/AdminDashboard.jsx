@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Helmet } from 'react-helmet';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Car, PlusCircle, Trash2, Edit, LogOut, Download, MessageSquare, Users, Image as ImageIcon, FileText, Check, Star } from 'lucide-react';
+import { Car, PlusCircle, Trash2, Edit, LogOut, Download, MessageSquare, Users, Image as ImageIcon, FileText, Check, Star, BarChart2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
 import { CSVLink } from 'react-csv';

@@ -5,19 +5,51 @@ import { useLocation } from 'react-router-dom';
 export default function ScrollToTop() {
   const location = useLocation();
 
+  // Desliga o comportamento padrão de restauração de scroll do browser
   useEffect(() => {
-    // Sempre que o pathname mudar, forçar scrollTop.
-    // Usamos behavior 'auto' para não criar animação que possa confundir o usuário.
-    try {
-      window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
-      // Também garantir para iOS / alguns browsers:
-      document.documentElement.scrollTop = 0;
-      document.body.scrollTop = 0;
-    } catch (e) {
-      // fallback simples
-      window.scrollTo(0, 0);
+    if (typeof window !== 'undefined' && 'scrollRestoration' in window.history) {
+      try {
+        window.history.scrollRestoration = 'manual';
+      } catch (e) {
+        // ignore
+      }
     }
-  }, [location.pathname]);
+    return () => {
+      try {
+        if ('scrollRestoration' in window.history) {
+          window.history.scrollRestoration = 'auto';
+        }
+      } catch (e) {}
+    };
+  }, []);
+
+  useEffect(() => {
+    // Função que efetua o scroll. Se tiver hash, tenta rolar para o elemento.
+    const doScroll = () => {
+      try {
+        if (location.hash) {
+          // se houver hash, tenta rolar para ele (ex.: /pagina#secao)
+          const id = location.hash.replace('#', '');
+          const el = document.getElementById(id) || document.querySelector(location.hash);
+          if (el && typeof el.scrollIntoView === 'function') {
+            el.scrollIntoView({ behavior: 'auto', block: 'start' });
+            return;
+          }
+        }
+        // caso normal: topo da página
+        window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+        document.documentElement.scrollTop = 0;
+        document.body.scrollTop = 0;
+      } catch (e) {
+        try { window.scrollTo(0, 0); } catch (_) {}
+      }
+    };
+
+    // Executar após micro-tarefa para garantir que o browser não re-aplique o restore depois.
+    const t = setTimeout(doScroll, 0);
+    return () => clearTimeout(t);
+  // Dependemos de pathname e hash para acionar
+  }, [location.pathname, location.hash]);
 
   return null;
 }

@@ -35,14 +35,8 @@
 }
 
 /* ---------------------------
-   Seu APP.CSS incorporado
+   Seu APP.CSS (mantive tudo exceto #root)
    --------------------------- */
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
-}
 
 .logo {
   height: 6em;
@@ -83,11 +77,7 @@
 /* ---------------------------
    Estilos do BackToTop (simples)
    --------------------------- */
-
-/* Classe usada no botão; a maior parte do estilo usa Tailwind inline na classe do componente,
-   mas deixamos aqui ajustes finos e acessibilidade. */
 .back-to-top {
-  /* fallback caso Tailwind não carregue imediatamente */
   display: inline-flex;
   align-items: center;
   justify-content: center;

@@ -49,8 +49,8 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
   const [newChecklistLabel, setNewChecklistLabel] = useState('');
   const [newChecklistNotes, setNewChecklistNotes] = useState('');
 
-  // drag state
-  const [draggingIndex, setDraggingIndex] = useState(null);
+  // drag state (uses id for robustness)
+  const [draggingId, setDraggingId] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
 
   useEffect(() => {
@@ -192,17 +192,16 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
     }
   };
 
-  // --- Drag & Drop handlers (fixed) ---
+  // --- Drag & Drop (robusto: usa id e placeholders) ---
 
-  const handleDragStart = (e, index) => {
-    setDraggingIndex(index);
-    try { e.dataTransfer.setData('text/plain', String(index)); } catch (err) { /* ignore */ }
+  const handleDragStart = (e, itemId) => {
+    setDraggingId(itemId);
+    try { e.dataTransfer.setData('text/plain', String(itemId)); } catch (err) { /* ignore */ }
     e.dataTransfer.effectAllowed = 'move';
   };
 
-  const handleDragEnter = (e, index) => {
+  const handleDragEnterPlaceholder = (e, index) => {
     e.preventDefault();
-    // show placeholder at this index (before the item)
     setDragOverIndex(index);
   };
 
@@ -212,13 +211,12 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
   };
 
   const handleDragEnd = () => {
-    setDraggingIndex(null);
+    setDraggingId(null);
     setDragOverIndex(null);
   };
 
   const saveChecklistOrder = async (newList) => {
     try {
-      // update ord for every item to match index
       await Promise.all(
         newList.map((it, idx) => {
           if (!it || !it.id) return Promise.resolve(null);
@@ -229,55 +227,52 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
     } catch (err) {
       console.error('Erro ao salvar ordem do checklist:', err);
       toast({ title: 'Erro ao salvar ordem', variant: 'destructive' });
-      // not re-fetch here — keep local order as user expects immediate feedback
     }
   };
 
-  const handleDrop = async (e, dropIndexCandidate) => {
+  const handleDropOnPlaceholder = async (e, placeholderIndex) => {
     e.preventDefault();
-
-    // prefer the react state if set, otherwise fallback to value passed
-    const dropIndex = typeof dragOverIndex === 'number' ? dragOverIndex : dropIndexCandidate;
-    const dragIndex = typeof draggingIndex === 'number'
-      ? draggingIndex
-      : Number(e.dataTransfer.getData('text/plain'));
-
-    if (isNaN(dragIndex) || dragIndex === null || dragIndex === undefined) {
+    const draggedId = e.dataTransfer.getData('text/plain') || draggingId;
+    if (!draggedId) {
       handleDragEnd();
       return;
     }
 
-    // Build new list: remove dragged item and insert at computed position
-    const working = Array.from(checklist);
-    const [moved] = working.splice(dragIndex, 1);
-
-    // If user dropped at end placeholder, dropIndex can be checklist.length
-    let insertIndex = dropIndex;
-    // When dragging downwards, after removing the item the array shifts left,
-    // so the insert position must be reduced by 1.
-    if (dragIndex < dropIndex) {
-      insertIndex = dropIndex - 1;
+    // find fresh indexes by id (in case list changed)
+    const currentIndex = checklist.findIndex(it => String(it.id) === String(draggedId));
+    if (currentIndex === -1) {
+      handleDragEnd();
+      return;
     }
 
+    // Build new list and insert at placeholderIndex (0..N)
+    const working = Array.from(checklist);
+    const [moved] = working.splice(currentIndex, 1);
+
+    // If dragging from above to lower position, removing earlier shifts target left
+    let insertIndex = placeholderIndex;
+    if (currentIndex < placeholderIndex) {
+      insertIndex = placeholderIndex - 1;
+    }
     if (insertIndex < 0) insertIndex = 0;
     if (insertIndex > working.length) insertIndex = working.length;
 
-    // If no change in position, just cleanup
-    if (insertIndex === dragIndex) {
+    // if no change, just reset
+    if (insertIndex === currentIndex) {
       handleDragEnd();
       return;
     }
 
     working.splice(insertIndex, 0, moved);
 
-    // immediate visual feedback
+    // immediate UI update
     setChecklist(working);
     handleDragEnd();
 
-    // try to persist the order (graceful on error)
+    // persist order
     await saveChecklistOrder(working);
 
-    // refresh server list to ensure consistency (optional)
+    // ensure server-state consistent
     if (selectedCar) {
       await fetchAll(selectedCar.id);
     }
@@ -626,23 +621,23 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
                 </div>
 
                 <div className="space-y-2">
-                  {/* Render with placeholders */}
+                  {/* placeholder before each item (rendered dynamically) */}
                   {checklist.map((item, idx) => (
                     <React.Fragment key={item.id}>
-                      {/* placeholder before item when dragOverIndex === idx */}
-                      {dragOverIndex === idx && (
-                        <div className="h-12 rounded-md border-2 border-dashed border-yellow-400 bg-yellow-50 transition-all" />
-                      )}
+                      {/* Placeholder drop zone before item */}
+                      <div
+                        onDragEnter={(e) => handleDragEnterPlaceholder(e, idx)}
+                        onDragOver={handleDragOver}
+                        onDrop={(e) => handleDropOnPlaceholder(e, idx)}
+                        className={dragOverIndex === idx ? "h-10 rounded-md border-2 border-dashed border-yellow-400 bg-yellow-50 transition-all" : "h-2"}
+                      />
 
                       <div
                         draggable
-                        onDragStart={(e) => handleDragStart(e, idx)}
-                        onDragEnter={(e) => handleDragEnter(e, idx)}
-                        onDragOver={handleDragOver}
-                        onDrop={(e) => handleDrop(e, idx)}
+                        onDragStart={(e) => handleDragStart(e, item.id)}
                         onDragEnd={handleDragEnd}
                         className={`flex items-center justify-between bg-white p-3 border rounded mb-2 shadow-sm transition-transform duration-150
-                          ${draggingIndex === idx ? 'opacity-70 scale-98 border-yellow-200' : 'hover:shadow-md'}`}
+                          ${draggingId === item.id ? 'opacity-70 scale-98 border-yellow-200' : 'hover:shadow-md'}`}
                         style={{ cursor: 'grab', userSelect: 'none' }}
                       >
                         <div className="flex items-center gap-3">
@@ -660,17 +655,12 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
                     </React.Fragment>
                   ))}
 
-                  {/* placeholder at end if dragging to after last item */}
-                  {dragOverIndex === checklist.length && (
-                    <div className="h-12 rounded-md border-2 border-dashed border-yellow-400 bg-yellow-50 transition-all" />
-                  )}
-
-                  {/* Add a drop target at the end (so user can drop after last item) */}
+                  {/* placeholder at the end */}
                   <div
-                    onDragEnter={(e) => handleDragEnter(e, checklist.length)}
+                    onDragEnter={(e) => handleDragEnterPlaceholder(e, checklist.length)}
                     onDragOver={handleDragOver}
-                    onDrop={(e) => handleDrop(e, checklist.length)}
-                    className="h-0"
+                    onDrop={(e) => handleDropOnPlaceholder(e, checklist.length)}
+                    className={dragOverIndex === checklist.length ? "h-10 rounded-md border-2 border-dashed border-yellow-400 bg-yellow-50 transition-all" : "h-2"}
                   />
 
                   {/* add new */}

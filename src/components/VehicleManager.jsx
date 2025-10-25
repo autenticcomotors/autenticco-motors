@@ -1,36 +1,41 @@
 // src/components/VehicleManager.jsx
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
-import { Check, Trash2, Edit, Megaphone, Wallet, ClipboardCheck, FileText } from 'lucide-react';
+import { Check, Trash2, Edit, Megaphone, Wallet, ClipboardCheck, FileText, DollarSign } from 'lucide-react';
 import {
-  getPublicationsByCar, addPublication, updatePublication, deletePublication,
-  getExpensesByCar, addExpense, updateExpense, deleteExpense,
-  getChecklistByCar, updateChecklistItem, addChecklistItem,
+  getPublicationsByCar, addPublication, deletePublication,
+  getExpensesByCar, addExpense, deleteExpense,
+  getChecklistByCar, updateChecklistItem,
   getPlatforms, addPlatform,
-  getPublicationsForCars, getExpensesForCars
+  getPublicationsForCars, getExpensesForCars,
+  updateCar
 } from '@/lib/car-api';
 
-// Helper de formatação
-const Money = ({ value }) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value || 0));
+// Small money formatter component
+const Money = ({ value }) => {
+  const v = Number(value || 0);
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
+};
 
 const VehicleManager = ({ cars = [], refreshAll }) => {
   const [selectedCar, setSelectedCar] = useState(null);
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState('checklist'); // checklist | publications | expenses
+  const [tab, setTab] = useState('checklist'); // checklist | publications | expenses | finance
   const [platforms, setPlatforms] = useState([]);
 
   const [checklist, setChecklist] = useState([]);
   const [publications, setPublications] = useState([]);
   const [expenses, setExpenses] = useState([]);
 
-  // resumo agregado para a lista principal
-  const [summaryMap, setSummaryMap] = useState({}); // { [carId]: { pubCount, adSpendTotal, extraExpensesTotal } }
+  // aggregate summary (pubCount, adSpendTotal, extraExpensesTotal)
+  const [summaryMap, setSummaryMap] = useState({});
 
-  // forms locais (mantidos similares ao que você tinha)
+  // forms
   const [pubForm, setPubForm] = useState({ title: '', platform_id: '', link: '', budget: '', spent: '', status: 'draft', published_at: '' });
   const [expenseForm, setExpenseForm] = useState({ category: '', amount: '', description: '', incurred_at: '' });
+  const [financeForm, setFinanceForm] = useState({ fipe_value: '', commission: '', return_to_seller: '', sale_price: '' });
   const [newPlatformName, setNewPlatformName] = useState('');
 
   useEffect(() => {
@@ -40,7 +45,7 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
     })();
   }, []);
 
-  // quando receber lista de cars, prefetch publications + expenses em bulk para montar resumo
+  // prefetch summaries for all cars (publications + expenses)
   useEffect(() => {
     const carIds = (Array.isArray(cars) ? cars.map(c => c.id) : []).filter(Boolean);
     if (carIds.length === 0) {
@@ -55,11 +60,10 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
           getPublicationsForCars(carIds),
           getExpensesForCars(carIds)
         ]);
-        // inicializa map
-        const map = {};
-        for (const id of carIds) map[id] = { pubCount: 0, adSpendTotal: 0, extraExpensesTotal: 0 };
 
-        // publications: pub.spent contributes to adSpendTotal
+        const map = {};
+        carIds.forEach(id => { map[id] = { pubCount: 0, adSpendTotal: 0, extraExpensesTotal: 0 }; });
+
         (pubs || []).forEach(p => {
           const id = p.car_id;
           if (!map[id]) map[id] = { pubCount: 0, adSpendTotal: 0, extraExpensesTotal: 0 };
@@ -67,11 +71,10 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
           map[id].adSpendTotal += Number(p.spent || 0);
         });
 
-        // expenses: all go to extraExpensesTotal (we consider ad spend is recorded in publications)
-        (exps || []).forEach(ex => {
-          const id = ex.car_id;
+        (exps || []).forEach(e => {
+          const id = e.car_id;
           if (!map[id]) map[id] = { pubCount: 0, adSpendTotal: 0, extraExpensesTotal: 0 };
-          map[id].extraExpensesTotal += Number(ex.amount || 0);
+          map[id].extraExpensesTotal += Number(e.amount || 0);
         });
 
         if (mounted) setSummaryMap(map);
@@ -83,12 +86,19 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
     return () => { mounted = false; };
   }, [cars]);
 
-  // abrir modal e carregar dados do carro selecionado
+  // open modal and fetch details for selected car
   const openFor = async (car) => {
     setSelectedCar(car);
     setOpen(true);
     setTab('checklist');
     await fetchAll(car.id);
+    // prefill finance form with car values
+    setFinanceForm({
+      fipe_value: car.fipe_value ?? '',
+      commission: car.commission ?? '',
+      return_to_seller: car.return_to_seller ?? '',
+      sale_price: car.sale_price ?? car.price ?? ''
+    });
   };
 
   const fetchAll = async (carId) => {
@@ -110,19 +120,19 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
     }
   };
 
-  // CHECKLIST
+  // checklist toggle
   const toggleChecklist = async (item) => {
     try {
-      const updated = { checked: !item.checked, updated_at: new Date().toISOString() };
-      await updateChecklistItem(item.id, updated);
-      setChecklist(prev => prev.map(i => i.id === item.id ? { ...i, ...updated } : i));
+      const patched = { checked: !item.checked, updated_at: new Date().toISOString() };
+      await updateChecklistItem(item.id, patched);
+      setChecklist(prev => prev.map(i => i.id === item.id ? { ...i, ...patched } : i));
       toast({ title: 'Checklist atualizado' });
     } catch (err) {
       toast({ title: 'Erro ao atualizar checklist', description: err.message || String(err), variant: 'destructive' });
     }
   };
 
-  // PUBLICAÇÕES
+  // publications
   const submitPublication = async () => {
     if (!selectedCar) return;
     try {
@@ -137,20 +147,20 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
         published_at: pubForm.published_at || null,
         notes: ''
       };
-      const { data, error } = await addPublication(payload);
-      if (error) throw error;
-      setPublications(prev => [data, ...prev]);
-      // atualizar resumo global
-      setSummaryMap(prev => {
-        const clone = { ...prev };
-        clone[selectedCar.id] = clone[selectedCar.id] || { pubCount: 0, adSpendTotal: 0, extraExpensesTotal: 0 };
-        clone[selectedCar.id].pubCount += 1;
-        clone[selectedCar.id].adSpendTotal += Number(payload.spent || 0);
-        return clone;
-      });
-      setPubForm({ title: '', platform_id: '', link: '', budget: '', spent: '', status: 'draft', published_at: '' });
-      toast({ title: 'Publicação adicionada' });
-      refreshAll && refreshAll();
+      const { data } = await addPublication(payload);
+      if (data) {
+        setPublications(prev => [data, ...prev]);
+        setSummaryMap(prev => {
+          const clone = { ...prev };
+          clone[selectedCar.id] = clone[selectedCar.id] || { pubCount: 0, adSpendTotal: 0, extraExpensesTotal: 0 };
+          clone[selectedCar.id].pubCount += 1;
+          clone[selectedCar.id].adSpendTotal += Number(payload.spent || 0);
+          return clone;
+        });
+        setPubForm({ title: '', platform_id: '', link: '', budget: '', spent: '', status: 'draft', published_at: '' });
+        toast({ title: 'Publicação adicionada' });
+        refreshAll && refreshAll();
+      }
     } catch (err) {
       console.error(err);
       toast({ title: 'Erro ao salvar publicação', description: err.message || String(err), variant: 'destructive' });
@@ -159,16 +169,15 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
 
   const removePublication = async (id) => {
     try {
-      await deletePublication(id);
-      // atualizar lista local e resumo
       const removed = publications.find(p => p.id === id);
+      await deletePublication(id);
       setPublications(prev => prev.filter(p => p.id !== id));
       if (removed) {
         setSummaryMap(prev => {
           const clone = { ...prev };
           const rec = clone[selectedCar.id] || { pubCount: 0, adSpendTotal: 0, extraExpensesTotal: 0 };
           rec.pubCount = Math.max(0, rec.pubCount - 1);
-          rec.adSpendTotal = Math.max(0, rec.adSpendTotal - (Number(removed.spent || 0)));
+          rec.adSpendTotal = Math.max(0, rec.adSpendTotal - Number(removed.spent || 0));
           clone[selectedCar.id] = rec;
           return clone;
         });
@@ -180,7 +189,7 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
     }
   };
 
-  // EXPENSES
+  // expenses
   const submitExpense = async () => {
     if (!selectedCar) return;
     try {
@@ -191,19 +200,19 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
         description: expenseForm.description || '',
         incurred_at: expenseForm.incurred_at || new Date().toISOString()
       };
-      const { data, error } = await addExpense(payload);
-      if (error) throw error;
-      setExpenses(prev => [data, ...prev]);
-      // atualizar resumo global
-      setSummaryMap(prev => {
-        const clone = { ...prev };
-        clone[selectedCar.id] = clone[selectedCar.id] || { pubCount: 0, adSpendTotal: 0, extraExpensesTotal: 0 };
-        clone[selectedCar.id].extraExpensesTotal += Number(payload.amount || 0);
-        return clone;
-      });
-      setExpenseForm({ category: '', amount: '', description: '', incurred_at: '' });
-      toast({ title: 'Gasto registrado' });
-      refreshAll && refreshAll();
+      const { data } = await addExpense(payload);
+      if (data) {
+        setExpenses(prev => [data, ...prev]);
+        setSummaryMap(prev => {
+          const clone = { ...prev };
+          clone[selectedCar.id] = clone[selectedCar.id] || { pubCount: 0, adSpendTotal: 0, extraExpensesTotal: 0 };
+          clone[selectedCar.id].extraExpensesTotal += Number(payload.amount || 0);
+          return clone;
+        });
+        setExpenseForm({ category: '', amount: '', description: '', incurred_at: '' });
+        toast({ title: 'Gasto registrado' });
+        refreshAll && refreshAll();
+      }
     } catch (err) {
       toast({ title: 'Erro ao salvar gasto', description: err.message || String(err), variant: 'destructive' });
     }
@@ -211,14 +220,14 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
 
   const removeExpense = async (id) => {
     try {
-      await deleteExpense(id);
       const removed = expenses.find(e => e.id === id);
+      await deleteExpense(id);
       setExpenses(prev => prev.filter(e => e.id !== id));
       if (removed) {
         setSummaryMap(prev => {
           const clone = { ...prev };
           const rec = clone[selectedCar.id] || { pubCount: 0, adSpendTotal: 0, extraExpensesTotal: 0 };
-          rec.extraExpensesTotal = Math.max(0, rec.extraExpensesTotal - (Number(removed.amount || 0)));
+          rec.extraExpensesTotal = Math.max(0, rec.extraExpensesTotal - Number(removed.amount || 0));
           clone[selectedCar.id] = rec;
           return clone;
         });
@@ -230,6 +239,7 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
     }
   };
 
+  // platform create
   const handleAddPlatform = async () => {
     if (!newPlatformName || newPlatformName.trim().length < 2) return;
     try {
@@ -244,10 +254,62 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
     }
   };
 
-  // utilitário para mostrar resumo por carro
-  const getSummary = (carId) => {
-    return summaryMap[carId] || { pubCount: 0, adSpendTotal: 0, extraExpensesTotal: 0 };
+  // FINANCE: compute profit and save to cars table
+  const computeProfitForSelected = () => {
+    if (!selectedCar) return 0;
+    const summary = summaryMap[selectedCar.id] || { adSpendTotal: 0, extraExpensesTotal: 0 };
+    const comm = Number(financeForm.commission || selectedCar.commission || 0);
+    const ad = Number(summary.adSpendTotal || 0);
+    const extras = Number(summary.extraExpensesTotal || 0);
+    const profit = comm - (ad + extras);
+    return profit;
   };
+
+  const saveFinance = async () => {
+    if (!selectedCar) return;
+    setOpen(true);
+    try {
+      const summary = summaryMap[selectedCar.id] || { adSpendTotal: 0, extraExpensesTotal: 0 };
+      const fipe_value = financeForm.fipe_value ? parseFloat(financeForm.fipe_value) : null;
+      const commission = financeForm.commission ? parseFloat(financeForm.commission) : 0;
+      const return_to_seller = financeForm.return_to_seller ? parseFloat(financeForm.return_to_seller) : 0;
+      const sale_price = financeForm.sale_price ? parseFloat(financeForm.sale_price) : (selectedCar.sale_price || selectedCar.price || null);
+
+      const adSpendTotal = Number(summary.adSpendTotal || 0);
+      const extraExpensesTotal = Number(summary.extraExpensesTotal || 0);
+
+      const profit = commission - (adSpendTotal + extraExpensesTotal);
+      const profit_percent = sale_price ? (profit / Number(sale_price || 1)) * 100 : null;
+
+      const patch = {
+        fipe_value,
+        commission,
+        return_to_seller,
+        sale_price,
+        profit,
+        profit_percent
+      };
+
+      const { data, error } = await updateCar(selectedCar.id, patch);
+      if (error) {
+        throw error;
+      }
+
+      // update local selectedCar and inform user
+      const updated = { ...(selectedCar || {}), ...patch };
+      setSelectedCar(updated);
+
+      // update summaryMap if needed (not changed by finance save unless we want to)
+      toast({ title: 'Financeiro atualizado com sucesso' });
+      refreshAll && refreshAll();
+    } catch (err) {
+      console.error('Erro ao salvar financeiro:', err);
+      toast({ title: 'Erro ao salvar financeiro', description: err.message || String(err), variant: 'destructive' });
+    }
+  };
+
+  // small helper to get summary for card
+  const getSummary = (carId) => summaryMap[carId] || { pubCount: 0, adSpendTotal: 0, extraExpensesTotal: 0 };
 
   return (
     <div>
@@ -257,8 +319,8 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
         {Array.isArray(cars) && cars.map(car => {
           const summary = getSummary(car.id);
           const sold = !!car.is_sold;
-          // pequena lógica para destacar lucro se existir
-          const maybeProfit = car.profit ? Number(car.profit) : null;
+          const profit = Number(car.profit ?? (car.commission ?? 0) - (summary.adSpendTotal + summary.extraExpensesTotal));
+          const profitDisplay = Number.isFinite(profit) ? profit : null;
 
           return (
             <div key={car.id} className={`bg-white rounded-xl p-4 flex items-center justify-between shadow transition hover:shadow-lg ${sold ? 'opacity-80' : ''}`}>
@@ -273,7 +335,7 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
                     {sold && <span className="ml-2 text-sm bg-red-600 text-white px-2 py-0.5 rounded-full font-semibold">VENDIDO</span>}
                   </div>
 
-                  <div className="mt-3 flex items-center gap-4 text-sm text-gray-600">
+                  <div className="mt-3 flex items-center gap-6 text-sm text-gray-600">
                     <div className="flex items-center gap-2">
                       <Megaphone className="h-4 w-4 text-yellow-500" />
                       <div>
@@ -298,12 +360,28 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
                       </div>
                     </div>
 
-                    {maybeProfit !== null && (
-                      <div className="ml-3">
-                        <div className="text-xs">Lucro</div>
-                        <div className={`font-semibold ${maybeProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>{Money({ value: maybeProfit })}</div>
+                    <div className="flex items-center gap-2">
+                      <DollarSign className="h-4 w-4 text-indigo-600" />
+                      <div>
+                        <div className="text-xs">Lucro estimado</div>
+                        <div className={`font-semibold ${profitDisplay >= 0 ? 'text-green-600' : 'text-red-600'}`}>{profitDisplay !== null ? Money({ value: profitDisplay }) : '-'}</div>
                       </div>
-                    )}
+                    </div>
+
+                    <div>
+                      <div className="text-xs">FIPE</div>
+                      <div className="font-medium">{car.fipe_value ? Money({ value: car.fipe_value }) : '-'}</div>
+                    </div>
+
+                    <div>
+                      <div className="text-xs">Comissão</div>
+                      <div className="font-medium">{car.commission ? Money({ value: car.commission }) : '-'}</div>
+                    </div>
+
+                    <div>
+                      <div className="text-xs">Devolver</div>
+                      <div className="font-medium">{car.return_to_seller ? Money({ value: car.return_to_seller }) : '-'}</div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -319,12 +397,12 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
         })}
       </div>
 
-      {/* Modal detalhado (abre ao clicar "Gerenciar") */}
+      {/* Modal */}
       <Dialog open={open} onOpenChange={(o) => { if (!o) { setSelectedCar(null); } setOpen(o); }}>
         <DialogContent className="max-w-4xl">
           <DialogHeader>
             <DialogTitle>Gestão - {selectedCar ? `${selectedCar.brand} ${selectedCar.model}` : ''}</DialogTitle>
-            <DialogDescription>Checklist, publicações e gastos por veículo</DialogDescription>
+            <DialogDescription>Checklist, publicações, gastos e financeiro por veículo</DialogDescription>
           </DialogHeader>
 
           <div className="mt-4">
@@ -332,11 +410,11 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
               <button onClick={() => setTab('checklist')} className={`px-3 py-1 rounded ${tab === 'checklist' ? 'bg-yellow-400 text-black' : 'bg-gray-100'}`}>Checklist</button>
               <button onClick={() => setTab('publications')} className={`px-3 py-1 rounded ${tab === 'publications' ? 'bg-yellow-400 text-black' : 'bg-gray-100'}`}>Publicações</button>
               <button onClick={() => setTab('expenses')} className={`px-3 py-1 rounded ${tab === 'expenses' ? 'bg-yellow-400 text-black' : 'bg-gray-100'}`}>Gastos</button>
+              <button onClick={() => setTab('finance')} className={`px-3 py-1 rounded ${tab === 'finance' ? 'bg-yellow-400 text-black' : 'bg-gray-100'}`}>Financeiro</button>
             </div>
 
-            {/* Conteúdos idênticos ao que você já tem (Checklist / Publications / Expenses) */}
             {tab === 'checklist' && (
-              <div>{/* CHECKLIST UI (igual ao que implementou) */}
+              <div>
                 {checklist.map(item => (
                   <div key={item.id} className="flex items-center justify-between bg-white p-3 border rounded mb-2">
                     <div className="flex items-center gap-3">
@@ -353,7 +431,7 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
             )}
 
             {tab === 'publications' && (
-              <div>{/* PUBLICATIONS UI */}
+              <div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                   <div className="space-y-2">
                     <input placeholder="Título do anúncio" value={pubForm.title} onChange={(e) => setPubForm(f => ({ ...f, title: e.target.value }))} className="w-full p-2 border rounded" />
@@ -403,11 +481,11 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
             )}
 
             {tab === 'expenses' && (
-              <div>{/* EXPENSES UI */}
+              <div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                   <input placeholder="Categoria (ex: Lavagem)" value={expenseForm.category} onChange={(e) => setExpenseForm(f => ({ ...f, category: e.target.value }))} className="p-2 border rounded" />
                   <input placeholder="Valor (R$)" type="number" value={expenseForm.amount} onChange={(e) => setExpenseForm(f => ({ ...f, amount: e.target.value }))} className="p-2 border rounded" />
-                  <input placeholder="Data" type="date" value={expenseForm.incurred_at ? (new Date(expenseForm.incurred_at).toISOString().slice(0,10)) : ''} onChange={(e) => setExpenseForm(f => ({ ...f, incurred_at: e.target.value ? new Date(e.target.value).toISOString() : '' }))} className="p-2 border rounded" />
+                  <input placeholder="Data" type="date" value={expenseForm.incurred_at ? expenseForm.incurred_at.slice(0,10) : ''} onChange={(e) => setExpenseForm(f => ({ ...f, incurred_at: e.target.value ? new Date(e.target.value).toISOString() : '' }))} className="p-2 border rounded" />
                   <input placeholder="Descrição" value={expenseForm.description} onChange={(e) => setExpenseForm(f => ({ ...f, description: e.target.value }))} className="p-2 border rounded" />
                   <div className="col-span-full flex gap-2">
                     <Button onClick={submitExpense}>Registrar gasto</Button>
@@ -427,6 +505,46 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
                       </div>
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {tab === 'finance' && selectedCar && (
+              <div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label className="text-sm text-gray-700">Valor FIPE</label>
+                    <input type="number" step="0.01" value={financeForm.fipe_value ?? ''} onChange={(e) => setFinanceForm(f => ({ ...f, fipe_value: e.target.value }))} className="w-full p-2 border rounded" />
+                  </div>
+
+                  <div>
+                    <label className="text-sm text-gray-700">Comissão (R$)</label>
+                    <input type="number" step="0.01" value={financeForm.commission ?? ''} onChange={(e) => setFinanceForm(f => ({ ...f, commission: e.target.value }))} className="w-full p-2 border rounded" />
+                  </div>
+
+                  <div>
+                    <label className="text-sm text-gray-700">Devolver ao vendedor (R$)</label>
+                    <input type="number" step="0.01" value={financeForm.return_to_seller ?? ''} onChange={(e) => setFinanceForm(f => ({ ...f, return_to_seller: e.target.value }))} className="w-full p-2 border rounded" />
+                  </div>
+
+                  <div>
+                    <label className="text-sm text-gray-700">Valor final vendido (R$)</label>
+                    <input type="number" step="0.01" value={financeForm.sale_price ?? ''} onChange={(e) => setFinanceForm(f => ({ ...f, sale_price: e.target.value }))} className="w-full p-2 border rounded" />
+                  </div>
+                </div>
+
+                <div className="mb-4">
+                  <div className="text-sm text-gray-600">Resumo de gastos registrados para este veículo</div>
+                  <div className="mt-2 flex gap-4">
+                    <div className="text-sm">Gasto com anúncios: <strong>{Money({ value: (summaryMap[selectedCar.id] || {}).adSpendTotal || 0 })}</strong></div>
+                    <div className="text-sm">Gastos extras: <strong>{Money({ value: (summaryMap[selectedCar.id] || {}).extraExpensesTotal || 0 })}</strong></div>
+                    <div className="text-sm">Lucro calculado: <strong className={` ${computeProfitForSelected() >= 0 ? 'text-green-600' : 'text-red-600'}`}>{Money({ value: computeProfitForSelected() })}</strong></div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2">
+                  <Button variant="ghost" onClick={() => { setOpen(false); setSelectedCar(null); }}>Cancelar</Button>
+                  <Button onClick={saveFinance}>Salvar Financeiro</Button>
                 </div>
               </div>
             )}

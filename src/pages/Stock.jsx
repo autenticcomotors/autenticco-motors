@@ -35,8 +35,10 @@ const Stock = () => {
                 setLoading(true);
                 const data = await getCars();
                 const safe = Array.isArray(data) ? data : [];
-                setAllCars(safe);
-                setFilteredCars(safe);
+                // garantir que ativos venham primeiro
+                const sorted = [...safe].sort((a, b) => (b.is_available === false ? 0 : 1) - (a.is_available === false ? 0 : 1) || (new Date(b.created_at || 0) - new Date(a.created_at || 0)));
+                setAllCars(sorted);
+                setFilteredCars(sorted);
             } catch (err) {
                 console.error('Erro ao buscar carros:', err);
                 setAllCars([]);
@@ -94,12 +96,6 @@ const Stock = () => {
         if (filters.bodyType) {
             carsToFilter = carsToFilter.filter(car => car.body_type === filters.bodyType);
         }
-
-        // Ordena: não vendidos primeiro, vendidos por último (mantém ordem interna)
-        carsToFilter.sort((a, b) => {
-            if (!!a.is_sold === !!b.is_sold) return 0;
-            return a.is_sold ? 1 : -1;
-        });
 
         setFilteredCars(carsToFilter);
     }, [filters, allCars]);
@@ -220,31 +216,23 @@ const Stock = () => {
                     {(Array.isArray(filteredCars) ? filteredCars : []).map(car => (
                         <motion.div
                             key={car.id}
-                            className={`bg-white rounded-2xl overflow-hidden shadow-lg border flex flex-col transition-transform duration-300 hover:-translate-y-2 ${car.is_sold ? 'pointer-events-none' : ''}`}
+                            className={`bg-white rounded-2xl overflow-hidden shadow-lg border flex flex-col transition-transform duration-300 hover:-translate-y-2 ${car.is_available === false ? 'opacity-90' : ''}`}
                             variants={itemVariants}
                             layout
                         >
                             <div className="relative">
-                                <img
-                                    src={car.main_photo_url || 'https://placehold.co/400x300/e2e8f0/4a5568?text=Sem+Foto'}
-                                    alt={`${car.brand} ${car.model}`}
-                                    className={`w-full h-56 object-cover transition-all duration-300 ${car.is_sold ? 'filter grayscale brightness-75' : ''}`}
-                                />
+                                <img src={car.main_photo_url || 'https://placehold.co/400x300/e2e8f0/4a5568?text=Sem+Foto'} alt={`${car.brand} ${car.model}`} className={`w-full h-56 object-cover ${car.is_available === false ? 'filter grayscale contrast-90' : ''}`} />
                                 <div className="absolute top-4 right-4 bg-black/50 text-white text-xs font-bold py-1 px-3 rounded-full flex items-center gap-1.5">
                                     <Droplet size={12} />
                                     <span>{car.fuel}</span>
                                 </div>
-
-                                {car.is_sold && (
-                                    <div className="absolute left-4 top-4">
-                                        <span className="bg-red-600 text-white px-3 py-1 rounded-full font-bold text-sm">VENDIDO</span>
-                                    </div>
+                                {car.is_available === false && (
+                                    <div className="absolute top-4 left-4 bg-red-600 text-white text-xs font-bold py-1 px-3 rounded-full">VENDIDO</div>
                                 )}
                             </div>
-
                             <div className="p-6 flex flex-col flex-grow">
-                                <h2 className={`text-xl font-bold ${car.is_sold ? 'text-gray-700' : 'text-gray-900'}`}>{car.brand} {car.model}</h2>
-                                <p className={`text-2xl font-bold my-2 ${car.is_sold ? 'text-gray-700' : 'text-gray-800'}`}>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(car.price) || 0)}</p>
+                                <h2 className="text-xl font-bold text-gray-900">{car.brand} {car.model}</h2>
+                                <p className="text-2xl font-bold text-gray-800 my-2">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(car.price) || 0)}</p>
                                 
                                 <div className="grid grid-cols-3 gap-3 text-sm text-gray-600 my-4 border-t border-b py-4">
                                     <div className="flex items-center gap-1.5">
@@ -262,10 +250,10 @@ const Stock = () => {
                                 </div>
                                 
                                 <div className="mt-auto">
-                                    {car.is_sold ? (
-                                        <button disabled className="w-full inline-flex items-center justify-center text-center bg-gray-200 text-gray-600 font-semibold py-3 px-4 rounded-lg cursor-not-allowed">
+                                    {car.is_available === false ? (
+                                        <div className="w-full inline-flex items-center justify-center text-center bg-gray-200 text-gray-600 font-semibold py-3 px-4 rounded-lg">
                                             Veículo Vendido
-                                        </button>
+                                        </div>
                                     ) : (
                                         <Link to={`/carro/${car.slug}`} className="group w-full inline-flex items-center justify-center text-center bg-yellow-400 text-black font-bold py-3 px-4 rounded-lg hover:bg-yellow-500 transition-all duration-300 transform hover:scale-105">
                                             Ver Detalhes

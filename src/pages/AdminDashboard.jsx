@@ -10,7 +10,8 @@ import { CSVLink } from 'react-csv';
 import { supabase } from '@/lib/supabase';
 import {
   getCars, addCar, deleteCar, updateCar, getTestimonials, addTestimonial, deleteTestimonial,
-  getLeads, updateLead, deleteLead, getPlatforms, markCarAsSold, unmarkCarAsSold
+  getLeads, updateLead, deleteLead, getPlatforms, markCarAsSold, unmarkCarAsSold,
+  addChecklistItem
 } from '@/lib/car-api';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -82,11 +83,11 @@ const AdminDashboard = () => {
   const statusOptions = ['Novo', 'Contato Realizado', 'Em Negociação', 'Venda Concluída', 'Descartado'];
 
   const sortCarsActiveFirst = (list = []) => {
-    // Ativos (is_available === true) primeiro, depois vendidos (false).
     return [...list].sort((a, b) => {
+      // ativos primeiro (is_available true), vendidos depois (is_available false)
       const aActive = a.is_available === false ? 0 : 1;
       const bActive = b.is_available === false ? 0 : 1;
-      if (aActive !== bActive) return bActive - aActive; // ativos primeiro
+      if (aActive !== bActive) return bActive - aActive; // ativo (1) should come before sold (0)
       // se mesmo status, ordenar por created_at desc
       const aTime = new Date(a.created_at || 0).getTime();
       const bTime = new Date(b.created_at || 0).getTime();
@@ -177,6 +178,12 @@ const AdminDashboard = () => {
     }
   };
 
+  const DEFAULT_CHECKLIST = [
+    { label: 'Fotos & Documentos', checked: false, notes: '' },
+    { label: 'Revisão Mecânica', checked: false, notes: '' },
+    { label: 'Limpeza e Higienização', checked: false, notes: '' }
+  ];
+
   const handleAddCar = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -193,7 +200,16 @@ const AdminDashboard = () => {
       const { data: addedCar, error } = await addCar(carData);
       if (error) { toast({ title: 'Erro ao adicionar.', description: error.message, variant: 'destructive' }); }
       else {
-        // prepend active car
+        // add default checklist items for the new car
+        try {
+          for (const item of DEFAULT_CHECKLIST) {
+            await addChecklistItem({ car_id: addedCar.id, label: item.label, checked: item.checked, notes: item.notes });
+          }
+        } catch (err) {
+          console.warn('Erro ao criar checklist padrão:', err);
+        }
+
+        // prepend active car to UI (and resort)
         setCars(prevCars => sortCarsActiveFirst([...(prevCars || []), addedCar]));
         setNewCar({ brand: '', model: '', year: '', price: '', mileage: '', fuel: '', photo_urls: [], youtube_link: '', full_description: '', transmission: '', body_type: '', color: '' });
         setPhotosToUpload([]);
@@ -275,9 +291,9 @@ const AdminDashboard = () => {
   const openSaleDialog = (car) => {
     setCarToSell(car);
     setSaleForm({
-      platform_id: car.sale_platform_id || (platforms[0] && platforms[0].id) || '',
+      platform_id: car.sold_platform_id || (platforms[0] && platforms[0].id) || '',
       sale_price: car.sale_price || '',
-      sale_date: new Date().toISOString().slice(0, 10),
+      sale_date: car.sold_at ? car.sold_at.slice(0,10) : new Date().toISOString().slice(0, 10),
       notes: ''
     });
     setSaleDialogOpen(true);
@@ -293,7 +309,6 @@ const AdminDashboard = () => {
     if (!carToSell) return;
     setLoading(true);
     try {
-      // call markCarAsSold
       const payload = {
         car_id: carToSell.id,
         platform_id: saleForm.platform_id || null,
@@ -322,8 +337,8 @@ const AdminDashboard = () => {
     if (!car) return;
     setLoading(true);
     try {
-      // desfazer venda e remover last sale
-      const res = await unmarkCarAsSold(car.id, { deleteLastSale: true });
+      // desfazer venda e remover todas as sales desse carro
+      const res = await unmarkCarAsSold(car.id, { deleteAllSales: true });
       if (res?.error) {
         toast({ title: 'Erro ao reverter venda', description: String(res.error), variant: 'destructive' });
       } else {
@@ -459,7 +474,7 @@ const AdminDashboard = () => {
                           <p className="text-gray-800 font-semibold">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(car.price || 0)}</p>
                           {car.is_available === false && (
                             <p className="text-sm text-red-600 mt-1">
-                              Vendido em {car.sale_date ? new Date(car.sale_date).toLocaleDateString('pt-BR') : '-'} - {car.sale_price ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(car.sale_price) : '-'}
+                              Vendido em {car.sold_at ? new Date(car.sold_at).toLocaleDateString('pt-BR') : '-'} - {car.sale_price ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(car.sale_price) : '-'}
                             </p>
                           )}
                         </div>

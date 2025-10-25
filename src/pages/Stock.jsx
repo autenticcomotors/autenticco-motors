@@ -35,8 +35,15 @@ const Stock = () => {
                 setLoading(true);
                 const data = await getCars();
                 const safe = Array.isArray(data) ? data : [];
-                // garantir que ativos venham primeiro
-                const sorted = [...safe].sort((a, b) => (b.is_available === false ? 0 : 1) - (a.is_available === false ? 0 : 1) || (new Date(b.created_at || 0) - new Date(a.created_at || 0)));
+                // garantir que ativos venham primeiro (is_available !== false)
+                const sorted = [...safe].sort((a, b) => {
+                    const aActive = a.is_available === false ? 0 : 1;
+                    const bActive = b.is_available === false ? 0 : 1;
+                    if (aActive !== bActive) return bActive - aActive; // ativos primeiro
+                    const aTime = new Date(a.created_at || 0).getTime();
+                    const bTime = new Date(b.created_at || 0).getTime();
+                    return bTime - aTime;
+                });
                 setAllCars(sorted);
                 setFilteredCars(sorted);
             } catch (err) {

@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import { Calendar, DollarSign, BarChart2, PieChart, Layers } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import BackgroundShape from '@/components/BackgroundShape';
-import { format, startOfWeek, startOfMonth, endOfMonth, startOfYear } from 'date-fns';
+import { format, startOfWeek, startOfMonth, startOfYear } from 'date-fns';
 import { getCars, getPublicationsForCars, getExpensesForCars, getSales } from '@/lib/car-api';
 
 const Money = ({ value }) => {
@@ -50,7 +50,6 @@ const Reports = () => {
   const [startDate, setStartDate] = useState(initialStart.toISOString().slice(0, 10));
   const [endDate, setEndDate] = useState(initialEnd.toISOString().slice(0, 10));
 
-  // car IDs array helper
   useEffect(() => {
     let mounted = true;
     const loadCars = async () => {
@@ -78,12 +77,10 @@ const Reports = () => {
       setLoading(true);
       try {
         const carIds = cars.map(c => c.id).filter(Boolean);
-        // publications & expenses: buscamos tudo para esses carros (controle por veículo)
         const [pubs, exps] = await Promise.all([
           getPublicationsForCars(carIds),
           getExpensesForCars(carIds)
         ]);
-        // sales: filtradas por período
         const salesData = await getSales({ startDate, endDate });
 
         if (!mounted) return;
@@ -175,7 +172,13 @@ const Reports = () => {
         const ad = pubMap[s.car_id] ? pubMap[s.car_id].spent : 0;
         const extra = expMap[s.car_id] || 0;
         const salePrice = Number(s.sale_price ?? 0);
-        totalRealProfit += (salePrice - (ad + extra));
+        // If sale has commission field, prefer it: profit = commission - (ad+extra)
+        const commissionFromSale = Number(s.commission ?? 0);
+        if (commissionFromSale) {
+          totalRealProfit += (commissionFromSale - (ad + extra));
+        } else {
+          totalRealProfit += (salePrice - (ad + extra));
+        }
       }
       totalSalesValue += Number(s.sale_price ?? 0);
     });

@@ -7,7 +7,7 @@ import { Check, Trash2, Edit, Megaphone, Wallet, ClipboardCheck, FileText, Dolla
 import {
   getPublicationsByCar, addPublication, deletePublication,
   getExpensesByCar, addExpense, deleteExpense,
-  getChecklistByCar, updateChecklistItem,
+  getChecklistByCar, updateChecklistItem, addChecklistItem, deleteChecklistItem,
   getPlatforms, addPlatform,
   getPublicationsForCars, getExpensesForCars,
   updateCar
@@ -18,6 +18,13 @@ const Money = ({ value }) => {
   const v = Number(value || 0);
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 };
+
+const defaultChecklistItems = [
+  { label: 'Lavagem e estética', notes: '' },
+  { label: 'Revisão básica', notes: '' },
+  { label: 'Fotos profissionais', notes: '' },
+  { label: 'Documentação conferida', notes: '' },
+];
 
 const VehicleManager = ({ cars = [], refreshAll }) => {
   const [selectedCar, setSelectedCar] = useState(null);
@@ -37,6 +44,10 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
   const [expenseForm, setExpenseForm] = useState({ category: '', amount: '', description: '', incurred_at: '' });
   const [financeForm, setFinanceForm] = useState({ fipe_value: '', commission: '', return_to_seller: '', sale_price: '' });
   const [newPlatformName, setNewPlatformName] = useState('');
+
+  // checklist add form
+  const [newChecklistLabel, setNewChecklistLabel] = useState('');
+  const [newChecklistNotes, setNewChecklistNotes] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -127,8 +138,72 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
       await updateChecklistItem(item.id, patched);
       setChecklist(prev => prev.map(i => i.id === item.id ? { ...i, ...patched } : i));
       toast({ title: 'Checklist atualizado' });
+      refreshAll && refreshAll();
     } catch (err) {
       toast({ title: 'Erro ao atualizar checklist', description: err.message || String(err), variant: 'destructive' });
+    }
+  };
+
+  // checklist: add new item
+  const submitChecklistItem = async () => {
+    if (!selectedCar) return;
+    if (!newChecklistLabel || newChecklistLabel.trim().length < 1) {
+      toast({ title: 'Informe o nome do item', variant: 'destructive' });
+      return;
+    }
+    try {
+      const payload = {
+        car_id: selectedCar.id,
+        label: newChecklistLabel.trim(),
+        notes: newChecklistNotes || '',
+        checked: false
+      };
+      const { data, error } = await addChecklistItem(payload);
+      if (error) throw error;
+      setChecklist(prev => [data, ...prev]);
+      setNewChecklistLabel('');
+      setNewChecklistNotes('');
+      toast({ title: 'Item de checklist adicionado' });
+      refreshAll && refreshAll();
+    } catch (err) {
+      console.error('Erro add checklist:', err);
+      toast({ title: 'Erro ao adicionar item', description: err.message || String(err), variant: 'destructive' });
+    }
+  };
+
+  // checklist: delete item
+  const removeChecklistItem = async (id) => {
+    try {
+      await deleteChecklistItem(id);
+      setChecklist(prev => prev.filter(i => i.id !== id));
+      toast({ title: 'Item removido' });
+      refreshAll && refreshAll();
+    } catch (err) {
+      console.error('Erro delete checklist:', err);
+      toast({ title: 'Erro ao remover item', description: err.message || String(err), variant: 'destructive' });
+    }
+  };
+
+  // create default checklist (useful when none exists)
+  const createDefaultChecklist = async () => {
+    if (!selectedCar) return;
+    try {
+      const created = [];
+      for (const it of defaultChecklistItems) {
+        const payload = { car_id: selectedCar.id, label: it.label, notes: it.notes, checked: false };
+        const { data, error } = await addChecklistItem(payload);
+        if (!error && data) created.push(data);
+      }
+      if (created.length > 0) {
+        setChecklist(prev => [...created, ...prev]);
+        toast({ title: 'Checklist padrão criado' });
+        refreshAll && refreshAll();
+      } else {
+        toast({ title: 'Nenhum item criado', variant: 'destructive' });
+      }
+    } catch (err) {
+      console.error('Erro criar checklist padrão:', err);
+      toast({ title: 'Erro ao criar checklist padrão', description: err.message || String(err), variant: 'destructive' });
     }
   };
 
@@ -267,7 +342,6 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
 
   const saveFinance = async () => {
     if (!selectedCar) return;
-    setOpen(true);
     try {
       const summary = summaryMap[selectedCar.id] || { adSpendTotal: 0, extraExpensesTotal: 0 };
       const fipe_value = financeForm.fipe_value ? parseFloat(financeForm.fipe_value) : null;
@@ -299,7 +373,6 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
       const updated = { ...(selectedCar || {}), ...patch };
       setSelectedCar(updated);
 
-      // update summaryMap if needed (not changed by finance save unless we want to)
       toast({ title: 'Financeiro atualizado com sucesso' });
       refreshAll && refreshAll();
     } catch (err) {
@@ -318,8 +391,8 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
       <div className="space-y-4">
         {Array.isArray(cars) && cars.map(car => {
           const summary = getSummary(car.id);
-          const sold = !!car.is_sold;
-          const profit = Number(car.profit ?? (car.commission ?? 0) - (summary.adSpendTotal + summary.extraExpensesTotal));
+          const sold = !!car.is_sold || car.is_available === false;
+          const profit = Number(car.profit ?? ((car.commission ?? 0) - (summary.adSpendTotal + summary.extraExpensesTotal)));
           const profitDisplay = Number.isFinite(profit) ? profit : null;
 
           return (
@@ -335,7 +408,7 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
                     {sold && <span className="ml-2 text-sm bg-red-600 text-white px-2 py-0.5 rounded-full font-semibold">VENDIDO</span>}
                   </div>
 
-                  <div className="mt-3 flex items-center gap-6 text-sm text-gray-600">
+                  <div className="mt-3 flex flex-wrap items-center gap-6 text-sm text-gray-600">
                     <div className="flex items-center gap-2">
                       <Megaphone className="h-4 w-4 text-yellow-500" />
                       <div>
@@ -352,13 +425,7 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <ClipboardCheck className="h-4 w-4 text-blue-500" />
-                      <div>
-                        <div className="text-xs">Checklist</div>
-                        <div className="font-medium">Abrir para ver</div>
-                      </div>
-                    </div>
+                    {/* Removed the "Checklist Abrir para ver" element here per request (keeps modal access only) */}
 
                     <div className="flex items-center gap-2">
                       <DollarSign className="h-4 w-4 text-indigo-600" />
@@ -415,18 +482,41 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
 
             {tab === 'checklist' && (
               <div>
-                {checklist.map(item => (
-                  <div key={item.id} className="flex items-center justify-between bg-white p-3 border rounded mb-2">
-                    <div className="flex items-center gap-3">
-                      <input type="checkbox" checked={!!item.checked} onChange={() => toggleChecklist(item)} />
-                      <div>
-                        <div className="font-medium">{item.label}</div>
-                        {item.notes && <div className="text-xs text-gray-500">{item.notes}</div>}
+                <div className="mb-3 flex items-center gap-3">
+                  <div className="text-sm text-gray-600">Itens do checklist</div>
+                  <div className="ml-auto flex gap-2">
+                    <Button size="sm" variant="ghost" onClick={() => createDefaultChecklist()}>Criar checklist padrão</Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {checklist.map(item => (
+                    <div key={item.id} className="flex items-center justify-between bg-white p-3 border rounded mb-2">
+                      <div className="flex items-center gap-3">
+                        <input type="checkbox" checked={!!item.checked} onChange={() => toggleChecklist(item)} />
+                        <div>
+                          <div className="font-medium">{item.label}</div>
+                          {item.notes && <div className="text-xs text-gray-500">{item.notes}</div>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="text-xs text-gray-400 mr-4">{item.updated_at ? new Date(item.updated_at).toLocaleString() : ''}</div>
+                        <button onClick={() => removeChecklistItem(item.id)} className="text-red-600"><Trash2 /></button>
                       </div>
                     </div>
-                    <div className="text-xs text-gray-400">{item.updated_at ? new Date(item.updated_at).toLocaleString() : ''}</div>
+                  ))}
+
+                  {/* add new */}
+                  <div className="bg-gray-50 p-3 border rounded">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                      <input placeholder="Novo item" value={newChecklistLabel} onChange={(e) => setNewChecklistLabel(e.target.value)} className="p-2 border rounded col-span-2" />
+                      <input placeholder="Notas (opcional)" value={newChecklistNotes} onChange={(e) => setNewChecklistNotes(e.target.value)} className="p-2 border rounded" />
+                    </div>
+                    <div className="mt-2 flex gap-2">
+                      <Button size="sm" onClick={submitChecklistItem}>Adicionar item</Button>
+                    </div>
                   </div>
-                ))}
+                </div>
               </div>
             )}
 
@@ -461,7 +551,7 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
                       <Button size="sm" onClick={handleAddPlatform}>Criar</Button>
                     </div>
 
-                    <div className="space-y-2">
+                    <div className="space-y-2 max-h-64 overflow-auto">
                       {publications.map(pub => (
                         <div key={pub.id} className="bg-white p-3 border rounded flex items-center justify-between">
                           <div>
@@ -492,7 +582,7 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
                   </div>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-2 max-h-64 overflow-auto">
                   {expenses.map(exp => (
                     <div key={exp.id} className="bg-white p-3 border rounded flex items-center justify-between">
                       <div>
@@ -535,7 +625,7 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
 
                 <div className="mb-4">
                   <div className="text-sm text-gray-600">Resumo de gastos registrados para este veículo</div>
-                  <div className="mt-2 flex gap-4">
+                  <div className="mt-2 flex gap-4 flex-wrap">
                     <div className="text-sm">Gasto com anúncios: <strong>{Money({ value: (summaryMap[selectedCar.id] || {}).adSpendTotal || 0 })}</strong></div>
                     <div className="text-sm">Gastos extras: <strong>{Money({ value: (summaryMap[selectedCar.id] || {}).extraExpensesTotal || 0 })}</strong></div>
                     <div className="text-sm">Lucro calculado: <strong className={` ${computeProfitForSelected() >= 0 ? 'text-green-600' : 'text-red-600'}`}>{Money({ value: computeProfitForSelected() })}</strong></div>

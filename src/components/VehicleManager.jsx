@@ -1,19 +1,19 @@
 // src/components/VehicleManager.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
-import { Check, Trash2, Megaphone, Wallet, DollarSign } from 'lucide-react';
+import { Check, Trash2, Megaphone, Wallet, ClipboardCheck, DollarSign } from 'lucide-react';
 import {
   getPublicationsByCar, addPublication, deletePublication,
   getExpensesByCar, addExpense, deleteExpense,
   getChecklistByCar, updateChecklistItem, addChecklistItem, deleteChecklistItem,
   getPlatforms, addPlatform,
   getPublicationsForCars, getExpensesForCars,
-  updateCar
+  updateCar,
+  // keep other imports from car-api if needed
 } from '@/lib/car-api';
 import { supabase } from '@/lib/supabase';
-import { fetchFipeForVehicle } from '@/lib/fipe-api'; // <<< nova importação
 
 // Small money formatter component
 const Money = ({ value }) => {
@@ -49,6 +49,10 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
 
   const [newChecklistLabel, setNewChecklistLabel] = useState('');
   const [newChecklistNotes, setNewChecklistNotes] = useState('');
+
+  // --- FILTROS
+  const [filterBrand, setFilterBrand] = useState('');
+  const [filterModel, setFilterModel] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -97,6 +101,32 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
     return () => { mounted = false; };
   }, [cars]);
 
+  // derive unique brands for the filter select
+  const brandOptions = useMemo(() => {
+    const setB = new Set();
+    (cars || []).forEach(c => {
+      if (c && c.brand) setB.add(String(c.brand).trim());
+    });
+    return Array.from(setB).sort((a,b) => a.localeCompare(b));
+  }, [cars]);
+
+  // normalized string helper for search
+  const normalizeStr = (s = '') => String(s || '').toLowerCase();
+
+  // filtered list according to filters
+  const filteredCars = useMemo(() => {
+    return (cars || []).filter(car => {
+      if (!car) return false;
+      if (filterBrand && String(car.brand || '').trim() !== String(filterBrand).trim()) return false;
+      if (filterModel) {
+        const q = normalizeStr(filterModel);
+        const carModel = normalizeStr(`${car.model || ''} ${car.name || ''}`);
+        if (!carModel.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [cars, filterBrand, filterModel]);
+
   const openFor = async (car) => {
     setSelectedCar(car);
     setOpen(true);
@@ -107,26 +137,6 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
       commission: car.commission ?? '',
       return_to_seller: car.return_to_seller ?? ''
     });
-
-    // Se não tem valor FIPE no registro, busca automaticamente e preenche (não salva)
-    if (!car.fipe_value) {
-      try {
-        const brand = car.brand || '';
-        const model = car.model || '';
-        const year = car.year || '';
-        const fuel = car.fuel || car.combustivel || ''; // tenta campos comuns
-        const res = await fetchFipeForVehicle({ brand, model, year, fuel });
-        if (res && res.value != null) {
-          setFinanceForm(prev => ({ ...prev, fipe_value: res.value }));
-          toast({ title: 'Valor FIPE carregado', description: res.formatted || 'Valor obtido', });
-        } else {
-          // não encontrado — silencioso (opcionalmente exibir)
-          // toast({ title: 'FIPE não encontrado automaticamente', variant: 'warning' });
-        }
-      } catch (err) {
-        console.warn('Erro ao buscar FIPE automático:', err);
-      }
-    }
   };
 
   const fetchAll = async (carId) => {
@@ -184,7 +194,6 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
       setNewChecklistNotes('');
       toast({ title: 'Item de checklist adicionado' });
       await fetchAll(selectedCar.id);
-      // não chama refreshAll() para evitar reload da lista inteira e possível fechamento do modal
     } catch (err) {
       console.error('Erro add checklist:', err);
       toast({ title: 'Erro ao adicionar item', description: err.message || String(err), variant: 'destructive' });
@@ -404,32 +413,6 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
     return profit;
   };
 
-  // função que busca FIPE e preenche o form (sem salvar)
-  const handleFetchFipe = async (showToast = true) => {
-    if (!selectedCar) return;
-    try {
-      const brand = selectedCar.brand || '';
-      const model = selectedCar.model || '';
-      const year = selectedCar.year || '';
-      const fuel = selectedCar.fuel || selectedCar.combustivel || '';
-      if (!brand || !model || !year) {
-        toast({ title: 'Marca, modelo e ano são necessários para buscar FIPE', variant: 'destructive' });
-        return;
-      }
-      if (showToast) toast({ title: 'Buscando valor FIPE...' });
-      const res = await fetchFipeForVehicle({ brand, model, year, fuel });
-      if (res && res.value != null) {
-        setFinanceForm(prev => ({ ...prev, fipe_value: res.value }));
-        if (showToast) toast({ title: 'Valor FIPE obtido', description: res.formatted || '' });
-      } else {
-        if (showToast) toast({ title: 'FIPE não encontrado', description: res && res.error ? String(res.error) : 'Não foi possível obter o valor.', variant: 'destructive' });
-      }
-    } catch (err) {
-      console.error('Erro buscar FIPE:', err);
-      toast({ title: 'Erro ao buscar FIPE', description: err.message || String(err), variant: 'destructive' });
-    }
-  };
-
   const saveFinance = async () => {
     if (!selectedCar) return;
     try {
@@ -473,8 +456,32 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
     <div>
       <h2 className="text-2xl font-semibold mb-4">Gestão de Veículos</h2>
 
+      {/* FILTROS */}
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div>
+          <label className="text-sm text-gray-600 block">Filtrar por Marca</label>
+          <select value={filterBrand} onChange={(e) => setFilterBrand(e.target.value)} className="p-2 border rounded">
+            <option value="">Todas as marcas</option>
+            {brandOptions.map(b => <option key={b} value={b}>{b}</option>)}
+          </select>
+        </div>
+
+        <div>
+          <label className="text-sm text-gray-600 block">Pesquisar Modelo</label>
+          <input placeholder="Ex: Sportage" value={filterModel} onChange={(e) => setFilterModel(e.target.value)} className="p-2 border rounded" />
+        </div>
+
+        <div className="flex items-end">
+          <Button size="sm" variant="ghost" onClick={() => { setFilterBrand(''); setFilterModel(''); }}>Limpar filtros</Button>
+        </div>
+
+        <div className="ml-auto text-sm text-gray-600">
+          Exibindo <strong className="text-gray-800">{filteredCars.length}</strong> de {cars.length}
+        </div>
+      </div>
+
       <div className="space-y-4">
-        {Array.isArray(cars) && cars.map(car => {
+        {Array.isArray(filteredCars) && filteredCars.map(car => {
           const summary = getSummary(car.id);
           const sold = !!car.is_sold || car.is_available === false;
           const profit = Number(car.profit ?? ((car.commission ?? 0) - (summary.adSpendTotal + summary.extraExpensesTotal)));
@@ -689,11 +696,7 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                   <div>
                     <label className="text-sm text-gray-700">Valor FIPE</label>
-                    <div className="flex items-center gap-2">
-                      <input type="number" step="0.01" value={financeForm.fipe_value ?? ''} onChange={(e) => setFinanceForm(f => ({ ...f, fipe_value: e.target.value }))} className="w-full p-2 border rounded" />
-                      <Button size="sm" onClick={() => handleFetchFipe(true)}>Buscar FIPE</Button>
-                    </div>
-                    <div className="text-xs text-gray-400 mt-1">O valor é buscado automaticamente ao abrir o modal se estiver vazio. Edite e clique em "Salvar Financeiro" para gravar.</div>
+                    <input type="number" step="0.01" value={financeForm.fipe_value ?? ''} onChange={(e) => setFinanceForm(f => ({ ...f, fipe_value: e.target.value }))} className="w-full p-2 border rounded" />
                   </div>
 
                   <div>
@@ -705,8 +708,6 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
                     <label className="text-sm text-gray-700">Devolver ao vendedor (R$)</label>
                     <input type="number" step="0.01" value={financeForm.return_to_seller ?? ''} onChange={(e) => setFinanceForm(f => ({ ...f, return_to_seller: e.target.value }))} className="w-full p-2 border rounded" />
                   </div>
-
-                  {/* REMOVIDO: valor final vendido (registrado no modal "Marcar como vendido" na listagem) */}
                 </div>
 
                 <div className="mb-4">

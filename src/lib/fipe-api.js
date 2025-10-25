@@ -264,3 +264,7 @@ export const getFipeValue = async ({ brand, model, year, fuel } = {}) => {
   }
 };
 
+// compatibilidade com import existente em VehicleManager.jsx
+export const fetchFipeForVehicle = getFipeValue;
+
+

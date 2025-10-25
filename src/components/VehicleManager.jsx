@@ -192,23 +192,22 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
     }
   };
 
-  // --- Improved Drag & Drop handlers ---
+  // --- Drag & Drop handlers (fixed) ---
 
   const handleDragStart = (e, index) => {
     setDraggingIndex(index);
-    // setData for older browsers / accessibility
     try { e.dataTransfer.setData('text/plain', String(index)); } catch (err) { /* ignore */ }
     e.dataTransfer.effectAllowed = 'move';
   };
 
   const handleDragEnter = (e, index) => {
     e.preventDefault();
-    // show placeholder BEFORE the item at "index"
+    // show placeholder at this index (before the item)
     setDragOverIndex(index);
   };
 
   const handleDragOver = (e) => {
-    e.preventDefault(); // needed to allow drop
+    e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
   };
 
@@ -219,7 +218,7 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
 
   const saveChecklistOrder = async (newList) => {
     try {
-      // grava ord para cada item (0,1,2...)
+      // update ord for every item to match index
       await Promise.all(
         newList.map((it, idx) => {
           if (!it || !it.id) return Promise.resolve(null);
@@ -230,6 +229,7 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
     } catch (err) {
       console.error('Erro ao salvar ordem do checklist:', err);
       toast({ title: 'Erro ao salvar ordem', variant: 'destructive' });
+      // not re-fetch here — keep local order as user expects immediate feedback
     }
   };
 
@@ -247,35 +247,40 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
       return;
     }
 
-    // if user drops on the same place — ignore
-    if (dragIndex === dropIndex || dragIndex === (dropIndex - 1)) {
+    // Build new list: remove dragged item and insert at computed position
+    const working = Array.from(checklist);
+    const [moved] = working.splice(dragIndex, 1);
+
+    // If user dropped at end placeholder, dropIndex can be checklist.length
+    let insertIndex = dropIndex;
+    // When dragging downwards, after removing the item the array shifts left,
+    // so the insert position must be reduced by 1.
+    if (dragIndex < dropIndex) {
+      insertIndex = dropIndex - 1;
+    }
+
+    if (insertIndex < 0) insertIndex = 0;
+    if (insertIndex > working.length) insertIndex = working.length;
+
+    // If no change in position, just cleanup
+    if (insertIndex === dragIndex) {
       handleDragEnd();
       return;
     }
 
-    // local reorder
-    const newList = Array.from(checklist);
-    const [moved] = newList.splice(dragIndex, 1);
+    working.splice(insertIndex, 0, moved);
 
-    // adjust insert index: if removing earlier item, the array shifts left
-    let insertIndex = dropIndex;
-    if (dragIndex < dropIndex) {
-      insertIndex = dropIndex - 1;
-    }
-    if (insertIndex < 0) insertIndex = 0;
-    if (insertIndex > newList.length) insertIndex = newList.length;
-
-    newList.splice(insertIndex, 0, moved);
-
-    // immediate feedback
-    setChecklist(newList);
+    // immediate visual feedback
+    setChecklist(working);
     handleDragEnd();
 
-    // persist
-    await saveChecklistOrder(newList);
+    // try to persist the order (graceful on error)
+    await saveChecklistOrder(working);
 
-    // refresh from server to normalize
-    if (selectedCar) await fetchAll(selectedCar.id);
+    // refresh server list to ensure consistency (optional)
+    if (selectedCar) {
+      await fetchAll(selectedCar.id);
+    }
   };
 
   // cria checklist padrão (itens default) PARA O VEÍCULO aberto

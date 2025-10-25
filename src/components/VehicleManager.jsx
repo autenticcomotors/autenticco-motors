@@ -1,17 +1,16 @@
 // src/components/VehicleManager.jsx
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
-import { Check, Trash2, Megaphone, Wallet, ClipboardCheck, DollarSign } from 'lucide-react';
+import { Check, Trash2, Megaphone, Wallet, DollarSign } from 'lucide-react';
 import {
   getPublicationsByCar, addPublication, deletePublication,
   getExpensesByCar, addExpense, deleteExpense,
   getChecklistByCar, updateChecklistItem, addChecklistItem, deleteChecklistItem,
   getPlatforms, addPlatform,
   getPublicationsForCars, getExpensesForCars,
-  updateCar,
-  // keep other imports from car-api if needed
+  updateCar
 } from '@/lib/car-api';
 import { supabase } from '@/lib/supabase';
 
@@ -49,10 +48,6 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
 
   const [newChecklistLabel, setNewChecklistLabel] = useState('');
   const [newChecklistNotes, setNewChecklistNotes] = useState('');
-
-  // --- FILTROS
-  const [filterBrand, setFilterBrand] = useState('');
-  const [filterModel, setFilterModel] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -101,32 +96,6 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
     return () => { mounted = false; };
   }, [cars]);
 
-  // derive unique brands for the filter select
-  const brandOptions = useMemo(() => {
-    const setB = new Set();
-    (cars || []).forEach(c => {
-      if (c && c.brand) setB.add(String(c.brand).trim());
-    });
-    return Array.from(setB).sort((a,b) => a.localeCompare(b));
-  }, [cars]);
-
-  // normalized string helper for search
-  const normalizeStr = (s = '') => String(s || '').toLowerCase();
-
-  // filtered list according to filters
-  const filteredCars = useMemo(() => {
-    return (cars || []).filter(car => {
-      if (!car) return false;
-      if (filterBrand && String(car.brand || '').trim() !== String(filterBrand).trim()) return false;
-      if (filterModel) {
-        const q = normalizeStr(filterModel);
-        const carModel = normalizeStr(`${car.model || ''} ${car.name || ''}`);
-        if (!carModel.includes(q)) return false;
-      }
-      return true;
-    });
-  }, [cars, filterBrand, filterModel]);
-
   const openFor = async (car) => {
     setSelectedCar(car);
     setOpen(true);
@@ -147,7 +116,15 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
         getPublicationsByCar(carId),
         getExpensesByCar(carId)
       ]);
-      setChecklist(cl || []);
+
+      // ensure order by ord if present
+      const orderedChecklist = (cl || []).slice().sort((a, b) => {
+        const ai = typeof a.ord === 'number' ? a.ord : 0;
+        const bi = typeof b.ord === 'number' ? b.ord : 0;
+        return ai - bi;
+      });
+
+      setChecklist(orderedChecklist);
       setPublications(pu || []);
       setExpenses(ex || []);
     } catch (err) {
@@ -194,6 +171,7 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
       setNewChecklistNotes('');
       toast({ title: 'Item de checklist adicionado' });
       await fetchAll(selectedCar.id);
+      // não chama refreshAll() para evitar reload da lista inteira e possível fechamento do modal
     } catch (err) {
       console.error('Erro add checklist:', err);
       toast({ title: 'Erro ao adicionar item', description: err.message || String(err), variant: 'destructive' });
@@ -210,6 +188,53 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
       console.error('Erro delete checklist:', err);
       toast({ title: 'Erro ao remover item', description: err.message || String(err), variant: 'destructive' });
     }
+  };
+
+  // Drag & drop helpers para reorder checklist
+  const handleDragStart = (e, index) => {
+    e.dataTransfer.setData('text/plain', String(index));
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault(); // necessário para permitir drop
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const saveChecklistOrder = async (newList) => {
+    try {
+      // grava ord para cada item (0,1,2...)
+      await Promise.all(
+        newList.map((it, idx) => {
+          if (!it || !it.id) return Promise.resolve(null);
+          return updateChecklistItem(it.id, { ord: idx });
+        })
+      );
+      toast({ title: 'Ordem do checklist salva' });
+    } catch (err) {
+      console.error('Erro ao salvar ordem do checklist:', err);
+      toast({ title: 'Erro ao salvar ordem', variant: 'destructive' });
+    }
+  };
+
+  const handleDrop = async (e, dropIndex) => {
+    e.preventDefault();
+    const dragIndex = Number(e.dataTransfer.getData('text/plain'));
+    if (isNaN(dragIndex)) return;
+
+    // Reordena localmente
+    const newList = Array.from(checklist);
+    const [moved] = newList.splice(dragIndex, 1);
+    newList.splice(dropIndex, 0, moved);
+
+    // Atualiza state imediatamente para feedback instantâneo
+    setChecklist(newList);
+
+    // Persiste a ordem
+    await saveChecklistOrder(newList);
+
+    // atualiza do servidor por precaução
+    if (selectedCar) await fetchAll(selectedCar.id);
   };
 
   // cria checklist padrão (itens default) PARA O VEÍCULO aberto
@@ -456,32 +481,8 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
     <div>
       <h2 className="text-2xl font-semibold mb-4">Gestão de Veículos</h2>
 
-      {/* FILTROS */}
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <div>
-          <label className="text-sm text-gray-600 block">Filtrar por Marca</label>
-          <select value={filterBrand} onChange={(e) => setFilterBrand(e.target.value)} className="p-2 border rounded">
-            <option value="">Todas as marcas</option>
-            {brandOptions.map(b => <option key={b} value={b}>{b}</option>)}
-          </select>
-        </div>
-
-        <div>
-          <label className="text-sm text-gray-600 block">Pesquisar Modelo</label>
-          <input placeholder="Ex: Sportage" value={filterModel} onChange={(e) => setFilterModel(e.target.value)} className="p-2 border rounded" />
-        </div>
-
-        <div className="flex items-end">
-          <Button size="sm" variant="ghost" onClick={() => { setFilterBrand(''); setFilterModel(''); }}>Limpar filtros</Button>
-        </div>
-
-        <div className="ml-auto text-sm text-gray-600">
-          Exibindo <strong className="text-gray-800">{filteredCars.length}</strong> de {cars.length}
-        </div>
-      </div>
-
       <div className="space-y-4">
-        {Array.isArray(filteredCars) && filteredCars.map(car => {
+        {Array.isArray(cars) && cars.map(car => {
           const summary = getSummary(car.id);
           const sold = !!car.is_sold || car.is_available === false;
           const profit = Number(car.profit ?? ((car.commission ?? 0) - (summary.adSpendTotal + summary.extraExpensesTotal)));
@@ -582,8 +583,15 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
                 </div>
 
                 <div className="space-y-2">
-                  {checklist.map(item => (
-                    <div key={item.id} className="flex items-center justify-between bg-white p-3 border rounded mb-2">
+                  {checklist.map((item, idx) => (
+                    <div
+                      key={item.id}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, idx)}
+                      onDragOver={handleDragOver}
+                      onDrop={(e) => handleDrop(e, idx)}
+                      className="flex items-center justify-between bg-white p-3 border rounded mb-2 cursor-move select-none"
+                    >
                       <div className="flex items-center gap-3">
                         <input type="checkbox" checked={!!item.checked} onChange={() => toggleChecklist(item)} />
                         <div>
@@ -708,6 +716,8 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
                     <label className="text-sm text-gray-700">Devolver ao vendedor (R$)</label>
                     <input type="number" step="0.01" value={financeForm.return_to_seller ?? ''} onChange={(e) => setFinanceForm(f => ({ ...f, return_to_seller: e.target.value }))} className="w-full p-2 border rounded" />
                   </div>
+
+                  {/* REMOVIDO: valor final vendido (registrado no modal "Marcar como vendido" na listagem) */}
                 </div>
 
                 <div className="mb-4">

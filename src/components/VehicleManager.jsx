@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
-import { Check, Trash2, Edit, Megaphone, Wallet, ClipboardCheck, FileText, DollarSign } from 'lucide-react';
+import { Check, Trash2, Megaphone, Wallet, DollarSign } from 'lucide-react';
 import {
   getPublicationsByCar, addPublication, deletePublication,
   getExpensesByCar, addExpense, deleteExpense,
@@ -12,6 +12,7 @@ import {
   getPublicationsForCars, getExpensesForCars,
   updateCar
 } from '@/lib/car-api';
+import { supabase } from '@/lib/supabase';
 
 // Small money formatter component
 const Money = ({ value }) => {
@@ -19,7 +20,6 @@ const Money = ({ value }) => {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 };
 
-// Default checklist items created when user clicks "Criar checklist padrão"
 const defaultChecklistItems = [
   { label: 'Lavagem e estética', notes: '' },
   { label: 'Revisão básica', notes: '' },
@@ -41,13 +41,11 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
 
   const [summaryMap, setSummaryMap] = useState({});
 
-  // forms
-  const [pubForm, setPubForm] = useState({ title: '', platform_id: '', link: '', budget: '', spent: '', status: 'draft', published_at: '' });
+  const [pubForm, setPubForm] = useState({ platform_id: '', link: '', budget: '', spent: '', status: 'draft', published_at: '' });
   const [expenseForm, setExpenseForm] = useState({ category: '', amount: '', description: '', incurred_at: '' });
-  const [financeForm, setFinanceForm] = useState({ fipe_value: '', commission: '', return_to_seller: '', sale_price: '' });
+  const [financeForm, setFinanceForm] = useState({ fipe_value: '', commission: '', return_to_seller: '' });
   const [newPlatformName, setNewPlatformName] = useState('');
 
-  // checklist add form
   const [newChecklistLabel, setNewChecklistLabel] = useState('');
   const [newChecklistNotes, setNewChecklistNotes] = useState('');
 
@@ -58,7 +56,6 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
     })();
   }, []);
 
-  // Aggregate summaries for cards
   useEffect(() => {
     const carIds = (Array.isArray(cars) ? cars.map(c => c.id) : []).filter(Boolean);
     if (carIds.length === 0) {
@@ -99,7 +96,6 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
     return () => { mounted = false; };
   }, [cars]);
 
-  // open modal and fetch details for selected car
   const openFor = async (car) => {
     setSelectedCar(car);
     setOpen(true);
@@ -108,8 +104,7 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
     setFinanceForm({
       fipe_value: car.fipe_value ?? '',
       commission: car.commission ?? '',
-      return_to_seller: car.return_to_seller ?? '',
-      sale_price: car.sale_price ?? car.price ?? ''
+      return_to_seller: car.return_to_seller ?? ''
     });
   };
 
@@ -139,18 +134,16 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
       await updateChecklistItem(item.id, patched);
       setChecklist(prev => prev.map(i => i.id === item.id ? { ...i, ...patched } : i));
       toast({ title: 'Checklist atualizado' });
-      // refresh summary and parent
+      // atualiza somente o modal (não força reload global)
       await fetchAll(selectedCar.id);
-      if (refreshAll) { try { refreshAll(); } catch(e){} }
     } catch (err) {
       toast({ title: 'Erro ao atualizar checklist', description: err.message || String(err), variant: 'destructive' });
     }
   };
 
-  // checklist: add new item
   const submitChecklistItem = async () => {
     if (!selectedCar) return;
-    if (!newChecklistLabel || newChecklistLabel.trim().length < 1) {
+    if (!newChecklistLabel || newChecklistLabel.trim().length === 0) {
       toast({ title: 'Informe o nome do item', variant: 'destructive' });
       return;
     }
@@ -162,53 +155,46 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
         checked: false,
         item_key: genItemKey()
       };
-      const { data, error } = await addChecklistItem(payload);
-      if (error) throw error;
-      // update local
+      const { data } = await addChecklistItem(payload);
       if (data) {
         setChecklist(prev => [data, ...prev]);
       }
       setNewChecklistLabel('');
       setNewChecklistNotes('');
       toast({ title: 'Item de checklist adicionado' });
-      // refresh inner lists but KEEP modal open
       await fetchAll(selectedCar.id);
-      if (refreshAll) { try { refreshAll(); } catch(e){} }
+      // não chama refreshAll() para evitar reload da lista inteira e possível fechamento do modal
     } catch (err) {
       console.error('Erro add checklist:', err);
       toast({ title: 'Erro ao adicionar item', description: err.message || String(err), variant: 'destructive' });
     }
   };
 
-  // checklist: delete item
   const removeChecklistItem = async (id) => {
     try {
       await deleteChecklistItem(id);
       setChecklist(prev => prev.filter(i => i.id !== id));
       toast({ title: 'Item removido' });
       await fetchAll(selectedCar.id);
-      if (refreshAll) { try { refreshAll(); } catch(e){} }
     } catch (err) {
       console.error('Erro delete checklist:', err);
       toast({ title: 'Erro ao remover item', description: err.message || String(err), variant: 'destructive' });
     }
   };
 
-  // create default checklist (creates default items for THIS vehicle)
+  // cria checklist padrão (itens default) PARA O VEÍCULO aberto
   const createDefaultChecklist = async () => {
     if (!selectedCar) return;
     try {
       const created = [];
       for (const it of defaultChecklistItems) {
         const payload = { car_id: selectedCar.id, label: it.label, notes: it.notes, checked: false, item_key: genItemKey() };
-        const { data, error } = await addChecklistItem(payload);
-        if (!error && data) created.push(data);
+        const { data } = await addChecklistItem(payload);
+        if (data) created.push(data);
       }
       if (created.length > 0) {
-        // refresh local
         await fetchAll(selectedCar.id);
-        toast({ title: 'Checklist padrão criado' });
-        if (refreshAll) { try { refreshAll(); } catch(e){} }
+        toast({ title: 'Checklist padrão criado para este veículo' });
       } else {
         toast({ title: 'Nenhum item criado', variant: 'destructive' });
       }
@@ -218,14 +204,94 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
     }
   };
 
-  // publications (Anúncios)
+  // SALVAR checklist atual como TEMPLATE GLOBAL (usando Supabase diretamente)
+  const saveChecklistAsTemplate = async (templateName = 'Padrão') => {
+    try {
+      if (!checklist || checklist.length === 0) {
+        toast({ title: 'Checklist vazio. Nada a salvar.', variant: 'destructive' });
+        return;
+      }
+      const itemsPayload = (checklist || []).map((it, idx) => ({
+        item_key: it.item_key || genItemKey(),
+        label: it.label || `Item ${idx+1}`,
+        notes: it.notes || '',
+        ord: idx
+      }));
+
+      // insere novo template
+      const { data, error } = await supabase
+        .from('checklist_templates')
+        .insert([{ name: templateName, items: itemsPayload }])
+        .select()
+        .single();
+
+      if (error) throw error;
+      toast({ title: 'Checklist salvo como padrão global' });
+    } catch (err) {
+      console.error('Erro ao salvar template:', err);
+      toast({ title: 'Erro ao salvar checklist como padrão', description: err.message || String(err), variant: 'destructive' });
+    }
+  };
+
+  // Aplicar template existente ao veículo aberto (buscar latest)
+  const applyLatestTemplateToVehicle = async () => {
+    if (!selectedCar) return;
+    try {
+      const { data: tplData, error } = await supabase
+        .from('checklist_templates')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (error) throw error;
+      if (!tplData || tplData.length === 0) {
+        toast({ title: 'Nenhum template disponível', variant: 'destructive' });
+        return;
+      }
+
+      const items = tplData[0].items || [];
+      if (items.length === 0) {
+        toast({ title: 'Template sem itens', variant: 'destructive' });
+        return;
+      }
+
+      // criar itens para o veículo
+      const created = [];
+      for (const it of items) {
+        const payload = {
+          car_id: selectedCar.id,
+          label: it.label,
+          notes: it.notes || '',
+          checked: false,
+          item_key: it.item_key || genItemKey()
+        };
+        const { data } = await addChecklistItem(payload);
+        if (data) created.push(data);
+      }
+
+      if (created.length > 0) {
+        await fetchAll(selectedCar.id);
+        toast({ title: 'Template aplicado ao veículo' });
+      } else {
+        toast({ title: 'Erro ao aplicar template', variant: 'destructive' });
+      }
+    } catch (err) {
+      console.error('Erro aplicar template:', err);
+      toast({ title: 'Erro ao aplicar template', description: err.message || String(err), variant: 'destructive' });
+    }
+  };
+
+  // PUBLICAÇÕES / ANÚNCIOS
+  // Observação: removi o campo "title" do formulário. O título será o nome da plataforma selecionada.
   const submitPublication = async () => {
     if (!selectedCar) return;
     try {
+      const platform = platforms.find(p => String(p.id) === String(pubForm.platform_id));
+      const titleFromPlatform = platform ? platform.name : '(Plataforma)';
       const payload = {
         car_id: selectedCar.id,
         platform_id: pubForm.platform_id || null,
-        title: pubForm.title,
+        title: titleFromPlatform,
         link: pubForm.link,
         status: pubForm.status,
         budget: pubForm.budget ? parseFloat(pubForm.budget) : null,
@@ -236,12 +302,10 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
       const { data } = await addPublication(payload);
       if (data) {
         setPublications(prev => [data, ...prev]);
-        setPubForm({ title: '', platform_id: '', link: '', budget: '', spent: '', status: 'draft', published_at: '' });
+        setPubForm({ platform_id: '', link: '', budget: '', spent: '', status: 'draft', published_at: '' });
         toast({ title: 'Anúncio adicionado' });
       }
-      // reload local lists, keep modal open
       await fetchAll(selectedCar.id);
-      if (refreshAll) { try { refreshAll(); } catch(e){} }
     } catch (err) {
       console.error(err);
       toast({ title: 'Erro ao salvar anúncio', description: err.message || String(err), variant: 'destructive' });
@@ -250,18 +314,16 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
 
   const removePublication = async (id) => {
     try {
-      const removed = publications.find(p => p.id === id);
       await deletePublication(id);
       setPublications(prev => prev.filter(p => p.id !== id));
       toast({ title: 'Anúncio removido' });
       await fetchAll(selectedCar.id);
-      if (refreshAll) { try { refreshAll(); } catch(e){} }
     } catch (err) {
       toast({ title: 'Erro ao remover anúncio', description: err.message || String(err), variant: 'destructive' });
     }
   };
 
-  // expenses
+  // EXPENSES
   const submitExpense = async () => {
     if (!selectedCar) return;
     try {
@@ -279,7 +341,6 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
         toast({ title: 'Gasto registrado' });
       }
       await fetchAll(selectedCar.id);
-      if (refreshAll) { try { refreshAll(); } catch(e){} }
     } catch (err) {
       toast({ title: 'Erro ao salvar gasto', description: err.message || String(err), variant: 'destructive' });
     }
@@ -287,18 +348,16 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
 
   const removeExpense = async (id) => {
     try {
-      const removed = expenses.find(e => e.id === id);
       await deleteExpense(id);
       setExpenses(prev => prev.filter(e => e.id !== id));
       toast({ title: 'Gasto removido' });
       await fetchAll(selectedCar.id);
-      if (refreshAll) { try { refreshAll(); } catch(e){} }
     } catch (err) {
       toast({ title: 'Erro ao remover gasto', description: err.message || String(err), variant: 'destructive' });
     }
   };
 
-  // platform create
+  // plataforma
   const handleAddPlatform = async () => {
     if (!newPlatformName || newPlatformName.trim().length < 2) return;
     try {
@@ -313,7 +372,7 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
     }
   };
 
-  // FINANCE: compute profit and save to cars table
+  // FINANCEIRO
   const computeProfitForSelected = () => {
     if (!selectedCar) return 0;
     const summary = summaryMap[selectedCar.id] || { adSpendTotal: 0, extraExpensesTotal: 0 };
@@ -331,21 +390,18 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
       const fipe_value = financeForm.fipe_value ? parseFloat(financeForm.fipe_value) : null;
       const commission = financeForm.commission ? parseFloat(financeForm.commission) : 0;
       const return_to_seller = financeForm.return_to_seller ? parseFloat(financeForm.return_to_seller) : 0;
-      const sale_price = financeForm.sale_price ? parseFloat(financeForm.sale_price) : (selectedCar.sale_price || selectedCar.price || null);
 
       const adSpendTotal = Number(summary.adSpendTotal || 0);
       const extraExpensesTotal = Number(summary.extraExpensesTotal || 0);
 
       const profit = commission - (adSpendTotal + extraExpensesTotal);
-      const profit_percent = sale_price ? (profit / Number(sale_price || 1)) * 100 : null;
-
+      // NOTA: não grava sale_price aqui (é feito no modal "Marcar como vendido" na listagem)
       const patch = {
         fipe_value,
         commission,
         return_to_seller,
-        sale_price,
         profit,
-        profit_percent
+        profit_percent: null
       };
 
       const { data, error } = await updateCar(selectedCar.id, patch);
@@ -355,10 +411,9 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
       setSelectedCar(updated);
 
       toast({ title: 'Financeiro atualizado com sucesso' });
-
-      // refresh lists but keep modal open
       await fetchAll(selectedCar.id);
-      if (refreshAll) { try { refreshAll(); } catch(e){} }
+      // se quiser atualizar o dashboard externo, chame refreshAll() manualmente
+      if (refreshAll) refreshAll();
     } catch (err) {
       console.error('Erro ao salvar financeiro:', err);
       toast({ title: 'Erro ao salvar financeiro', description: err.message || String(err), variant: 'destructive' });
@@ -467,6 +522,8 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
                   <div className="text-sm text-gray-600">Itens do checklist</div>
                   <div className="ml-auto flex gap-2">
                     <Button size="sm" variant="ghost" onClick={() => createDefaultChecklist()}>Criar checklist padrão</Button>
+                    <Button size="sm" variant="outline" onClick={() => applyLatestTemplateToVehicle()}>Aplicar checklist padrão</Button>
+                    <Button size="sm" onClick={() => saveChecklistAsTemplate('Padrão')}>Salvar checklist atual como padrão</Button>
                   </div>
                 </div>
 
@@ -505,7 +562,7 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
               <div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                   <div className="space-y-2">
-                    <input placeholder="Título do anúncio" value={pubForm.title} onChange={(e) => setPubForm(f => ({ ...f, title: e.target.value }))} className="w-full p-2 border rounded" />
+                    {/* título removido — o título será o nome da plataforma */}
                     <select value={pubForm.platform_id} onChange={(e) => setPubForm(f => ({ ...f, platform_id: e.target.value }))} className="w-full p-2 border rounded">
                       <option value="">Plataforma</option>
                       {platforms.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -598,10 +655,7 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
                     <input type="number" step="0.01" value={financeForm.return_to_seller ?? ''} onChange={(e) => setFinanceForm(f => ({ ...f, return_to_seller: e.target.value }))} className="w-full p-2 border rounded" />
                   </div>
 
-                  <div>
-                    <label className="text-sm text-gray-700">Valor final vendido (R$)</label>
-                    <input type="number" step="0.01" value={financeForm.sale_price ?? ''} onChange={(e) => setFinanceForm(f => ({ ...f, sale_price: e.target.value }))} className="w-full p-2 border rounded" />
-                  </div>
+                  {/* REMOVIDO: valor final vendido (registrado no modal "Marcar como vendido" na listagem) */}
                 </div>
 
                 <div className="mb-4">

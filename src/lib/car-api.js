@@ -202,7 +202,6 @@ export const addPlatform = async (name) => {
 
 export const markCarAsSold = async ({ car_id, platform_id = null, sale_price = null, sale_date = null, notes = null }) => {
   try {
-    // create sale row
     const salePayload = {
       car_id,
       platform_id,
@@ -222,7 +221,6 @@ export const markCarAsSold = async ({ car_id, platform_id = null, sale_price = n
       return { error: saleError };
     }
 
-    // update cars table: set sold flags and sold_at, also mark is_available = false
     const { data: updatedCar, error: carUpdateError } = await supabase
       .from('cars')
       .update({
@@ -250,7 +248,6 @@ export const markCarAsSold = async ({ car_id, platform_id = null, sale_price = n
 
 export const unmarkCarAsSold = async (carId, { deleteAllSales = true } = {}) => {
   try {
-    // revert car fields first
     const { data: updatedCar, error: carErr } = await supabase
       .from('cars')
       .update({
@@ -269,7 +266,6 @@ export const unmarkCarAsSold = async (carId, { deleteAllSales = true } = {}) => 
       return { error: carErr };
     }
 
-    // delete sales
     if (deleteAllSales) {
       const { error: delErr } = await supabase
         .from('sales')
@@ -280,7 +276,6 @@ export const unmarkCarAsSold = async (carId, { deleteAllSales = true } = {}) => 
         return { error: delErr };
       }
     } else {
-      // delete only the latest sale (by created_at desc)
       const { data: lastSale, error: lastErr } = await supabase
         .from('sales')
         .select('*')
@@ -319,7 +314,6 @@ export const getSalesByCar = async (carId) => {
   return data || [];
 };
 
-// Busca de sales com filtros (usado pelo Reports)
 export const getSales = async (filters = {}) => {
   try {
     let query = supabase
@@ -512,5 +506,50 @@ export const getExpensesForCars = async (carIds = []) => {
     .in('car_id', carIds);
   if (error) console.error('Erro ao buscar gastos (bulk):', error);
   return data || [];
+};
+
+/*
+  -----------------------------
+  FUNÇÕES: CHECKLIST TEMPLATES (global templates)
+  -----------------------------
+*/
+
+export const saveChecklistTemplate = async (name = 'Padrão', items = []) => {
+  try {
+    const payload = {
+      name: name,
+      template: items, // armazenamos o array JSON na coluna `template`
+      created_at: new Date().toISOString()
+    };
+    const { data, error } = await supabase
+      .from('checklist_templates')
+      .insert([payload])
+      .select()
+      .single();
+    if (error) console.error('Erro ao salvar template:', error);
+    return { data, error };
+  } catch (err) {
+    console.error('Erro em saveChecklistTemplate:', err);
+    return { error: err };
+  }
+};
+
+export const getLatestChecklistTemplate = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('checklist_templates')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(1);
+    if (error) {
+      console.error('Erro ao buscar latest checklist template:', error);
+      return { data: null, error };
+    }
+    const found = Array.isArray(data) && data.length > 0 ? data[0] : null;
+    return { data: found, error: null };
+  } catch (err) {
+    console.error('Erro em getLatestChecklistTemplate:', err);
+    return { data: null, error: err };
+  }
 };
 

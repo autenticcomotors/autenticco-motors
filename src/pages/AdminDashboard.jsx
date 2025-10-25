@@ -11,7 +11,7 @@ import { supabase } from '@/lib/supabase';
 import {
   getCars, addCar, deleteCar, updateCar, getTestimonials, addTestimonial, deleteTestimonial,
   getLeads, updateLead, deleteLead, getPlatforms, markCarAsSold, unmarkCarAsSold,
-  addChecklistItem
+  addChecklistItem, getLatestChecklistTemplate
 } from '@/lib/car-api';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -84,19 +84,18 @@ const AdminDashboard = () => {
 
   const sortCarsActiveFirst = (list = []) => {
     return [...list].sort((a, b) => {
-      // ativos primeiro (is_available true), vendidos depois (is_available false)
       const aActive = a.is_available === false ? 0 : 1;
       const bActive = b.is_available === false ? 0 : 1;
-      if (aActive !== bActive) return bActive - aActive; // ativo (1) should come before sold (0)
-      // se mesmo status, ordenar por created_at desc
+      if (aActive !== bActive) return bActive - aActive;
       const aTime = new Date(a.created_at || 0).getTime();
       const bTime = new Date(b.created_at || 0).getTime();
       return bTime - aTime;
     });
   };
 
-  const fetchAllData = useCallback(async () => {
-    setLoading(true);
+  // fetchAllData now accepts options to avoid showing full-screen loading (used by VehicleManager)
+  const fetchAllData = useCallback(async (opts = { showLoading: true }) => {
+    if (opts.showLoading) setLoading(true);
     try {
       const [carsData, testimonialsData, leadsData, platformsData] = await Promise.all([
         getCars(), getTestimonials(), getLeads(leadFilters), getPlatforms()
@@ -112,7 +111,7 @@ const AdminDashboard = () => {
       setLeads([]);
       setPlatforms([]);
     } finally {
-      setLoading(false);
+      if (opts.showLoading) setLoading(false);
     }
   }, [leadFilters]);
 
@@ -200,10 +199,15 @@ const AdminDashboard = () => {
       const { data: addedCar, error } = await addCar(carData);
       if (error) { toast({ title: 'Erro ao adicionar.', description: error.message, variant: 'destructive' }); }
       else {
-        // add default checklist items for the new car
+        // try to apply latest checklist template (global) to new car, fallback to DEFAULT_CHECKLIST
         try {
-          for (const item of DEFAULT_CHECKLIST) {
-            await addChecklistItem({ car_id: addedCar.id, label: item.label, checked: item.checked, notes: item.notes });
+          const { data: tplArr, error: tplErr } = await getLatestChecklistTemplate();
+          let itemsToCreate = DEFAULT_CHECKLIST;
+          if (!tplErr && tplArr && tplArr.template && Array.isArray(tplArr.template) && tplArr.template.length > 0) {
+            itemsToCreate = tplArr.template.map(it => ({ label: it.label || it.label, notes: it.notes || '', checked: false }));
+          }
+          for (const item of itemsToCreate) {
+            await addChecklistItem({ car_id: addedCar.id, label: item.label, checked: item.checked || false, notes: item.notes || '' });
           }
         } catch (err) {
           console.warn('Erro ao criar checklist padrão:', err);
@@ -337,7 +341,6 @@ const AdminDashboard = () => {
     if (!car) return;
     setLoading(true);
     try {
-      // desfazer venda e remover todas as sales desse carro
       const res = await unmarkCarAsSold(car.id, { deleteAllSales: true });
       if (res?.error) {
         toast({ title: 'Erro ao reverter venda', description: String(res.error), variant: 'destructive' });
@@ -519,7 +522,8 @@ const AdminDashboard = () => {
           {/* GESTÃO (VehicleManager) */}
           {activeTab === 'gestao' && (
             <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-xl border">
-              <VehicleManager cars={cars} refreshAll={fetchAllData} />
+              {/* passamos refreshAll sem loading para não fechar modal */}
+              <VehicleManager cars={cars} refreshAll={() => fetchAllData({ showLoading: false })} />
             </div>
           )}
 

@@ -1,16 +1,19 @@
+// src/pages/AdminDashboard.jsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Helmet } from 'react-helmet';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Car, PlusCircle, Trash2, Edit, LogOut, Download, MessageSquare, Users, Image as ImageIcon, FileText, Check, Star } from 'lucide-react';
+import { Car, PlusCircle, Trash2, Edit, LogOut, Download, MessageSquare, Users, Image as ImageIcon, FileText, Check, Star, Tag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
 import { CSVLink } from 'react-csv';
 import { supabase } from '@/lib/supabase';
-import { getCars, addCar, deleteCar, updateCar, getTestimonials, addTestimonial, deleteTestimonial, getLeads, updateLead, deleteLead } from '@/lib/car-api';
+import { getCars, addCar, deleteCar, updateCar, getTestimonials, addTestimonial, deleteTestimonial, getLeads, updateLead, deleteLead, getPlatforms, markCarAsSold, addPlatform } from '@/lib/car-api';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import BackgroundShape from '@/components/BackgroundShape';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
 
 const FormFields = React.memo(({ carData, onChange, carOptions }) => (
     <>
@@ -33,6 +36,7 @@ const AdminDashboard = () => {
     const [cars, setCars] = useState([]);
     const [leads, setLeads] = useState([]);
     const [testimonials, setTestimonials] = useState([]);
+    const [platforms, setPlatforms] = useState([]);
     const [loading, setLoading] = useState(true);
     const [leadFilters, setLeadFilters] = useState({ status: '', startDate: '', endDate: '' });
     const [leadToDelete, setLeadToDelete] = useState(null);
@@ -44,6 +48,13 @@ const AdminDashboard = () => {
     const [mainPhotoIndex, setMainPhotoIndex] = useState(0);
     const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
     const [carToDelete, setCarToDelete] = useState(null);
+    const [markSoldModalOpen, setMarkSoldModalOpen] = useState(false);
+    const [selectedCarToMark, setSelectedCarToMark] = useState(null);
+    const [salePriceInput, setSalePriceInput] = useState('');
+    const [saleDateInput, setSaleDateInput] = useState(new Date());
+    const [salePlatformInput, setSalePlatformInput] = useState('');
+    const [newPlatformName, setNewPlatformName] = useState('');
+    const [isAddingPlatform, setIsAddingPlatform] = useState(false);
     const navigate = useNavigate();
     const fileInputRef = useRef(null);
 
@@ -55,13 +66,20 @@ const AdminDashboard = () => {
     
     const fetchAllData = useCallback(async () => {
         setLoading(true);
-        const [carsData, testimonialsData, leadsData] = await Promise.all([
-            getCars(), getTestimonials(), getLeads(leadFilters)
-        ]);
-        setCars(carsData || []);
-        setTestimonials(testimonialsData || []);
-        setLeads(leadsData || []);
-        setLoading(false);
+        try {
+            const [carsData, testimonialsData, leadsData, platformsData] = await Promise.all([
+                getCars(), getTestimonials(), getLeads(leadFilters), getPlatforms()
+            ]);
+            setCars(carsData || []);
+            setTestimonials(testimonialsData || []);
+            setLeads(leadsData || []);
+            setPlatforms(platformsData || []);
+        } catch (err) {
+            console.error('Erro ao buscar dados:', err);
+            toast({ title: 'Erro ao carregar dados', description: err.message || String(err), variant: 'destructive' });
+        } finally {
+            setLoading(false);
+        }
     }, [leadFilters]);
 
     useEffect(() => { fetchAllData(); }, [fetchAllData]);
@@ -83,7 +101,69 @@ const AdminDashboard = () => {
     const handleEditCarClick = (car) => { setPhotosToUpload([]); setPhotosToDelete([]); setEditingCar(JSON.parse(JSON.stringify(car))); setIsEditDialogOpen(true); };
     const handleUpdateCar = async (e) => { e.preventDefault(); if (!editingCar) return; setLoading(true); let finalCarData = { ...editingCar }; if (photosToUpload.length > 0) { const newPhotoUrls = []; for (const file of photosToUpload) { const fileName = `${finalCarData.brand}/${Date.now()}_${file.name}`; const { data, error } = await supabase.storage.from('car_photos').upload(fileName, file); if (error) { toast({ title: 'Erro no upload.', description: error.message, variant: 'destructive' }); setLoading(false); return; } const { data: { publicUrl } } = supabase.storage.from('car_photos').getPublicUrl(data.path); newPhotoUrls.push(publicUrl); } finalCarData.photo_urls = [...finalCarData.photo_urls, ...newPhotoUrls]; } if (photosToDelete.length > 0) { const filePaths = photosToDelete.map(url => url.split('/car_photos/')[1]).filter(Boolean); if (filePaths.length > 0) { await supabase.storage.from('car_photos').remove(filePaths); } } if (!finalCarData.photo_urls.includes(finalCarData.main_photo_url)) { finalCarData.main_photo_url = finalCarData.photo_urls[0] || null; } const { error } = await updateCar(finalCarData.id, { ...finalCarData, price: parseFloat(finalCarData.price) }); if (error) { toast({ title: 'Erro ao atualizar.', description: error.message, variant: 'destructive' }); } else { setCars(cars.map(car => car.id === finalCarData.id ? finalCarData : car)); setIsEditDialogOpen(false); setEditingCar(null); toast({ title: 'Veículo atualizado!' }); } setLoading(false); };
     const handleDeleteCar = async (id) => { setLoading(true); const carToDeleteData = cars.find(car => car.id === id); if (carToDeleteData && carToDeleteData.photo_urls && carToDeleteData.photo_urls.length > 0) { const filePaths = carToDeleteData.photo_urls.map(url => url.split('/car_photos/')[1]).filter(Boolean); if(filePaths.length > 0) { await supabase.storage.from('car_photos').remove(filePaths); } } const { error } = await deleteCar(id); if (error) { toast({ title: 'Erro ao remover.', variant: 'destructive' }); } else { setCars(cars.filter(car => car.id !== id)); toast({ title: 'Veículo removido.' }); } setCarToDelete(null); setLoading(false); };
-    
+
+    // === MARCAR COMO VENDIDO ===
+    const openMarkSoldModal = (car) => {
+      setSelectedCarToMark(car);
+      setSalePriceInput(car.sale_price ? String(car.sale_price) : '');
+      setSaleDateInput(car.sold_at ? new Date(car.sold_at) : new Date());
+      setSalePlatformInput(car.sold_platform_id || (platforms[0] ? platforms[0].id : ''));
+      setMarkSoldModalOpen(true);
+    };
+
+    const handleConfirmMarkSold = async () => {
+      if (!selectedCarToMark) return;
+      setLoading(true);
+      try {
+        const salePayload = {
+          car_id: selectedCarToMark.id,
+          platform_id: salePlatformInput || null,
+          sale_price: salePriceInput ? parseFloat(salePriceInput) : null,
+          sale_date: saleDateInput ? saleDateInput.toISOString() : new Date().toISOString()
+        };
+        const result = await markCarAsSold(salePayload);
+        if (result.error) {
+          throw result.error;
+        }
+        toast({ title: 'Carro marcado como VENDIDO!' });
+        setMarkSoldModalOpen(false);
+        setSelectedCarToMark(null);
+        // atualizar localmente: marcar is_sold true e valores
+        setCars(prev => prev.map(c => c.id === salePayload.car_id ? { ...c, is_sold: true, sold_at: salePayload.sale_date, sold_platform_id: salePayload.platform_id, sale_price: salePayload.sale_price } : c));
+      } catch (err) {
+        console.error(err);
+        toast({ title: 'Erro ao marcar como vendido', description: err.message || String(err), variant: 'destructive' });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    const handleAddPlatformUI = async () => {
+      if (!newPlatformName || newPlatformName.trim().length < 2) return;
+      setIsAddingPlatform(true);
+      try {
+        const created = await addPlatform(newPlatformName.trim());
+        if (created) {
+          setPlatforms(prev => [...prev, created]);
+          setNewPlatformName('');
+          toast({ title: 'Plataforma criada!' });
+        } else {
+          toast({ title: 'Não foi possível criar a plataforma', variant: 'destructive' });
+        }
+      } catch (err) {
+        toast({ title: 'Erro ao criar plataforma', description: err.message || String(err), variant: 'destructive' });
+      } finally {
+        setIsAddingPlatform(false);
+      }
+    };
+
+    // ordena carros: não vendidos primeiro, vendidos por último (mantém ordem interna)
+    const sortedCars = [...cars].sort((a,b) => {
+      if (a.is_sold === b.is_sold) return 0;
+      if (a.is_sold) return 1; // vendidos -> depois
+      return -1; // não vendidos -> antes
+    });
+
     return (
         <div className="relative isolate min-h-screen bg-gray-50 text-gray-800 pt-28">
             <Helmet><title>Dashboard - AutenTicco Motors</title></Helmet>
@@ -165,22 +245,57 @@ const AdminDashboard = () => {
                                 <Button type="submit" className="w-full bg-yellow-400 text-black font-bold py-3" disabled={loading}>{loading ? 'Salvando...' : 'Salvar Veículo'}</Button>
                             </form>
                         </div>
+
                         <div>
                             <div className="flex justify-between items-center mb-6">
                                 <h2 className="text-2xl font-semibold flex items-center"><Car className="mr-3 text-yellow-500" /> Estoque Atual ({cars.length})</h2>
                                 <Button variant="outline" size="sm" asChild><CSVLink data={cars} filename={"estoque-autenticco.csv"} className="flex items-center"><Download className="mr-2 h-4 w-4" /> Exportar para CSV</CSVLink></Button>
                             </div>
                             <div className="space-y-4">
-                                {cars && cars.map(car => (
-                                    <motion.div key={car.id} layout className="bg-white rounded-2xl p-4 flex items-center justify-between shadow border">
-                                        <div className="flex items-center gap-4"><img src={car.main_photo_url || 'https://placehold.co/96x64/e2e8f0/4a5568?text=Sem+Foto'} alt={`${car.brand} ${car.model}`} className="h-16 w-24 object-cover rounded-md" /><div><h3 className="font-bold text-lg text-gray-900">{car.brand} {car.model} ({car.year})</h3><p className="text-gray-800 font-semibold">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(car.price)}</p></div></div>
+                                {sortedCars && sortedCars.map(car => {
+                                    const sold = !!car.is_sold;
+                                    return (
+                                    <motion.div key={car.id} layout className={`bg-white rounded-2xl p-4 flex items-center justify-between shadow border ${sold ? 'opacity-80' : ''}`}>
+                                        <div className="flex items-center gap-4">
+                                            <div className="relative">
+                                                <img src={car.main_photo_url || 'https://placehold.co/96x64/e2e8f0/4a5568?text=Sem+Foto'} alt={`${car.brand} ${car.model}`} className={`h-16 w-24 object-cover rounded-md ${sold ? 'filter grayscale brightness-75' : ''}`} />
+                                                {sold && <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                                    <span className="bg-red-600 text-white px-3 py-1 rounded-full font-bold text-sm">VENDIDO</span>
+                                                </div>}
+                                            </div>
+                                            <div>
+                                                <h3 className="font-bold text-lg text-gray-900">{car.brand} {car.model} ({car.year})</h3>
+                                                <p className="text-gray-800 font-semibold">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(car.price)}</p>
+                                                {sold && <p className="text-sm text-red-600">Vendido em {car.sold_at ? new Date(car.sold_at).toLocaleDateString() : '—'} {car.sale_price ? `- ${new Intl.NumberFormat('pt-BR',{ style:'currency', currency:'BRL'}).format(car.sale_price)}` : ''}</p>}
+                                            </div>
+                                        </div>
                                         <div className="flex items-center gap-2">
                                             <Button variant="ghost" size="icon" onClick={() => handleToggleFeatured(car.id, car.is_featured)} title={car.is_featured ? 'Remover dos destaques' : 'Adicionar aos destaques'}><Star className={`h-5 w-5 transition-colors ${car.is_featured ? 'text-yellow-500 fill-yellow-500' : 'text-gray-400 hover:text-yellow-500'}`} /></Button>
-                                            <Button variant="ghost" size="icon" onClick={() => handleEditCarClick(car)}><Edit className="h-5 w-5 text-blue-500 hover:text-blue-400" /></Button>
-                                            <AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon" onClick={() => setCarToDelete(car)}><Trash2 className="h-5 w-5 text-red-500 hover:text-red-400" /></Button></AlertDialogTrigger><AlertDialogContent className="bg-white"><AlertDialogHeader><AlertDialogTitle>Tem certeza?</AlertDialogTitle><AlertDialogDescription>Esta ação removerá o veículo.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteCar(carToDelete.id)}>Excluir</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+
+                                            {!sold && (
+                                                <Button variant="ghost" size="icon" onClick={() => handleEditCarClick(car)}><Edit className="h-5 w-5 text-blue-500 hover:text-blue-400" /></Button>
+                                            )}
+
+                                            {!sold ? (
+                                                <Button variant="outline" size="sm" onClick={() => openMarkSoldModal(car)}><Tag className="mr-2 h-4 w-4" />Marcar como vendido</Button>
+                                            ) : (
+                                                <Button variant="ghost" size="icon" disabled title="Vendido"><FileText className="h-5 w-5 text-gray-400" /></Button>
+                                            )}
+
+                                            <AlertDialog>
+                                                <AlertDialogTrigger asChild>
+                                                    <Button variant="ghost" size="icon" onClick={() => setCarToDelete(car)}>
+                                                        <Trash2 className="h-5 w-5 text-red-500 hover:text-red-400" />
+                                                    </Button>
+                                                </AlertDialogTrigger>
+                                                <AlertDialogContent className="bg-white">
+                                                    <AlertDialogHeader><AlertDialogTitle>Tem certeza?</AlertDialogTitle><AlertDialogDescription>Esta ação removerá o veículo.</AlertDialogDescription></AlertDialogHeader>
+                                                    <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteCar(carToDelete.id)}>Excluir</AlertDialogAction></AlertDialogFooter>
+                                                </AlertDialogContent>
+                                            </AlertDialog>
                                         </div>
                                     </motion.div>
-                                ))}
+                                )})}
                             </div>
                         </div>
                     </>)}
@@ -198,6 +313,7 @@ const AdminDashboard = () => {
                 </motion.div>
             </div>
             
+            {/* Modal editar veículo (mantive igual) */}
             <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
                 <DialogContent className="bg-white text-gray-900">
                     <DialogHeader><DialogTitle>Editar Veículo</DialogTitle></DialogHeader>
@@ -217,8 +333,57 @@ const AdminDashboard = () => {
                     )}
                 </DialogContent>
             </Dialog>
+
+            {/* Modal Marcar como vendido */}
+            <Dialog open={markSoldModalOpen} onOpenChange={setMarkSoldModalOpen}>
+              <DialogContent className="bg-white text-gray-900 w-full max-w-xl">
+                <DialogHeader>
+                  <DialogTitle>Marcar Veículo como Vendido</DialogTitle>
+                  <DialogDescription>Ao marcar como vendido, o veículo ficará visível no final da lista como VENDIDO.</DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Veículo</label>
+                    <div className="mt-1 text-sm text-gray-800 font-semibold">{selectedCarToMark ? `${selectedCarToMark.brand} ${selectedCarToMark.model} (${selectedCarToMark.year})` : '—'}</div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Plataforma</label>
+                    <div className="flex gap-2 items-center mt-1">
+                      <select value={salePlatformInput} onChange={(e) => setSalePlatformInput(e.target.value)} className="w-full p-2 border rounded">
+                        <option value="">-- selecionar --</option>
+                        {platforms.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                      <div className="flex items-center gap-2">
+                        <input placeholder="Nova plataforma" className="p-2 border rounded text-sm" value={newPlatformName} onChange={(e) => setNewPlatformName(e.target.value)} />
+                        <Button size="sm" onClick={handleAddPlatformUI} disabled={isAddingPlatform}>{isAddingPlatform ? 'Salvando...' : 'Criar'}</Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Valor final vendido</label>
+                    <input type="number" value={salePriceInput} onChange={(e) => setSalePriceInput(e.target.value)} className="w-full p-2 border rounded mt-1" />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Data da venda</label>
+                    <div className="mt-1">
+                      <DatePicker selected={saleDateInput} onChange={(date) => setSaleDateInput(date)} className="w-full p-2 border rounded" />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-4">
+                    <Button variant="ghost" onClick={() => setMarkSoldModalOpen(false)}>Cancelar</Button>
+                    <Button onClick={handleConfirmMarkSold} className="bg-red-600 text-white">{loading ? 'Processando...' : 'Confirmar Venda'}</Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
         </div>
     );
 };
 
 export default AdminDashboard;
+

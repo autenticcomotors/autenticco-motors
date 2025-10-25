@@ -13,7 +13,7 @@ export const getCars = async () => {
     .select('*')
     .order('created_at', { ascending: false });
   if (error) console.error('Erro ao buscar carros:', error);
-  return data;
+  return data || [];
 };
 
 export const getFeaturedCars = async () => {
@@ -24,7 +24,7 @@ export const getFeaturedCars = async () => {
     .order('created_at', { ascending: false })
     .limit(4);
   if (error) console.error('Erro ao buscar carros em destaque:', error);
-  return data;
+  return data || [];
 };
 
 export const getCarBySlug = async (slug) => {
@@ -46,16 +46,19 @@ export const addCar = async (carData) => {
   const { data, error } = await supabase
     .from('cars')
     .insert([{ ...carData, name: carName, slug }])
-    .select();
+    .select()
+    .single();
   if (error) console.error('Erro ao adicionar carro:', error);
-  return data;
+  return { data, error };
 };
 
 export const updateCar = async (id, carData) => {
   const { data, error } = await supabase
     .from('cars')
     .update(carData)
-    .eq('id', id);
+    .eq('id', id)
+    .select()
+    .single();
   if (error) console.error('Erro ao atualizar carro:', error);
   return { data, error };
 };
@@ -81,14 +84,15 @@ export const getTestimonials = async () => {
     .select('*')
     .order('created_at', { ascending: false });
   if (error) console.error('Erro ao buscar depoimentos:', error);
-  return data;
+  return data || [];
 };
 
 export const addTestimonial = async (testimonialData) => {
   const { data, error } = await supabase
     .from('testimonials')
     .insert([testimonialData])
-    .select();
+    .select()
+    .single();
   if (error) console.error('Erro ao adicionar depoimento:', error);
   return { data, error };
 };
@@ -109,9 +113,9 @@ export const deleteTestimonial = async (id) => {
 */
 
 export const addLead = async (leadData) => {
-  const { error } = await supabase.from('leads').insert([leadData]);
+  const { data, error } = await supabase.from('leads').insert([leadData]).select().single();
   if (error) console.error('Erro ao adicionar lead:', error);
-  return { error };
+  return { data, error };
 };
 
 export const getLeads = async (filters = {}) => {
@@ -124,7 +128,6 @@ export const getLeads = async (filters = {}) => {
     query = query.eq('status', filters.status);
   }
 
-  // Lógica robusta de data (início/fim do dia)
   if (filters.startDate) {
     const startDate = new Date(filters.startDate);
     startDate.setUTCHours(0, 0, 0, 0);
@@ -138,14 +141,16 @@ export const getLeads = async (filters = {}) => {
 
   const { data, error } = await query;
   if (error) console.error('Erro ao buscar leads:', error);
-  return data;
+  return data || [];
 };
 
 export const updateLead = async (id, leadData) => {
   const { data, error } = await supabase
     .from('leads')
     .update(leadData)
-    .eq('id', id);
+    .eq('id', id)
+    .select()
+    .single();
   if (error) console.error('Erro ao atualizar lead:', error);
   return { data, error };
 };
@@ -161,7 +166,7 @@ export const deleteLead = async (id) => {
 
 /*
   -----------------------------
-  NOVAS FUNÇÕES: PLATAFORMAS (platforms)
+  FUNÇÕES: PLATAFORMAS (platforms)
   -----------------------------
 */
 
@@ -171,7 +176,7 @@ export const getPlatforms = async () => {
     .select('*')
     .order('name', { ascending: true });
   if (error) console.error('Erro ao buscar plataformas:', error);
-  return data;
+  return data || [];
 };
 
 export const addPlatform = async (name) => {
@@ -190,13 +195,12 @@ export const addPlatform = async (name) => {
 
 /*
   -----------------------------
-  NOVAS FUNÇÕES: VENDAS / SALES
+  FUNÇÕES: SALES (vendas)
   -----------------------------
 */
 
 export const markCarAsSold = async ({ car_id, platform_id = null, sale_price = null, sale_date = null, notes = null }) => {
   try {
-    // 1) Inserir registro em sales
     const { data: saleData, error: saleError } = await supabase
       .from('sales')
       .insert([{
@@ -214,7 +218,6 @@ export const markCarAsSold = async ({ car_id, platform_id = null, sale_price = n
       return { error: saleError };
     }
 
-    // 2) Atualizar carro (marca como vendido)
     const { data: updatedCar, error: carUpdateError } = await supabase
       .from('cars')
       .update({
@@ -241,7 +244,6 @@ export const markCarAsSold = async ({ car_id, platform_id = null, sale_price = n
 
 export const unmarkCarAsSold = async (carId, { deleteLastSale = false } = {}) => {
   try {
-    // Atualiza o carro para não-vendido
     const { data: updatedCar, error: carErr } = await supabase
       .from('cars')
       .update({
@@ -259,7 +261,6 @@ export const unmarkCarAsSold = async (carId, { deleteLastSale = false } = {}) =>
       return { error: carErr };
     }
 
-    // Opcional: deletar o último sale (se solicitado)
     if (deleteLastSale) {
       const { data: lastSale, error: lastErr } = await supabase
         .from('sales')
@@ -296,12 +297,43 @@ export const getSalesByCar = async (carId) => {
     .eq('car_id', carId)
     .order('created_at', { ascending: false });
   if (error) console.error('Erro ao buscar sales por carro:', error);
-  return data;
+  return data || [];
+};
+
+// Busca de sales com filtros (usado pelo Reports)
+export const getSales = async (filters = {}) => {
+  try {
+    let query = supabase
+      .from('sales')
+      .select('*, platforms(name), cars(brand, model, year, slug)')
+      .order('sale_date', { ascending: false });
+
+    if (filters.platform_id) {
+      query = query.eq('platform_id', filters.platform_id);
+    }
+    if (filters.startDate) {
+      const start = new Date(filters.startDate);
+      start.setUTCHours(0, 0, 0, 0);
+      query = query.gte('sale_date', start.toISOString());
+    }
+    if (filters.endDate) {
+      const end = new Date(filters.endDate);
+      end.setUTCHours(23, 59, 59, 999);
+      query = query.lte('sale_date', end.toISOString());
+    }
+
+    const { data, error } = await query;
+    if (error) console.error('Erro ao buscar sales:', error);
+    return data || [];
+  } catch (err) {
+    console.error('Erro em getSales:', err);
+    return [];
+  }
 };
 
 /*
   -----------------------------
-  NOVAS FUNÇÕES: PUBLICAÇÕES (vehicle_publications)
+  FUNÇÕES: PUBLICAÇÕES (vehicle_publications)
   -----------------------------
 */
 
@@ -312,7 +344,7 @@ export const getPublicationsByCar = async (carId) => {
     .eq('car_id', carId)
     .order('created_at', { ascending: false });
   if (error) console.error('Erro ao buscar publicações por carro:', error);
-  return data;
+  return data || [];
 };
 
 export const addPublication = async (pub) => {
@@ -329,7 +361,9 @@ export const updatePublication = async (id, patch) => {
   const { data, error } = await supabase
     .from('vehicle_publications')
     .update(patch)
-    .eq('id', id);
+    .eq('id', id)
+    .select()
+    .single();
   if (error) console.error('Erro ao atualizar publicação:', error);
   return { data, error };
 };
@@ -345,7 +379,7 @@ export const deletePublication = async (id) => {
 
 /*
   -----------------------------
-  NOVAS FUNÇÕES: GASTOS (vehicle_expenses)
+  FUNÇÕES: GASTOS (vehicle_expenses)
   -----------------------------
 */
 
@@ -356,7 +390,7 @@ export const getExpensesByCar = async (carId) => {
     .eq('car_id', carId)
     .order('incurred_at', { ascending: false });
   if (error) console.error('Erro ao buscar gastos por carro:', error);
-  return data;
+  return data || [];
 };
 
 export const addExpense = async (expense) => {
@@ -373,7 +407,9 @@ export const updateExpense = async (id, patch) => {
   const { data, error } = await supabase
     .from('vehicle_expenses')
     .update(patch)
-    .eq('id', id);
+    .eq('id', id)
+    .select()
+    .single();
   if (error) console.error('Erro ao atualizar gasto:', error);
   return { data, error };
 };
@@ -389,7 +425,7 @@ export const deleteExpense = async (id) => {
 
 /*
   -----------------------------
-  NOVAS FUNÇÕES: CHECKLIST (vehicle_checklists)
+  FUNÇÕES: CHECKLIST (vehicle_checklists)
   -----------------------------
 */
 
@@ -400,14 +436,16 @@ export const getChecklistByCar = async (carId) => {
     .eq('car_id', carId)
     .order('created_at', { ascending: true });
   if (error) console.error('Erro ao buscar checklist:', error);
-  return data;
+  return data || [];
 };
 
 export const updateChecklistItem = async (id, patch) => {
   const { data, error } = await supabase
     .from('vehicle_checklists')
     .update(patch)
-    .eq('id', id);
+    .eq('id', id)
+    .select()
+    .single();
   if (error) console.error('Erro ao atualizar checklist:', error);
   return { data, error };
 };

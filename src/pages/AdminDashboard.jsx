@@ -3,7 +3,10 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Helmet } from 'react-helmet';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Car, PlusCircle, Trash2, Edit, LogOut, Download, MessageSquare, Users, Image as ImageIcon, FileText, Check, Star, Tag } from 'lucide-react';
+import {
+  Car, PlusCircle, Trash2, Edit, LogOut, Download, MessageSquare, Users,
+  Image as ImageIcon, FileText, Check, Star, Tag
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
 import { CSVLink } from 'react-csv';
@@ -19,6 +22,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import BackgroundShape from '@/components/BackgroundShape';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
+import VehicleManager from '@/components/VehicleManager';
 
 const FormFields = React.memo(({ carData, onChange, carOptions }) => (
   <>
@@ -187,7 +191,6 @@ const AdminDashboard = () => {
             setLoading(false);
             return;
           }
-          // getPublicUrl is sync; use the path from uploadData
           const { data: { publicUrl } } = supabase.storage.from('car_photos').getPublicUrl(uploadData.path);
           newPhotoUrls.push(publicUrl);
         }
@@ -252,7 +255,7 @@ const AdminDashboard = () => {
     }
   };
 
-  // === MARCAR COMO VENDIDO ===
+  // === MARCAR COMO VENDIDO
   const openMarkSoldModal = (car) => {
     setSelectedCarToMark(car);
     setSalePriceInput(car.sale_price ? String(car.sale_price) : '');
@@ -287,7 +290,7 @@ const AdminDashboard = () => {
     }
   };
 
-  // === DESFAZER VENDA ===
+  // === DESFAZER VENDA
   const handleConfirmUndoSale = async () => {
     if (!undoSaleCarId) return;
     setLoading(true);
@@ -324,7 +327,7 @@ const AdminDashboard = () => {
     }
   };
 
-  // ordena carros: não vendidos primeiro, vendidos por último (mantém ordem interna)
+  // ordena carros: não vendidos primeiro, vendidos por último
   const sortedCars = [...cars].sort((a, b) => {
     if (a.is_sold === b.is_sold) return 0;
     return a.is_sold ? 1 : -1;
@@ -344,30 +347,31 @@ const AdminDashboard = () => {
           <div className="flex space-x-4 mb-8 border-b">
             <button className={`px-4 py-2 font-semibold ${activeTab === 'leads' ? 'border-b-2 border-yellow-500 text-yellow-500' : 'text-gray-500 hover:text-gray-900'}`} onClick={() => setActiveTab('leads')}><Users className="inline mr-2" /> Leads</button>
             <button className={`px-4 py-2 font-semibold ${activeTab === 'cars' ? 'border-b-2 border-yellow-500 text-yellow-500' : 'text-gray-500 hover:text-gray-900'}`} onClick={() => setActiveTab('cars')}><Car className="inline mr-2" /> Veículos</button>
+            <button className={`px-4 py-2 font-semibold ${activeTab === 'gestao' ? 'border-b-2 border-yellow-500 text-yellow-500' : 'text-gray-500 hover:text-gray-900'}`} onClick={() => setActiveTab('gestao')}><FileText className="inline mr-2" /> Gestão</button>
             <button className={`px-4 py-2 font-semibold ${activeTab === 'testimonials' ? 'border-b-2 border-yellow-500 text-yellow-500' : 'text-gray-500 hover:text-gray-900'}`} onClick={() => setActiveTab('testimonials')}><MessageSquare className="inline mr-2" /> Depoimentos</button>
           </div>
 
           {activeTab === 'leads' && (
             <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-xl border">
+              {/* ... conteúdo de Leads (mantido) ... */}
               <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
                 <div className="text-lg font-bold">Exibindo <span className="text-yellow-500">{leads.length}</span> lead(s)</div>
                 <div className="flex flex-wrap items-center justify-center gap-4">
                   <div className='flex gap-2 items-center'>
                     <label htmlFor="startDate" className='text-sm font-medium'>De:</label>
-                    <input type="date" id="startDate" name="startDate" value={leadFilters.startDate} onChange={(e) => setLeadFilters(f => ({ ...f, startDate: e.target.value }))} className="bg-white border-gray-300 rounded-md p-2 h-10 text-sm" />
+                    <input type="date" id="startDate" name="startDate" value={leadFilters.startDate} onChange={(e) => setLeadFilters(f => ({...f, startDate: e.target.value}))} className="bg-white border-gray-300 rounded-md p-2 h-10 text-sm" />
                   </div>
                   <div className='flex gap-2 items-center'>
                     <label htmlFor="endDate" className='text-sm font-medium'>Até:</label>
-                    <input type="date" id="endDate" name="endDate" value={leadFilters.endDate} onChange={(e) => setLeadFilters(f => ({ ...f, endDate: e.target.value }))} className="bg-white border-gray-300 rounded-md p-2 h-10 text-sm" />
+                    <input type="date" id="endDate" name="endDate" value={leadFilters.endDate} onChange={(e) => setLeadFilters(f => ({...f, endDate: e.target.value}))} className="bg-white border-gray-300 rounded-md p-2 h-10 text-sm" />
                   </div>
-                  <select value={leadFilters.status} onChange={(e) => setLeadFilters(f => ({ ...f, status: e.target.value }))} className="bg-white border-gray-300 rounded-md p-2 h-10 text-sm">
+                  <select value={leadFilters.status} onChange={(e) => setLeadFilters(f => ({...f, status: e.target.value}))} className="bg-white border-gray-300 rounded-md p-2 h-10 text-sm">
                     <option value="">Filtrar por Status</option>
                     {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                   <Button variant="outline" size="sm" asChild><CSVLink data={leadsForCSV(leads)} filename={"leads-autenticco.csv"} className="flex items-center"><Download className="mr-2 h-4 w-4" /> Exportar</CSVLink></Button>
                 </div>
               </div>
-
               <div className="space-y-4">
                 {leads.map(lead => (
                   <motion.div key={lead.id} layout className="bg-white rounded-lg p-4 shadow border">
@@ -381,7 +385,6 @@ const AdminDashboard = () => {
                         <select value={lead.status} onChange={(e) => handleStatusChange(lead.id, e.target.value)} className="bg-gray-100 border-gray-300 rounded p-2 text-sm flex-shrink-0">
                           {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
-
                         <AlertDialog open={leadToDelete === lead.id} onOpenChange={(isOpen) => !isOpen && setLeadToDelete(null)}>
                           <AlertDialogTrigger asChild>
                             <Button variant="ghost" size="icon" onClick={() => setLeadToDelete(lead.id)}>
@@ -401,120 +404,113 @@ const AdminDashboard = () => {
             </div>
           )}
 
-          {activeTab === 'cars' && ( <>
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-8 mb-12 shadow-xl border">
-              <h2 className="text-2xl font-semibold mb-6 flex items-center"><PlusCircle className="mr-3 text-yellow-500" /> Adicionar Novo Veículo</h2>
-              <form onSubmit={handleAddCar} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6"><FormFields carData={newCar} onChange={handleNewCarInputChange} carOptions={carOptions} /></div>
-                <div>
-                  <Button type="button" onClick={() => fileInputRef.current && fileInputRef.current.click()}><ImageIcon className="mr-2 h-4 w-4" /> Adicionar Fotos</Button>
-                  <input type="file" ref={fileInputRef} onChange={handlePhotoUpload} multiple accept="image/*" className="hidden" />
-                  <div className="mt-4 flex flex-wrap gap-4">{photosToUpload.map((file, index) => (
-                    <div key={index} className="relative cursor-pointer" onClick={() => setMainPhotoIndex(index)}>
-                      <img src={URL.createObjectURL(file)} alt={`Preview ${index}`} className={`h-24 w-24 object-cover rounded-lg ${mainPhotoIndex === index ? 'ring-2 ring-yellow-500' : ''}`} />
-                      {mainPhotoIndex === index && <div className="absolute top-1 right-1 bg-yellow-500 text-black rounded-full p-1"><Check className="h-3 w-3" /></div>}
-                      <button type="button" onClick={(e) => { e.stopPropagation(); removePhoto(index); }} className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1"><Trash2 className="h-3 w-3" /></button>
-                    </div>
-                  ))}</div>
-                </div>
-                <Button type="submit" className="w-full bg-yellow-400 text-black font-bold py-3" disabled={loading}>{loading ? 'Salvando...' : 'Salvar Veículo'}</Button>
-              </form>
-            </div>
-
-            <div>
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-semibold flex items-center"><Car className="mr-3 text-yellow-500" /> Estoque Atual ({cars.length})</h2>
-                <Button variant="outline" size="sm" asChild><CSVLink data={cars} filename={"estoque-autenticco.csv"} className="flex items-center"><Download className="mr-2 h-4 w-4" /> Exportar para CSV</CSVLink></Button>
-              </div>
-              <div className="space-y-4">
-                {sortedCars && sortedCars.map(car => {
-                  const sold = !!car.is_sold;
-                  return (
-                    <motion.div key={car.id} layout className={`bg-white rounded-2xl p-4 flex items-center justify-between shadow border ${sold ? 'opacity-80' : ''}`}>
-                      <div className="flex items-center gap-4">
-                        <div className="relative">
-                          <img src={car.main_photo_url || 'https://placehold.co/96x64/e2e8f0/4a5568?text=Sem+Foto'} alt={`${car.brand} ${car.model}`} className={`h-16 w-24 object-cover rounded-md ${sold ? 'filter grayscale brightness-75' : ''}`} />
-                          {sold && <div className="absolute inset-0 flex items-center justify-center pointer-events-none"><span className="bg-red-600 text-white px-3 py-1 rounded-full font-bold text-sm">VENDIDO</span></div>}
-                        </div>
-                        <div>
-                          <h3 className="font-bold text-lg text-gray-900">{car.brand} {car.model} ({car.year})</h3>
-                          <p className="text-gray-800 font-semibold">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(car.price)}</p>
-                          {sold && <p className="text-sm text-red-600">Vendido em {car.sold_at ? new Date(car.sold_at).toLocaleDateString() : '—'} {car.sale_price ? `- ${new Intl.NumberFormat('pt-BR',{ style:'currency', currency:'BRL'}).format(car.sale_price)}` : ''}</p>}
-                        </div>
+          {activeTab === 'cars' && (
+            <>
+              {/* ... aba Veículos (mantida) ... */}
+              <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-8 mb-12 shadow-xl border">
+                <h2 className="text-2xl font-semibold mb-6 flex items-center"><PlusCircle className="mr-3 text-yellow-500" /> Adicionar Novo Veículo</h2>
+                <form onSubmit={handleAddCar} className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6"><FormFields carData={newCar} onChange={handleNewCarInputChange} carOptions={carOptions} /></div>
+                  <div>
+                    <Button type="button" onClick={() => fileInputRef.current && fileInputRef.current.click()}><ImageIcon className="mr-2 h-4 w-4" /> Adicionar Fotos</Button>
+                    <input type="file" ref={fileInputRef} onChange={handlePhotoUpload} multiple accept="image/*" className="hidden"/>
+                    <div className="mt-4 flex flex-wrap gap-4">{photosToUpload.map((file, index) => (
+                      <div key={index} className="relative cursor-pointer" onClick={() => setMainPhotoIndex(index)}>
+                        <img src={URL.createObjectURL(file)} alt={`Preview ${index}`} className={`h-24 w-24 object-cover rounded-lg ${mainPhotoIndex === index ? 'ring-2 ring-yellow-500' : ''}`} />
+                        {mainPhotoIndex === index && <div className="absolute top-1 right-1 bg-yellow-500 text-black rounded-full p-1"><Check className="h-3 w-3" /></div>}
+                        <button type="button" onClick={(e) => { e.stopPropagation(); removePhoto(index); }} className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1"><Trash2 className="h-3 w-3" /></button>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Button variant="ghost" size="icon" onClick={() => handleToggleFeatured(car.id, car.is_featured)} title={car.is_featured ? 'Remover dos destaques' : 'Adicionar aos destaques'}>
-                          <Star className={`h-5 w-5 transition-colors ${car.is_featured ? 'text-yellow-500 fill-yellow-500' : 'text-gray-400 hover:text-yellow-500'}`} />
-                        </Button>
+                    ))}</div>
+                  </div>
+                  <Button type="submit" className="w-full bg-yellow-400 text-black font-bold py-3" disabled={loading}>{loading ? 'Salvando...' : 'Salvar Veículo'}</Button>
+                </form>
+              </div>
 
-                        {!sold && <Button variant="ghost" size="icon" onClick={() => handleEditCarClick(car)}><Edit className="h-5 w-5 text-blue-500 hover:text-blue-400" /></Button>}
+              <div>
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-2xl font-semibold flex items-center"><Car className="mr-3 text-yellow-500" /> Estoque Atual ({cars.length})</h2>
+                  <Button variant="outline" size="sm" asChild><CSVLink data={cars} filename={"estoque-autenticco.csv"} className="flex items-center"><Download className="mr-2 h-4 w-4" /> Exportar para CSV</CSVLink></Button>
+                </div>
+                <div className="space-y-4">
+                  {sortedCars && sortedCars.map(car => {
+                    const sold = !!car.is_sold;
+                    return (
+                      <motion.div key={car.id} layout className={`bg-white rounded-2xl p-4 flex items-center justify-between shadow border ${sold ? 'opacity-80' : ''}`}>
+                        <div className="flex items-center gap-4">
+                          <div className="relative">
+                            <img src={car.main_photo_url || 'https://placehold.co/96x64/e2e8f0/4a5568?text=Sem+Foto'} alt={`${car.brand} ${car.model}`} className={`h-16 w-24 object-cover rounded-md ${sold ? 'filter grayscale brightness-75' : ''}`} />
+                            {sold && <div className="absolute inset-0 flex items-center justify-center pointer-events-none"><span className="bg-red-600 text-white px-3 py-1 rounded-full font-bold text-sm">VENDIDO</span></div>}
+                          </div>
+                          <div>
+                            <h3 className="font-bold text-lg text-gray-900">{car.brand} {car.model} ({car.year})</h3>
+                            <p className="text-gray-800 font-semibold">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(car.price)}</p>
+                            {sold && <p className="text-sm text-red-600">Vendido em {car.sold_at ? new Date(car.sold_at).toLocaleDateString() : '—'} {car.sale_price ? `- ${new Intl.NumberFormat('pt-BR',{ style:'currency', currency:'BRL'}).format(car.sale_price)}` : ''}</p>}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button variant="ghost" size="icon" onClick={() => handleToggleFeatured(car.id, car.is_featured)} title={car.is_featured ? 'Remover dos destaques' : 'Adicionar aos destaques'}>
+                            <Star className={`h-5 w-5 transition-colors ${car.is_featured ? 'text-yellow-500 fill-yellow-500' : 'text-gray-400 hover:text-yellow-500'}`} />
+                          </Button>
 
-                        {!sold ? (
-                          <Button variant="outline" size="sm" onClick={() => openMarkSoldModal(car)}><Tag className="mr-2 h-4 w-4" />Marcar como vendido</Button>
-                        ) : (
-                          <AlertDialog open={undoSaleCarId === car.id} onOpenChange={(isOpen) => !isOpen && setUndoSaleCarId(null)}>
+                          {!sold && <Button variant="ghost" size="icon" onClick={() => handleEditCarClick(car)}><Edit className="h-5 w-5 text-blue-500 hover:text-blue-400" /></Button>}
+
+                          {!sold ? (
+                            <Button variant="outline" size="sm" onClick={() => openMarkSoldModal(car)}><Tag className="mr-2 h-4 w-4" />Marcar como vendido</Button>
+                          ) : (
+                            <AlertDialog open={undoSaleCarId === car.id} onOpenChange={(isOpen) => !isOpen && setUndoSaleCarId(null)}>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="outline" size="sm" onClick={() => setUndoSaleCarId(car.id)}>Desfazer venda</Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent className="bg-white">
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Desfazer venda</AlertDialogTitle>
+                                  <AlertDialogDescription>Tem certeza que quer retornar este veículo ao estoque? Isso removerá o registro de venda.</AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                  <AlertDialogAction onClick={handleConfirmUndoSale}>Sim, retornar ao estoque</AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          )}
+
+                          <AlertDialog>
                             <AlertDialogTrigger asChild>
-                              <Button variant="outline" size="sm" onClick={() => setUndoSaleCarId(car.id)}>Desfazer venda</Button>
+                              <Button variant="ghost" size="icon" onClick={() => setCarToDelete(car)}>
+                                <Trash2 className="h-5 w-5 text-red-500 hover:text-red-400" />
+                              </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent className="bg-white">
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Desfazer venda</AlertDialogTitle>
-                                <AlertDialogDescription>Tem certeza que quer retornar este veículo ao estoque? Isso removerá o registro de venda.</AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                <AlertDialogAction onClick={handleConfirmUndoSale}>Sim, retornar ao estoque</AlertDialogAction>
-                              </AlertDialogFooter>
+                              <AlertDialogHeader><AlertDialogTitle>Tem certeza?</AlertDialogTitle><AlertDialogDescription>Esta ação removerá o veículo.</AlertDialogDescription></AlertDialogHeader>
+                              <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteCar(carToDelete.id)}>Excluir</AlertDialogAction></AlertDialogFooter>
                             </AlertDialogContent>
                           </AlertDialog>
-                        )}
-
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={() => setCarToDelete(car)}>
-                              <Trash2 className="h-5 w-5 text-red-500 hover:text-red-400" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent className="bg-white">
-                            <AlertDialogHeader><AlertDialogTitle>Tem certeza?</AlertDialogTitle><AlertDialogDescription>Esta ação removerá o veículo.</AlertDialogDescription></AlertDialogHeader>
-                            <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteCar(carToDelete.id)}>Excluir</AlertDialogAction></AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </div>
-                    </motion.div>
-                  );
-                })}
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          </>)}
+            </>
+          )}
 
-          {activeTab === 'testimonials' && ( <>
+          {activeTab === 'gestao' && (
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-xl border">
+              <VehicleManager cars={sortedCars} refreshAll={fetchAllData} />
+            </div>
+          )}
+
+          {activeTab === 'testimonials' && (
             <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-8 mb-12 shadow-xl border">
               <h2 className="text-2xl font-semibold mb-6 flex items-center"><PlusCircle className="mr-3 text-yellow-500" /> Adicionar Novo Depoimento</h2>
-              <form onSubmit={handleAddTestimonial} className="space-y-6">
-                <input name="client_name" value={newTestimonial.client_name} onChange={handleNewTestimonialInputChange} placeholder="Nome do Cliente *" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none" />
-                <input name="car_sold" value={newTestimonial.car_sold} onChange={handleNewTestimonialInputChange} placeholder="Carro (Ex: BMW X5 2021)" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none" />
-                <textarea name="testimonial_text" value={newTestimonial.testimonial_text} onChange={handleNewTestimonialInputChange} placeholder="Texto do depoimento *" rows={4} className="w-full p-3 bg-white border border-gray-300 rounded-lg" />
-                <Button type="submit" className="w-full bg-yellow-400 text-black hover:bg-yellow-500 font-bold py-3">Salvar Depoimento</Button>
-              </form>
+              <form onSubmit={handleAddTestimonial} className="space-y-6"><input name="client_name" value={newTestimonial.client_name} onChange={handleNewTestimonialInputChange} placeholder="Nome do Cliente *" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none" /><input name="car_sold" value={newTestimonial.car_sold} onChange={handleNewTestimonialInputChange} placeholder="Carro (Ex: BMW X5 2021)" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none" /><textarea name="testimonial_text" value={newTestimonial.testimonial_text} onChange={handleNewTestimonialInputChange} placeholder="Texto do depoimento *" rows={4} className="w-full p-3 bg-white border border-gray-300 rounded-lg" /><Button type="submit" className="w-full bg-yellow-400 text-black hover:bg-yellow-500 font-bold py-3">Salvar Depoimento</Button></form>
+              <div className="mt-8"><h2 className="text-2xl font-semibold mb-6 flex items-center"><MessageSquare className="mr-3 text-yellow-500" /> Depoimentos Cadastrados ({testimonials.length})</h2><div className="space-y-4">{testimonials.map(item => (<motion.div key={item.id} layout className="bg-white rounded-2xl p-4 flex items-center justify-between shadow border"><div><p className="italic text-gray-600">"{item.testimonial_text}"</p><p className="font-bold mt-2 text-gray-800">{item.client_name} - <span className="text-sm font-normal text-gray-500">{item.car_sold}</span></p></div><Button variant="ghost" size="icon" onClick={() => deleteTestimonial(item.id)}><Trash2 className="h-5 w-5 text-red-500" /></Button></motion.div>))}</div></div>
             </div>
-            <div>
-              <h2 className="text-2xl font-semibold mb-6 flex items-center"><MessageSquare className="mr-3 text-yellow-500" /> Depoimentos Cadastrados ({testimonials.length})</h2>
-              <div className="space-y-4">{testimonials.map(item => (
-                <motion.div key={item.id} layout className="bg-white rounded-2xl p-4 flex items-center justify-between shadow border">
-                  <div>
-                    <p className="italic text-gray-600">"{item.testimonial_text}"</p>
-                    <p className="font-bold mt-2 text-gray-800">{item.client_name} - <span className="text-sm font-normal text-gray-500">{item.car_sold}</span></p>
-                  </div>
-                  <Button variant="ghost" size="icon" onClick={() => handleDeleteTestimonial(item.id)}><Trash2 className="h-5 w-5 text-red-500" /></Button>
-                </motion.div>
-              ))}</div>
-            </div>
-          </>)}
+          )}
         </motion.div>
       </div>
 
-      {/* Modal editar veículo */}
+      {/* Dialogs manutenção (editar, vender) mantidos abaixo */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="bg-white text-gray-900">
           <DialogHeader><DialogTitle>Editar Veículo</DialogTitle></DialogHeader>
@@ -545,7 +541,6 @@ const AdminDashboard = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Modal Marcar como vendido */}
       <Dialog open={markSoldModalOpen} onOpenChange={setMarkSoldModalOpen}>
         <DialogContent className="bg-white text-gray-900 w-full max-w-xl">
           <DialogHeader>

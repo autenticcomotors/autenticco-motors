@@ -13,6 +13,7 @@ import {
   updateCar
 } from '@/lib/car-api';
 import { supabase } from '@/lib/supabase';
+import { fetchFipeForVehicle } from '@/lib/fipe-api'; // <<< nova importação
 
 // Small money formatter component
 const Money = ({ value }) => {
@@ -106,6 +107,26 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
       commission: car.commission ?? '',
       return_to_seller: car.return_to_seller ?? ''
     });
+
+    // Se não tem valor FIPE no registro, busca automaticamente e preenche (não salva)
+    if (!car.fipe_value) {
+      try {
+        const brand = car.brand || '';
+        const model = car.model || '';
+        const year = car.year || '';
+        const fuel = car.fuel || car.combustivel || ''; // tenta campos comuns
+        const res = await fetchFipeForVehicle({ brand, model, year, fuel });
+        if (res && res.value != null) {
+          setFinanceForm(prev => ({ ...prev, fipe_value: res.value }));
+          toast({ title: 'Valor FIPE carregado', description: res.formatted || 'Valor obtido', });
+        } else {
+          // não encontrado — silencioso (opcionalmente exibir)
+          // toast({ title: 'FIPE não encontrado automaticamente', variant: 'warning' });
+        }
+      } catch (err) {
+        console.warn('Erro ao buscar FIPE automático:', err);
+      }
+    }
   };
 
   const fetchAll = async (carId) => {
@@ -383,6 +404,32 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
     return profit;
   };
 
+  // função que busca FIPE e preenche o form (sem salvar)
+  const handleFetchFipe = async (showToast = true) => {
+    if (!selectedCar) return;
+    try {
+      const brand = selectedCar.brand || '';
+      const model = selectedCar.model || '';
+      const year = selectedCar.year || '';
+      const fuel = selectedCar.fuel || selectedCar.combustivel || '';
+      if (!brand || !model || !year) {
+        toast({ title: 'Marca, modelo e ano são necessários para buscar FIPE', variant: 'destructive' });
+        return;
+      }
+      if (showToast) toast({ title: 'Buscando valor FIPE...' });
+      const res = await fetchFipeForVehicle({ brand, model, year, fuel });
+      if (res && res.value != null) {
+        setFinanceForm(prev => ({ ...prev, fipe_value: res.value }));
+        if (showToast) toast({ title: 'Valor FIPE obtido', description: res.formatted || '' });
+      } else {
+        if (showToast) toast({ title: 'FIPE não encontrado', description: res && res.error ? String(res.error) : 'Não foi possível obter o valor.', variant: 'destructive' });
+      }
+    } catch (err) {
+      console.error('Erro buscar FIPE:', err);
+      toast({ title: 'Erro ao buscar FIPE', description: err.message || String(err), variant: 'destructive' });
+    }
+  };
+
   const saveFinance = async () => {
     if (!selectedCar) return;
     try {
@@ -642,7 +689,11 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                   <div>
                     <label className="text-sm text-gray-700">Valor FIPE</label>
-                    <input type="number" step="0.01" value={financeForm.fipe_value ?? ''} onChange={(e) => setFinanceForm(f => ({ ...f, fipe_value: e.target.value }))} className="w-full p-2 border rounded" />
+                    <div className="flex items-center gap-2">
+                      <input type="number" step="0.01" value={financeForm.fipe_value ?? ''} onChange={(e) => setFinanceForm(f => ({ ...f, fipe_value: e.target.value }))} className="w-full p-2 border rounded" />
+                      <Button size="sm" onClick={() => handleFetchFipe(true)}>Buscar FIPE</Button>
+                    </div>
+                    <div className="text-xs text-gray-400 mt-1">O valor é buscado automaticamente ao abrir o modal se estiver vazio. Edite e clique em "Salvar Financeiro" para gravar.</div>
                   </div>
 
                   <div>

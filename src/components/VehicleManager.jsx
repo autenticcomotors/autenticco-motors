@@ -49,6 +49,10 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
   const [newChecklistLabel, setNewChecklistLabel] = useState('');
   const [newChecklistNotes, setNewChecklistNotes] = useState('');
 
+  // drag state
+  const [draggingIndex, setDraggingIndex] = useState(null);
+  const [dragOverIndex, setDragOverIndex] = useState(null);
+
   useEffect(() => {
     (async () => {
       const p = await getPlatforms();
@@ -142,7 +146,6 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
       await updateChecklistItem(item.id, patched);
       setChecklist(prev => prev.map(i => i.id === item.id ? { ...i, ...patched } : i));
       toast({ title: 'Checklist atualizado' });
-      // atualiza somente o modal (não força reload global)
       await fetchAll(selectedCar.id);
     } catch (err) {
       toast({ title: 'Erro ao atualizar checklist', description: err.message || String(err), variant: 'destructive' });
@@ -171,7 +174,6 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
       setNewChecklistNotes('');
       toast({ title: 'Item de checklist adicionado' });
       await fetchAll(selectedCar.id);
-      // não chama refreshAll() para evitar reload da lista inteira e possível fechamento do modal
     } catch (err) {
       console.error('Erro add checklist:', err);
       toast({ title: 'Erro ao adicionar item', description: err.message || String(err), variant: 'destructive' });
@@ -190,15 +192,29 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
     }
   };
 
-  // Drag & drop helpers para reorder checklist
+  // --- Improved Drag & Drop handlers ---
+
   const handleDragStart = (e, index) => {
-    e.dataTransfer.setData('text/plain', String(index));
+    setDraggingIndex(index);
+    // setData for older browsers / accessibility
+    try { e.dataTransfer.setData('text/plain', String(index)); } catch (err) { /* ignore */ }
     e.dataTransfer.effectAllowed = 'move';
   };
 
+  const handleDragEnter = (e, index) => {
+    e.preventDefault();
+    // show placeholder BEFORE the item at "index"
+    setDragOverIndex(index);
+  };
+
   const handleDragOver = (e) => {
-    e.preventDefault(); // necessário para permitir drop
+    e.preventDefault(); // needed to allow drop
     e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDragEnd = () => {
+    setDraggingIndex(null);
+    setDragOverIndex(null);
   };
 
   const saveChecklistOrder = async (newList) => {
@@ -217,23 +233,48 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
     }
   };
 
-  const handleDrop = async (e, dropIndex) => {
+  const handleDrop = async (e, dropIndexCandidate) => {
     e.preventDefault();
-    const dragIndex = Number(e.dataTransfer.getData('text/plain'));
-    if (isNaN(dragIndex)) return;
 
-    // Reordena localmente
+    // prefer the react state if set, otherwise fallback to value passed
+    const dropIndex = typeof dragOverIndex === 'number' ? dragOverIndex : dropIndexCandidate;
+    const dragIndex = typeof draggingIndex === 'number'
+      ? draggingIndex
+      : Number(e.dataTransfer.getData('text/plain'));
+
+    if (isNaN(dragIndex) || dragIndex === null || dragIndex === undefined) {
+      handleDragEnd();
+      return;
+    }
+
+    // if user drops on the same place — ignore
+    if (dragIndex === dropIndex || dragIndex === (dropIndex - 1)) {
+      handleDragEnd();
+      return;
+    }
+
+    // local reorder
     const newList = Array.from(checklist);
     const [moved] = newList.splice(dragIndex, 1);
-    newList.splice(dropIndex, 0, moved);
 
-    // Atualiza state imediatamente para feedback instantâneo
+    // adjust insert index: if removing earlier item, the array shifts left
+    let insertIndex = dropIndex;
+    if (dragIndex < dropIndex) {
+      insertIndex = dropIndex - 1;
+    }
+    if (insertIndex < 0) insertIndex = 0;
+    if (insertIndex > newList.length) insertIndex = newList.length;
+
+    newList.splice(insertIndex, 0, moved);
+
+    // immediate feedback
     setChecklist(newList);
+    handleDragEnd();
 
-    // Persiste a ordem
+    // persist
     await saveChecklistOrder(newList);
 
-    // atualiza do servidor por precaução
+    // refresh from server to normalize
     if (selectedCar) await fetchAll(selectedCar.id);
   };
 
@@ -337,7 +378,6 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
   };
 
   // PUBLICAÇÕES / ANÚNCIOS
-  // Observação: removi o campo "title" do formulário. O título será o nome da plataforma selecionada.
   const submitPublication = async () => {
     if (!selectedCar) return;
     try {
@@ -450,7 +490,6 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
       const extraExpensesTotal = Number(summary.extraExpensesTotal || 0);
 
       const profit = commission - (adSpendTotal + extraExpensesTotal);
-      // NOTA: não grava sale_price aqui (é feito no modal "Marcar como vendido" na listagem)
       const patch = {
         fipe_value,
         commission,
@@ -467,7 +506,6 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
 
       toast({ title: 'Financeiro atualizado com sucesso' });
       await fetchAll(selectedCar.id);
-      // se quiser atualizar o dashboard externo, chame refreshAll() manualmente
       if (refreshAll) refreshAll();
     } catch (err) {
       console.error('Erro ao salvar financeiro:', err);
@@ -583,28 +621,52 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
                 </div>
 
                 <div className="space-y-2">
+                  {/* Render with placeholders */}
                   {checklist.map((item, idx) => (
-                    <div
-                      key={item.id}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, idx)}
-                      onDragOver={handleDragOver}
-                      onDrop={(e) => handleDrop(e, idx)}
-                      className="flex items-center justify-between bg-white p-3 border rounded mb-2 cursor-move select-none"
-                    >
-                      <div className="flex items-center gap-3">
-                        <input type="checkbox" checked={!!item.checked} onChange={() => toggleChecklist(item)} />
-                        <div>
-                          <div className="font-medium">{item.label}</div>
-                          {item.notes && <div className="text-xs text-gray-500">{item.notes}</div>}
+                    <React.Fragment key={item.id}>
+                      {/* placeholder before item when dragOverIndex === idx */}
+                      {dragOverIndex === idx && (
+                        <div className="h-12 rounded-md border-2 border-dashed border-yellow-400 bg-yellow-50 transition-all" />
+                      )}
+
+                      <div
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, idx)}
+                        onDragEnter={(e) => handleDragEnter(e, idx)}
+                        onDragOver={handleDragOver}
+                        onDrop={(e) => handleDrop(e, idx)}
+                        onDragEnd={handleDragEnd}
+                        className={`flex items-center justify-between bg-white p-3 border rounded mb-2 shadow-sm transition-transform duration-150
+                          ${draggingIndex === idx ? 'opacity-70 scale-98 border-yellow-200' : 'hover:shadow-md'}`}
+                        style={{ cursor: 'grab', userSelect: 'none' }}
+                      >
+                        <div className="flex items-center gap-3">
+                          <input type="checkbox" checked={!!item.checked} onChange={() => toggleChecklist(item)} />
+                          <div>
+                            <div className="font-medium">{item.label}</div>
+                            {item.notes && <div className="text-xs text-gray-500">{item.notes}</div>}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="text-xs text-gray-400 mr-4">{item.updated_at ? new Date(item.updated_at).toLocaleString() : ''}</div>
+                          <button onClick={() => removeChecklistItem(item.id)} className="text-red-600"><Trash2 /></button>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <div className="text-xs text-gray-400 mr-4">{item.updated_at ? new Date(item.updated_at).toLocaleString() : ''}</div>
-                        <button onClick={() => removeChecklistItem(item.id)} className="text-red-600"><Trash2 /></button>
-                      </div>
-                    </div>
+                    </React.Fragment>
                   ))}
+
+                  {/* placeholder at end if dragging to after last item */}
+                  {dragOverIndex === checklist.length && (
+                    <div className="h-12 rounded-md border-2 border-dashed border-yellow-400 bg-yellow-50 transition-all" />
+                  )}
+
+                  {/* Add a drop target at the end (so user can drop after last item) */}
+                  <div
+                    onDragEnter={(e) => handleDragEnter(e, checklist.length)}
+                    onDragOver={handleDragOver}
+                    onDrop={(e) => handleDrop(e, checklist.length)}
+                    className="h-0"
+                  />
 
                   {/* add new */}
                   <div className="bg-gray-50 p-3 border rounded">
@@ -624,7 +686,6 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
               <div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                   <div className="space-y-2">
-                    {/* título removido — o título será o nome da plataforma */}
                     <select value={pubForm.platform_id} onChange={(e) => setPubForm(f => ({ ...f, platform_id: e.target.value }))} className="w-full p-2 border rounded">
                       <option value="">Plataforma</option>
                       {platforms.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -716,8 +777,6 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
                     <label className="text-sm text-gray-700">Devolver ao vendedor (R$)</label>
                     <input type="number" step="0.01" value={financeForm.return_to_seller ?? ''} onChange={(e) => setFinanceForm(f => ({ ...f, return_to_seller: e.target.value }))} className="w-full p-2 border rounded" />
                   </div>
-
-                  {/* REMOVIDO: valor final vendido (registrado no modal "Marcar como vendido" na listagem) */}
                 </div>
 
                 <div className="mb-4">

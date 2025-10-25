@@ -8,7 +8,12 @@ import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
 import { CSVLink } from 'react-csv';
 import { supabase } from '@/lib/supabase';
-import { getCars, addCar, deleteCar, updateCar, getTestimonials, addTestimonial, deleteTestimonial, getLeads, updateLead, deleteLead, getPlatforms, markCarAsSold, addPlatform } from '@/lib/car-api';
+import {
+  getCars, addCar, deleteCar, updateCar,
+  getTestimonials, addTestimonial, deleteTestimonial,
+  getLeads, updateLead, deleteLead,
+  getPlatforms, markCarAsSold, addPlatform, unmarkCarAsSold
+} from '@/lib/car-api';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import BackgroundShape from '@/components/BackgroundShape';
@@ -55,6 +60,7 @@ const AdminDashboard = () => {
     const [salePlatformInput, setSalePlatformInput] = useState('');
     const [newPlatformName, setNewPlatformName] = useState('');
     const [isAddingPlatform, setIsAddingPlatform] = useState(false);
+    const [undoSaleCarId, setUndoSaleCarId] = useState(null); // <--- novo estado para desfazer venda
     const navigate = useNavigate();
     const fileInputRef = useRef(null);
 
@@ -99,7 +105,7 @@ const AdminDashboard = () => {
     const removePhoto = (index, isExisting = false) => { if (isExisting && editingCar) { const photoUrl = editingCar.photo_urls[index]; setPhotosToDelete(prev => [...prev, photoUrl]); setEditingCar(prev => ({ ...prev, photo_urls: prev.photo_urls.filter((_, i) => i !== index) })); } else { setPhotosToUpload(prev => prev.filter((_, i) => i !== index)); }};
     const handleAddCar = async (e) => { e.preventDefault(); setLoading(true); const photoUrls = []; for (const file of photosToUpload) { const fileName = `${newCar.brand}/${Date.now()}_${file.name}`; const { data, error } = await supabase.storage.from('car_photos').upload(fileName, file); if (error) { toast({ title: 'Erro no upload.', description: error.message, variant: 'destructive' }); setLoading(false); return; } const { data: { publicUrl } } = supabase.storage.from('car_photos').getPublicUrl(data.path); photoUrls.push(publicUrl); } const carData = { ...newCar, photo_urls: photoUrls, main_photo_url: photoUrls[mainPhotoIndex] || null, price: parseFloat(newCar.price) }; const { data: addedCar, error } = await addCar(carData); if (error) { toast({ title: 'Erro ao adicionar.', description: error.message, variant: 'destructive' }); } else { setCars(prevCars => [addedCar[0], ...prevCars]); setNewCar({ brand: '', model: '', year: '', price: '', mileage: '', fuel: '', photo_urls: [], youtube_link: '', full_description: '', transmission: '', body_type: '', color: '' }); setPhotosToUpload([]); setMainPhotoIndex(0); if (fileInputRef.current) fileInputRef.current.value = ""; toast({ title: 'Veículo adicionado!' }); } setLoading(false); };
     const handleEditCarClick = (car) => { setPhotosToUpload([]); setPhotosToDelete([]); setEditingCar(JSON.parse(JSON.stringify(car))); setIsEditDialogOpen(true); };
-    const handleUpdateCar = async (e) => { e.preventDefault(); if (!editingCar) return; setLoading(true); let finalCarData = { ...editingCar }; if (photosToUpload.length > 0) { const newPhotoUrls = []; for (const file of photosToUpload) { const fileName = `${finalCarData.brand}/${Date.now()}_${file.name}`; const { data, error } = await supabase.storage.from('car_photos').upload(fileName, file); if (error) { toast({ title: 'Erro no upload.', description: error.message, variant: 'destructive' }); setLoading(false); return; } const { data: { publicUrl } } = supabase.storage.from('car_photos').getPublicUrl(data.path); newPhotoUrls.push(publicUrl); } finalCarData.photo_urls = [...finalCarData.photo_urls, ...newPhotoUrls]; } if (photosToDelete.length > 0) { const filePaths = photosToDelete.map(url => url.split('/car_photos/')[1]).filter(Boolean); if (filePaths.length > 0) { await supabase.storage.from('car_photos').remove(filePaths); } } if (!finalCarData.photo_urls.includes(finalCarData.main_photo_url)) { finalCarData.main_photo_url = finalCarData.photo_urls[0] || null; } const { error } = await updateCar(finalCarData.id, { ...finalCarData, price: parseFloat(finalCarData.price) }); if (error) { toast({ title: 'Erro ao atualizar.', description: error.message, variant: 'destructive' }); } else { setCars(cars.map(car => car.id === finalCarData.id ? finalCarData : car)); setIsEditDialogOpen(false); setEditingCar(null); toast({ title: 'Veículo atualizado!' }); } setLoading(false); };
+    const handleUpdateCar = async (e) => { e.preventDefault(); if (!editingCar) return; setLoading(true); let finalCarData = { ...editingCar }; if (photosToUpload.length > 0) { const newPhotoUrls = []; for (const file of photosToUpload) { const fileName = `${finalCarData.brand}/${Date.now()}_${file.name}`; const { data, error } = await supabase.storage.from('car_photos').upload(fileName, file); if (error) { toast({ title: 'Erro no upload.', description: error.message, variant: 'destructive' }); setLoading(false); return; } const { data: { publicUrl } } await supabase.storage.from('car_photos').getPublicUrl; newPhotoUrls.push(publicUrl); } finalCarData.photo_urls = [...finalCarData.photo_urls, ...newPhotoUrls]; } if (photosToDelete.length > 0) { const filePaths = photosToDelete.map(url => url.split('/car_photos/')[1]).filter(Boolean); if (filePaths.length > 0) { await supabase.storage.from('car_photos').remove(filePaths); } } if (!finalCarData.photo_urls.includes(finalCarData.main_photo_url)) { finalCarData.main_photo_url = finalCarData.photo_urls[0] || null; } const { error } = await updateCar(finalCarData.id, { ...finalCarData, price: parseFloat(finalCarData.price) }); if (error) { toast({ title: 'Erro ao atualizar.', description: error.message, variant: 'destructive' }); } else { setCars(cars.map(car => car.id === finalCarData.id ? finalCarData : car)); setIsEditDialogOpen(false); setEditingCar(null); toast({ title: 'Veículo atualizado!' }); } setLoading(false); };
     const handleDeleteCar = async (id) => { setLoading(true); const carToDeleteData = cars.find(car => car.id === id); if (carToDeleteData && carToDeleteData.photo_urls && carToDeleteData.photo_urls.length > 0) { const filePaths = carToDeleteData.photo_urls.map(url => url.split('/car_photos/')[1]).filter(Boolean); if(filePaths.length > 0) { await supabase.storage.from('car_photos').remove(filePaths); } } const { error } = await deleteCar(id); if (error) { toast({ title: 'Erro ao remover.', variant: 'destructive' }); } else { setCars(cars.filter(car => car.id !== id)); toast({ title: 'Veículo removido.' }); } setCarToDelete(null); setLoading(false); };
 
     // === MARCAR COMO VENDIDO ===
@@ -133,6 +139,25 @@ const AdminDashboard = () => {
       } catch (err) {
         console.error(err);
         toast({ title: 'Erro ao marcar como vendido', description: err.message || String(err), variant: 'destructive' });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    // === DESFAZER VENDA (novo) ===
+    const handleConfirmUndoSale = async () => {
+      if (!undoSaleCarId) return;
+      setLoading(true);
+      try {
+        const res = await unmarkCarAsSold(undoSaleCarId, { deleteLastSale: true });
+        if (res.error) throw res.error;
+        // atualizar UI local
+        setCars(prev => prev.map(c => c.id === undoSaleCarId ? { ...c, is_sold: false, sold_at: null, sold_platform_id: null, sale_price: null } : c));
+        toast({ title: 'Venda revertida — veículo voltou ao estoque.' });
+        setUndoSaleCarId(null);
+      } catch (err) {
+        console.error('Erro ao desfazer venda:', err);
+        toast({ title: 'Erro ao desfazer venda', description: err.message || String(err), variant: 'destructive' });
       } finally {
         setLoading(false);
       }
@@ -279,7 +304,22 @@ const AdminDashboard = () => {
                                             {!sold ? (
                                                 <Button variant="outline" size="sm" onClick={() => openMarkSoldModal(car)}><Tag className="mr-2 h-4 w-4" />Marcar como vendido</Button>
                                             ) : (
-                                                <Button variant="ghost" size="icon" disabled title="Vendido"><FileText className="h-5 w-5 text-gray-400" /></Button>
+                                                /* BOTÃO PARA DESFAZER VENDA - usa AlertDialog para confirmar */
+                                                <AlertDialog open={undoSaleCarId === car.id} onOpenChange={(isOpen) => !isOpen && setUndoSaleCarId(null)}>
+                                                    <AlertDialogTrigger asChild>
+                                                        <Button variant="outline" size="sm" onClick={() => setUndoSaleCarId(car.id)}>Desfazer venda</Button>
+                                                    </AlertDialogTrigger>
+                                                    <AlertDialogContent className="bg-white">
+                                                        <AlertDialogHeader>
+                                                            <AlertDialogTitle>Desfazer venda</AlertDialogTitle>
+                                                            <AlertDialogDescription>Tem certeza que quer retornar este veículo ao estoque? Isso removerá o registro de venda.</AlertDialogDescription>
+                                                        </AlertDialogHeader>
+                                                        <AlertDialogFooter>
+                                                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                                            <AlertDialogAction onClick={handleConfirmUndoSale}>Sim, retornar ao estoque</AlertDialogAction>
+                                                        </AlertDialogFooter>
+                                                    </AlertDialogContent>
+                                                </AlertDialog>
                                             )}
 
                                             <AlertDialog>
@@ -334,7 +374,7 @@ const AdminDashboard = () => {
                 </DialogContent>
             </Dialog>
 
-            {/* Modal Marcar como vendido */}
+            {/* Modal Marcar como vendido (mantive igual) */}
             <Dialog open={markSoldModalOpen} onOpenChange={setMarkSoldModalOpen}>
               <DialogContent className="bg-white text-gray-900 w-full max-w-xl">
                 <DialogHeader>

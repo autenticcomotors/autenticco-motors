@@ -8,7 +8,7 @@ import { getFeaturedCars, getTestimonials } from '@/lib/car-api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import ReactMarkdown from 'react-markdown';
 import BackgroundShape from '@/components/BackgroundShape';
-import heroBackground from '@/assets/ponte.jpg'; // imagem de alta-res
+import heroBackground from '@/assets/ponte.jpg';
 
 const Home = () => {
   const [featuredCars, setFeaturedCars] = useState([]);
@@ -46,21 +46,27 @@ const Home = () => {
       <div className="bg-white">
         <BackgroundShape />
 
-        {/* HERO: agora usa background-image no section (mais responsivo ao zoom) */}
+        {/* HERO: imagem como <img> — garante escala correta com zoom do navegador */}
         <section
           className="relative flex items-center justify-center text-left text-white overflow-hidden"
-          style={{
-            height: '75vh',
-            minHeight: '520px',
-            backgroundImage: `url(${heroBackground})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center center',
-            backgroundRepeat: 'no-repeat',
-            backgroundAttachment: 'scroll'
-          }}
+          style={{ height: '75vh', minHeight: '420px' }}
         >
-          {/* overlay leve */}
-          <div className="absolute inset-0 bg-black/10" />
+          {/* imagem full-bleed */}
+          <div className="absolute inset-0 z-0 overflow-hidden">
+            <img
+              src={heroBackground}
+              alt="Fundo hero"
+              style={{
+                width: '100vw',
+                height: '75vh',
+                minHeight: '420px',
+                objectFit: 'cover',
+                objectPosition: 'center center',
+                display: 'block',
+              }}
+            />
+            <div className="absolute inset-0 bg-black/10" />
+          </div>
 
           {/* conteúdo */}
           <motion.div
@@ -70,9 +76,7 @@ const Home = () => {
             className="relative z-10 w-full px-6 sm:px-8 lg:px-12"
           >
             <div className="mx-auto max-w-8xl flex items-center justify-between h-full">
-              {/* bloco esquerdo (ocupa ~40-45% para evitar sobrepor o carro) */}
               <div className="w-full md:w-5/12 flex flex-col justify-center py-12 pl-6 md:pl-12 lg:pl-20">
-                {/* card quadrado/compacto */}
                 <div
                   className="rounded-2xl p-6 md:p-8"
                   style={{
@@ -114,13 +118,12 @@ const Home = () => {
                 </div>
               </div>
 
-              {/* espaço direito maior (apenas espaço, sem imagem extra) */}
               <div className="hidden md:block md:w-7/12 h-full" />
             </div>
           </motion.div>
         </section>
 
-        {/* RESTANTE DA PÁGINA (mantive igual ao original) */}
+        {/* restante igual */}
         <section className="py-24 bg-white">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center">

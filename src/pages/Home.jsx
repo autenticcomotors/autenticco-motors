@@ -1,4 +1,3 @@
-// src/pages/Home.jsx
 import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet';
 import { motion } from 'framer-motion';
@@ -8,7 +7,7 @@ import { getFeaturedCars, getTestimonials } from '@/lib/car-api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import ReactMarkdown from 'react-markdown';
 import BackgroundShape from '@/components/BackgroundShape';
-import heroBackground from '@/assets/ponte.jpg';
+import heroBackground from '@/assets/ponte.jpg'; // já apontando para a ponte (alta-res)
 
 const Home = () => {
   const [featuredCars, setFeaturedCars] = useState([]);
@@ -33,6 +32,16 @@ const Home = () => {
 
   const TEXT_LIMIT = 20;
 
+  // estilo inline para o hero — background-image, responsivo e com cover
+  const heroStyle = {
+    backgroundImage: `url(${heroBackground})`,
+    backgroundSize: 'cover',
+    backgroundPosition: 'center right',
+    backgroundRepeat: 'no-repeat',
+    minHeight: '75vh',
+    width: '100%',
+  };
+
   return (
     <>
       <Helmet>
@@ -46,27 +55,13 @@ const Home = () => {
       <div className="bg-white">
         <BackgroundShape />
 
-        {/* HERO: imagem como <img> — garante escala correta com zoom do navegador */}
+        {/* HERO: agora usando background-image no section (mais previsível no zoom) */}
         <section
           className="relative flex items-center justify-center text-left text-white overflow-hidden"
-          style={{ height: '75vh', minHeight: '420px' }}
+          style={heroStyle}
         >
-          {/* imagem full-bleed */}
-          <div className="absolute inset-0 z-0 overflow-hidden">
-            <img
-              src={heroBackground}
-              alt="Fundo hero"
-              style={{
-                width: '100vw',
-                height: '75vh',
-                minHeight: '420px',
-                objectFit: 'cover',
-                objectPosition: 'center center',
-                display: 'block',
-              }}
-            />
-            <div className="absolute inset-0 bg-black/10" />
-          </div>
+          {/* overlay leve */}
+          <div className="absolute inset-0 bg-black/10" />
 
           {/* conteúdo */}
           <motion.div
@@ -76,7 +71,9 @@ const Home = () => {
             className="relative z-10 w-full px-6 sm:px-8 lg:px-12"
           >
             <div className="mx-auto max-w-8xl flex items-center justify-between h-full">
+              {/* bloco esquerdo (ocupa ~40-45% para evitar sobrepor o carro) */}
               <div className="w-full md:w-5/12 flex flex-col justify-center py-12 pl-6 md:pl-12 lg:pl-20">
+                {/* card quadrado/compacto */}
                 <div
                   className="rounded-2xl p-6 md:p-8"
                   style={{
@@ -118,12 +115,14 @@ const Home = () => {
                 </div>
               </div>
 
+              {/* espaço direito maior (mantém layout como antes) */}
               <div className="hidden md:block md:w-7/12 h-full" />
             </div>
           </motion.div>
         </section>
 
-        {/* restante igual */}
+        {/* ========================= RESTANTE DA PÁGINA ========================= */}
+
         <section className="py-24 bg-white">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center">

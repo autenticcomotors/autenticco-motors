@@ -1,3 +1,4 @@
+// src/pages/Home.jsx
 import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet';
 import { motion } from 'framer-motion';
@@ -7,7 +8,7 @@ import { getFeaturedCars, getTestimonials } from '@/lib/car-api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import ReactMarkdown from 'react-markdown';
 import BackgroundShape from '@/components/BackgroundShape';
-import heroBackground from '@/assets/ponte.jpg'; // já apontando para a ponte (alta-res)
+import heroBackground from '@/assets/ponte.jpg'; // imagem de alta-res
 
 const Home = () => {
   const [featuredCars, setFeaturedCars] = useState([]);
@@ -45,22 +46,21 @@ const Home = () => {
       <div className="bg-white">
         <BackgroundShape />
 
-        {/* HERO: imagem via <img> (acompanha zoom) + card */}
+        {/* HERO: agora usa background-image no section (mais responsivo ao zoom) */}
         <section
           className="relative flex items-center justify-center text-left text-white overflow-hidden"
-          style={{ height: '75vh' }}
+          style={{
+            height: '75vh',
+            minHeight: '520px',
+            backgroundImage: `url(${heroBackground})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center center',
+            backgroundRepeat: 'no-repeat',
+            backgroundAttachment: 'scroll'
+          }}
         >
-          {/* imagem como elemento normal para acompanhar zoom do navegador */}
-          <div className="absolute inset-0 z-0">
-            <img
-              src={heroBackground}
-              alt="Fundo hero"
-              className="w-full h-full object-cover"
-              style={{ display: 'block' }}
-            />
-            {/* overlay leve: pouca opacidade (imagem quase visível) */}
-            <div className="absolute inset-0 bg-black/10" />
-          </div>
+          {/* overlay leve */}
+          <div className="absolute inset-0 bg-black/10" />
 
           {/* conteúdo */}
           <motion.div
@@ -84,7 +84,6 @@ const Home = () => {
                     width: '100%',
                   }}
                 >
-                  {/* título com sombra leve para melhor leitura */}
                   <h2
                     className="text-3xl md:text-4xl lg:text-4xl font-extrabold leading-tight"
                     style={{ color: '#fff', textShadow: '0 6px 18px rgba(0,0,0,0.45)' }}
@@ -97,7 +96,6 @@ const Home = () => {
                     Assessoria completa, negociação transparente e garantia de melhor valor.
                   </p>
 
-                  {/* botões: primeiro amarelo, segundo preto com borda amarela */}
                   <div className="mt-6 flex flex-col sm:flex-row gap-4">
                     <Link
                       to="/estoque"
@@ -116,16 +114,13 @@ const Home = () => {
                 </div>
               </div>
 
-              {/* espaço direito maior (imagem ocupa o fundo) */}
+              {/* espaço direito maior (apenas espaço, sem imagem extra) */}
               <div className="hidden md:block md:w-7/12 h-full" />
             </div>
           </motion.div>
         </section>
 
-        {/* ========================= RESTANTE DA PÁGINA ========================= */}
-
-        {/* <-- ALTERAÇÃO: deixar esta section BRANCA (antes era bg-gray-50) -->
-            Section "Quer vender seu carro ?" agora tem fundo branco para diferenciar */}
+        {/* RESTANTE DA PÁGINA (mantive igual ao original) */}
         <section className="py-24 bg-white">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center">

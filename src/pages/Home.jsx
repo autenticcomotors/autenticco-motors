@@ -7,7 +7,7 @@ import { getFeaturedCars, getTestimonials } from '@/lib/car-api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import ReactMarkdown from 'react-markdown';
 import BackgroundShape from '@/components/BackgroundShape';
-import heroBackground from '@/assets/ponte.jpg'; // já apontando para a ponte (alta-res)
+import heroBackground from '@/assets/ponte.jpg';
 
 const Home = () => {
   const [featuredCars, setFeaturedCars] = useState([]);
@@ -32,15 +32,9 @@ const Home = () => {
 
   const TEXT_LIMIT = 20;
 
-  // estilo inline para o hero — background-image, responsivo e com cover
-  const heroStyle = {
-    backgroundImage: `url(${heroBackground})`,
-    backgroundSize: 'cover',
-    backgroundPosition: 'center right',
-    backgroundRepeat: 'no-repeat',
-    minHeight: '75vh',
-    width: '100%',
-  };
+  // ajuste da porcentagem de padding-top controla a "altura" responsiva do hero
+  // 40% = altura ~40% da largura; ajuste se quiser hero mais alto/baixo
+  const HERO_ASPECT_PADDING = '40%';
 
   return (
     <>
@@ -55,74 +49,86 @@ const Home = () => {
       <div className="bg-white">
         <BackgroundShape />
 
-        {/* HERO: agora usando background-image no section (mais previsível no zoom) */}
-        <section
-          className="relative flex items-center justify-center text-left text-white overflow-hidden"
-          style={heroStyle}
-        >
-          {/* overlay leve */}
-          <div className="absolute inset-0 bg-black/10" />
+        {/* HERO responsivo: container com padding-top para controlar proporção + img object-fit */}
+        <section className="relative text-left text-white overflow-hidden">
+          {/* wrapper que define a proporção responsiva */}
+          <div style={{ width: '100%', paddingTop: HERO_ASPECT_PADDING, position: 'relative' }}>
+            {/* imagem absoluta cobrindo todo o espaço do wrapper */}
+            <img
+              src={heroBackground}
+              alt="Fundo hero"
+              style={{
+                position: 'absolute',
+                inset: 0,
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                objectPosition: 'right center',
+                display: 'block',
+              }}
+            />
+            {/* overlay leve */}
+            <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.10)' }} />
 
-          {/* conteúdo */}
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8 }}
-            className="relative z-10 w-full px-6 sm:px-8 lg:px-12"
-          >
-            <div className="mx-auto max-w-8xl flex items-center justify-between h-full">
-              {/* bloco esquerdo (ocupa ~40-45% para evitar sobrepor o carro) */}
-              <div className="w-full md:w-5/12 flex flex-col justify-center py-12 pl-6 md:pl-12 lg:pl-20">
-                {/* card quadrado/compacto */}
-                <div
-                  className="rounded-2xl p-6 md:p-8"
-                  style={{
-                    background: 'linear-gradient(rgba(3,3,3,0.48), rgba(3,3,3,0.44))',
-                    backdropFilter: 'saturate(120%) blur(2px)',
-                    border: '1px solid rgba(255,255,255,0.04)',
-                    boxShadow: '0 12px 40px rgba(0,0,0,0.45)',
-                    maxWidth: '520px',
-                    width: '100%',
-                  }}
-                >
-                  <h2
-                    className="text-3xl md:text-4xl lg:text-4xl font-extrabold leading-tight"
-                    style={{ color: '#fff', textShadow: '0 6px 18px rgba(0,0,0,0.45)' }}
-                  >
-                    <span className="block">Venda com segurança.</span>
-                    <span className="block" style={{ color: '#F7C93C' }}>Compre com confiança.</span>
-                  </h2>
-
-                  <p className="mt-4 text-sm md:text-base text-gray-200 max-w-2xl">
-                    Assessoria completa, negociação transparente e garantia de melhor valor.
-                  </p>
-
-                  <div className="mt-6 flex flex-col sm:flex-row gap-4">
-                    <Link
-                      to="/estoque"
-                      className="inline-block bg-yellow-400 text-black px-6 py-3 rounded-xl text-lg font-semibold shadow-2xl transform transition-all duration-200 hover:-translate-y-1"
+            {/* conteúdo absoluto sobre a imagem (centro-esquerda) */}
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8 }}
+              style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center' }}
+            >
+              <div className="w-full px-6 sm:px-8 lg:px-12">
+                <div className="mx-auto max-w-8xl flex items-center justify-between h-full">
+                  <div className="w-full md:w-5/12 flex flex-col justify-center py-12 pl-6 md:pl-12 lg:pl-20">
+                    <div
+                      className="rounded-2xl p-6 md:p-8"
+                      style={{
+                        background: 'linear-gradient(rgba(3,3,3,0.48), rgba(3,3,3,0.44))',
+                        backdropFilter: 'saturate(120%) blur(2px)',
+                        border: '1px solid rgba(255,255,255,0.04)',
+                        boxShadow: '0 12px 40px rgba(0,0,0,0.45)',
+                        maxWidth: '520px',
+                        width: '100%',
+                      }}
                     >
-                      Quero Comprar
-                    </Link>
+                      <h2
+                        className="text-3xl md:text-4xl lg:text-4xl font-extrabold leading-tight"
+                        style={{ color: '#fff', textShadow: '0 6px 18px rgba(0,0,0,0.45)' }}
+                      >
+                        <span className="block">Venda com segurança.</span>
+                        <span className="block" style={{ color: '#F7C93C' }}>Compre com confiança.</span>
+                      </h2>
 
-                    <Link
-                      to="/vender"
-                      className="inline-block bg-black text-yellow-400 px-6 py-3 rounded-xl text-lg font-semibold shadow-md border-2 border-yellow-400 transition-all duration-200 hover:bg-yellow-400 hover:text-black"
-                    >
-                      Quero Vender
-                    </Link>
+                      <p className="mt-4 text-sm md:text-base text-gray-200 max-w-2xl">
+                        Assessoria completa, negociação transparente e garantia de melhor valor.
+                      </p>
+
+                      <div className="mt-6 flex flex-col sm:flex-row gap-4">
+                        <Link
+                          to="/estoque"
+                          className="inline-block bg-yellow-400 text-black px-6 py-3 rounded-xl text-lg font-semibold shadow-2xl transform transition-all duration-200 hover:-translate-y-1"
+                        >
+                          Quero Comprar
+                        </Link>
+
+                        <Link
+                          to="/vender"
+                          className="inline-block bg-black text-yellow-400 px-6 py-3 rounded-xl text-lg font-semibold shadow-md border-2 border-yellow-400 transition-all duration-200 hover:bg-yellow-400 hover:text-black"
+                        >
+                          Quero Vender
+                        </Link>
+                      </div>
+                    </div>
                   </div>
+
+                  <div className="hidden md:block md:w-7/12 h-full" />
                 </div>
               </div>
-
-              {/* espaço direito maior (mantém layout como antes) */}
-              <div className="hidden md:block md:w-7/12 h-full" />
-            </div>
-          </motion.div>
+            </motion.div>
+          </div>
         </section>
 
-        {/* ========================= RESTANTE DA PÁGINA ========================= */}
-
+        {/* Resto da página */}
         <section className="py-24 bg-white">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center">

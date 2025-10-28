@@ -14,6 +14,11 @@ const CarFilter = ({ filters, setFilters, filterOptions, onClear }) => {
     setFilters(prev => ({ ...prev, [name]: value }));
   };
 
+  const handleCheckboxChange = (e) => {
+    const { name, checked } = e.target;
+    setFilters(prev => ({ ...prev, [name]: checked }));
+  };
+
   const priceRanges = [
     { value: '0-100000', label: 'Até R$100.000' },
     { value: '100000-200000', label: 'R$100k - R$200k' },
@@ -53,8 +58,8 @@ const CarFilter = ({ filters, setFilters, filterOptions, onClear }) => {
       transition={{ duration: 0.6, ease: "easeOut" }}
       className="bg-gray-900/90 backdrop-blur-sm p-6 rounded-2xl shadow-2xl border border-gray-700 mb-12"
     >
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 items-center">
-        <motion.div whileHover={{ y: -2 }} className="relative sm:col-span-2 md:col-span-3 lg:col-span-4 xl:col-span-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4 items-center">
+        <motion.div whileHover={{ y: -2 }} className="relative sm:col-span-2 md:col-span-3 lg:col-span-4 xl:col-span-3">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
             <input
                 type="text" name="model" value={filters.model || ''} onChange={handleInputChange}
@@ -69,6 +74,19 @@ const CarFilter = ({ filters, setFilters, filterOptions, onClear }) => {
         {renderSelect('transmission', 'Câmbio', filterOptions.transmissions)}
         {renderSelect('bodyType', 'Carroceria', filterOptions.bodyTypes)}
         {renderSelect('color', 'Cor', filterOptions.colors)}
+
+        {/* Checkbox Blindado */}
+        <motion.div whileHover={{ y: -2 }} className="flex items-center gap-3 pl-3">
+          <input
+            id="is_blindado"
+            name="is_blindado"
+            type="checkbox"
+            checked={!!filters.is_blindado}
+            onChange={handleCheckboxChange}
+            className="h-4 w-4 text-yellow-500 rounded border-gray-300 bg-white"
+          />
+          <label htmlFor="is_blindado" className="text-sm text-gray-200 select-none">Mostrar só blindados</label>
+        </motion.div>
         
         <div className="col-span-full flex justify-end">
             <Button onClick={onClear} variant="ghost" className="text-gray-400 hover:text-white transition-colors">
@@ -82,3 +100,4 @@ const CarFilter = ({ filters, setFilters, filterOptions, onClear }) => {
 };
 
 export default CarFilter;
+

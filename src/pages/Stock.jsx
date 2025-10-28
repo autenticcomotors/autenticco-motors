@@ -93,6 +93,10 @@ const Stock = () => {
                 return mileage >= (min || 0) && (max ? mileage <= max : true);
             });
         }
+        
+        if (filters.is_blindado) {
+           carsToFilter = carsToFilter.filter(car => !!car.is_blindado);
+        }
 
         ['year', 'fuel', 'color', 'transmission'].forEach(key => {
             if (filters[key]) {

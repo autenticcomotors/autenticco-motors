@@ -4,83 +4,95 @@ import { Button } from '@/components/ui/button';
 import { CSVLink } from 'react-csv';
 import { getPlatforms, getPublicationsForCars } from '@/lib/car-api';
 
-// fallback Money simples
 const MoneyFallback = ({ value }) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value || 0));
 
-const OverviewBoard = ({ cars = [], onOpenGestaoForCar = (car) => {}, refreshAll = () => {} }) => {
-  const [platforms, setPlatforms] = useState([]);
-  const [pubsMap, setPubsMap] = useState({}); // { carId: { platformKey: [pubs...] } }
+const OverviewBoard = ({ cars = [], platforms = [], onOpenGestaoForCar = (car) => {} }) => {
+  const [pubsMap, setPubsMap] = useState({});
   const [search, setSearch] = useState('');
   const [brandFilter, setBrandFilter] = useState('');
-  const [enabledCols, setEnabledCols] = useState({}); // { colKey: true/false }
+  const [enabledCols, setEnabledCols] = useState({});
   const [loading, setLoading] = useState(false);
+  const [allPlatforms, setAllPlatforms] = useState(platforms || []);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const p = await getPlatforms();
-        setPlatforms(p || []);
-        const defaults = {};
-        (p || []).forEach(pp => { defaults[`platform_${pp.id}`] = true; });
-        ['instagram', 'youtube', 'video', 'site', 'olx', 'webmotors', 'mercadolivre'].forEach(k => { if (!(k in defaults)) defaults[k] = true; });
-        setEnabledCols(defaults);
-      } catch (err) {
-        console.error('Erro ao carregar plataformas:', err);
-        setPlatforms([]);
-      }
-    })();
-  }, []);
+    setAllPlatforms(platforms || []);
+    const defaults = {};
+    (platforms || []).forEach(pp => { defaults[`platform_${pp.id}`] = true; });
+    ['instagram','youtube','tiktok','facebook','whatsapp','site','mercadolivre','olx','webmotors'].forEach(k => { if (!(k in defaults)) defaults[k] = true; });
+    setEnabledCols(prev => ({ ...defaults, ...prev }));
+  }, [platforms]);
 
   useEffect(() => {
-    const fetchPubs = async () => {
+    const fetch = async () => {
       const carIds = (cars || []).map(c => c.id).filter(Boolean);
       if (carIds.length === 0) { setPubsMap({}); return; }
       setLoading(true);
       try {
         const pubs = await getPublicationsForCars(carIds);
         const map = {};
-        (cars || []).forEach(c => { map[c.id] = {}; });
+        carIds.forEach(id => { map[id] = {}; });
         (pubs || []).forEach(p => {
           const id = p.car_id;
           if (!map[id]) map[id] = {};
-          const platformKey = p.platform_id ? `platform_${p.platform_id}` : (p.title || 'manual').toLowerCase();
+          const platformKey = p.platform_id ? `platform_${p.platform_id}` : (p.platform_name || '').toLowerCase();
           if (!map[id][platformKey]) map[id][platformKey] = [];
           map[id][platformKey].push(p);
-          if (p.link) {
-            const l = (p.link || '').toLowerCase();
-            if (l.includes('instagram.com')) {
-              map[id]['instagram'] = map[id]['instagram'] || [];
-              map[id]['instagram'].push(p);
-            }
-            if (l.includes('youtube.com') || l.includes('youtu.be')) {
-              map[id]['youtube'] = map[id]['youtube'] || [];
-              map[id]['youtube'].push(p);
-            }
-            if (l.includes('olx')) { map[id]['olx'] = map[id]['olx'] || []; map[id]['olx'].push(p); }
-            if (l.includes('webmotors')) { map[id]['webmotors'] = map[id]['webmotors'] || []; map[id]['webmotors'].push(p); }
-            if (l.includes('mercadolivre') || l.includes('mercado livre')) { map[id]['mercadolivre'] = map[id]['mercadolivre'] || []; map[id]['mercadolivre'].push(p); }
-          }
-          if ((p.title || '').toLowerCase().includes('youtube') || (p.title || '').toLowerCase().includes('video')) {
-            map[id]['video'] = map[id]['video'] || [];
-            map[id]['video'].push(p);
-          }
+
+          const l = (p.link || '').toLowerCase();
+          if (l.includes('instagram.com')) { map[id]['instagram'] = map[id]['instagram'] || []; map[id]['instagram'].push(p); }
+          if (l.includes('youtube.com') || l.includes('youtu.be')) { map[id]['youtube'] = map[id]['youtube'] || []; map[id]['youtube'].push(p); }
+          if (l.includes('olx')) { map[id]['olx'] = map[id]['olx'] || []; map[id]['olx'].push(p); }
+          if (l.includes('webmotors')) { map[id]['webmotors'] = map[id]['webmotors'] || []; map[id]['webmotors'].push(p); }
+          if (l.includes('mercadolivre') || l.includes('mercado livre')) { map[id]['mercadolivre'] = map[id]['mercadolivre'] || []; map[id]['mercadolivre'].push(p); }
         });
         setPubsMap(map);
       } catch (err) {
-        console.error('Erro ao carregar publicações:', err);
+        console.error('Erro fetch pubs:', err);
         setPubsMap({});
       } finally {
         setLoading(false);
       }
     };
-
-    fetchPubs();
+    fetch();
   }, [cars]);
 
   const brandOptions = useMemo(() => {
     const setB = new Set((cars || []).map(c => (c.brand || '').trim()).filter(Boolean));
     return Array.from(setB).sort((a,b) => a.localeCompare(b, 'pt-BR'));
   }, [cars]);
+
+  const allColumnKeys = useMemo(() => {
+    const keys = [];
+    (allPlatforms || []).forEach(p => keys.push({ key: `platform_${p.id}`, label: p.name, type: p.platform_type || 'other' }));
+    const extras = [
+      { key: 'instagram', label: 'Instagram', type: 'social' },
+      { key: 'youtube', label: 'YouTube', type: 'social' },
+      { key: 'tiktok', label: 'TikTok', type: 'social' },
+      { key: 'facebook', label: 'Facebook', type: 'social' },
+      { key: 'whatsapp', label: 'WhatsApp', type: 'social' },
+      { key: 'site', label: 'Site', type: 'social' },
+      { key: 'mercadolivre', label: 'MercadoLivre', type: 'marketplace' },
+      { key: 'olx', label: 'OLX', type: 'marketplace' },
+      { key: 'webmotors', label: 'Webmotors', type: 'marketplace' }
+    ];
+    extras.forEach(e => { if (!keys.find(k => k.key === e.key)) keys.push(e); });
+    return keys;
+  }, [allPlatforms]);
+
+  const toggleCol = (key) => {
+    setEnabledCols(prev => {
+      const next = { ...prev, [key]: !prev[key] };
+      try { window.localStorage.setItem('overview_enabled_cols', JSON.stringify(next)); } catch (e) {}
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem('overview_enabled_cols') || '{}');
+      if (saved && Object.keys(saved).length) setEnabledCols(prev => ({ ...prev, ...saved }));
+    } catch (e) {}
+  }, []);
 
   const filtered = useMemo(() => {
     const term = (search || '').trim().toLowerCase();
@@ -92,37 +104,22 @@ const OverviewBoard = ({ cars = [], onOpenGestaoForCar = (car) => {}, refreshAll
     });
   }, [cars, search, brandFilter]);
 
-  const allColumnKeys = useMemo(() => {
-    const keys = [];
-    (platforms || []).forEach(p => keys.push({ key: `platform_${p.id}`, label: p.name }));
-    const extras = [
-      { key: 'instagram', label: 'Instagram' },
-      { key: 'youtube', label: 'YouTube' },
-      { key: 'video', label: 'Vídeo' },
-      { key: 'site', label: 'Site' },
-      { key: 'olx', label: 'OLX' },
-      { key: 'webmotors', label: 'Webmotors' },
-      { key: 'mercadolivre', label: 'Mercado Livre' }
-    ];
-    extras.forEach(e => { if (!keys.find(k => k.key === e.key)) keys.push(e); });
-    return keys;
-  }, [platforms]);
-
-  const toggleCol = (key) => setEnabledCols(prev => ({ ...prev, [key]: !prev[key] }));
+  const marketplaceCols = allColumnKeys.filter(c => enabledCols[c.key] && c.type === 'marketplace');
+  const socialCols = allColumnKeys.filter(c => enabledCols[c.key] && c.type === 'social');
 
   const csvData = useMemo(() => {
-    const header = ['Marca', 'Modelo', 'Ano', 'Preco', ...allColumnKeys.filter(c => enabledCols[c.key]).map(c => c.label)];
+    const header = ['Marca', 'Modelo', 'Ano', 'Preco', ...[...marketplaceCols, ...socialCols].map(c => c.label)];
     const rows = (filtered || []).map(car => {
       const row = [car.brand || '', car.model || '', car.year || '', car.price || ''];
       const map = pubsMap[car.id] || {};
-      allColumnKeys.filter(c => enabledCols[c.key]).forEach(col => {
+      [...marketplaceCols, ...socialCols].forEach(col => {
         const exists = Array.isArray(map[col.key]) && map[col.key].length > 0;
         row.push(exists ? 'SIM' : 'NÃO');
       });
       return row;
     });
     return [header, ...rows];
-  }, [filtered, allColumnKeys, enabledCols, pubsMap]);
+  }, [filtered, marketplaceCols, socialCols, pubsMap]);
 
   return (
     <div className="bg-white p-6 rounded-2xl shadow">
@@ -154,57 +151,68 @@ const OverviewBoard = ({ cars = [], onOpenGestaoForCar = (car) => {}, refreshAll
       </div>
 
       <div className="overflow-auto border rounded">
-        <table className="min-w-full">
-          <thead className="bg-gray-100 sticky top-0">
+        <table className="w-full table-fixed min-w-[900px]">
+          <thead className="bg-gray-100 sticky top-0 z-10">
             <tr>
               <th className="p-3 text-left">Veículo</th>
-              <th className="p-3">Preço</th>
-              {allColumnKeys.filter(c => enabledCols[c.key]).map(col => (
-                <th key={col.key} className="p-3 text-center">{col.label}</th>
-              ))}
+              <th className="p-3 text-left">Preço</th>
+              {marketplaceCols.length > 0 && <th className="p-3 text-center" colSpan={marketplaceCols.length}>Anúncios</th>}
+              {socialCols.length > 0 && <th className="p-3 text-center" colSpan={socialCols.length}>Redes Sociais</th>}
               <th className="p-3 text-center">Ações</th>
+            </tr>
+            <tr>
+              <th className="p-2" />
+              <th className="p-2" />
+              {marketplaceCols.map(col => <th key={col.key} className="p-2 text-center text-xs">{col.label}</th>)}
+              {socialCols.map(col => <th key={col.key} className="p-2 text-center text-xs">{col.label}</th>)}
+              <th className="p-2" />
             </tr>
           </thead>
 
           <tbody>
             {loading && (
               <tr>
-                <td colSpan={3 + allColumnKeys.filter(c => enabledCols[c.key]).length} className="p-6 text-center text-sm text-gray-500">Carregando dados...</td>
+                <td colSpan={4 + marketplaceCols.length + socialCols.length} className="p-6 text-center text-sm text-gray-500">Carregando dados...</td>
               </tr>
             )}
 
             {!loading && filtered.length === 0 && (
               <tr>
-                <td colSpan={3 + allColumnKeys.filter(c => enabledCols[c.key]).length} className="p-6 text-center text-sm text-gray-500">Nenhum veículo encontrado.</td>
+                <td colSpan={4 + marketplaceCols.length + socialCols.length} className="p-6 text-center text-sm text-gray-500">Nenhum veículo encontrado.</td>
               </tr>
             )}
 
             {!loading && filtered.map(car => {
               const map = pubsMap[car.id] || {};
               return (
-                <tr key={car.id} className="border-b last:border-b-0">
+                <tr key={car.id} className="odd:bg-white even:bg-gray-50 border-b">
                   <td className="p-3">
                     <div className="font-semibold">{car.brand} {car.model} <span className="text-xs text-gray-500">({car.year})</span></div>
                     <div className="text-xs text-gray-500">{car.mileage ? `${car.mileage} km` : ''} {car.is_blindado ? ' • BLINDADO' : ''}</div>
                   </td>
                   <td className="p-3"><MoneyFallback value={car.price} /></td>
 
-                  {allColumnKeys.filter(c => enabledCols[c.key]).map(col => {
+                  {marketplaceCols.map(col => {
                     const exists = Array.isArray(map[col.key]) && map[col.key].length > 0;
                     return (
                       <td key={col.key} className="p-2 text-center">
-                        {exists ? (
-                          <div className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded inline-block">SIM</div>
-                        ) : (
-                          <div className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded inline-block">NÃO</div>
-                        )}
+                        {exists ? <div className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded inline-block">SIM</div> : <div className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded inline-block">NÃO</div>}
+                      </td>
+                    );
+                  })}
+
+                  {socialCols.map(col => {
+                    const exists = Array.isArray(map[col.key]) && map[col.key].length > 0;
+                    return (
+                      <td key={col.key} className="p-2 text-center">
+                        {exists ? <div className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded inline-block">SIM</div> : <div className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded inline-block">NÃO</div>}
                       </td>
                     );
                   })}
 
                   <td className="p-3 text-right">
                     <div className="flex items-center gap-2 justify-end">
-                      <Button size="sm" variant="outline" onClick={() => { onOpenGestaoForCar(car); }}>Gerenciar</Button>
+                      <Button size="sm" variant="outline" onClick={() => onOpenGestaoForCar(car)}>Gerenciar</Button>
                     </div>
                     <div className="text-xs text-gray-400 mt-1 text-right">Atualizado: {car.updated_at ? new Date(car.updated_at).toLocaleDateString() : '-'}</div>
                   </td>

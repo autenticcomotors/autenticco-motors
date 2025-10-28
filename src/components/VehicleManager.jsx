@@ -14,7 +14,6 @@ import {
 } from '@/lib/car-api';
 import { supabase } from '@/lib/supabase';
 
-// Small money formatter component
 const Money = ({ value }) => {
   const v = Number(value || 0);
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
@@ -29,19 +28,18 @@ const defaultChecklistItems = [
 
 const genItemKey = () => `item_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
 
-const VehicleManager = ({ cars = [], refreshAll }) => {
+const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled = () => {}, platforms: externalPlatforms = [] }) => {
   const [selectedCar, setSelectedCar] = useState(null);
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState('checklist'); // checklist | publications | expenses | finance
-  const [platforms, setPlatforms] = useState([]);
+  const [tab, setTab] = useState('checklist'); // checklist | publications_market | publications_social | expenses | finance
+  const [platforms, setPlatforms] = useState(externalPlatforms || []);
 
   const [checklist, setChecklist] = useState([]);
   const [publications, setPublications] = useState([]);
   const [expenses, setExpenses] = useState([]);
-
   const [summaryMap, setSummaryMap] = useState({});
 
-  const [pubForm, setPubForm] = useState({ platform_id: '', link: '', budget: '', spent: '', status: 'draft', published_at: '' });
+  const [pubForm, setPubForm] = useState({ platform_id: '', platform_type: '', link: '', budget: '', spent: '', status: 'draft', published_at: '' });
   const [expenseForm, setExpenseForm] = useState({ category: '', amount: '', description: '', incurred_at: '' });
   const [financeForm, setFinanceForm] = useState({ fipe_value: '', commission: '', return_to_seller: '' });
   const [newPlatformName, setNewPlatformName] = useState('');
@@ -49,20 +47,23 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
   const [newChecklistLabel, setNewChecklistLabel] = useState('');
   const [newChecklistNotes, setNewChecklistNotes] = useState('');
 
-  // drag state (uses id for robustness)
   const [draggingId, setDraggingId] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
 
-  // FILTROS LOCAIS (marca + pesquisa)
   const [searchTerm, setSearchTerm] = useState('');
   const [brandFilter, setBrandFilter] = useState('');
 
   useEffect(() => {
     (async () => {
-      const p = await getPlatforms();
-      setPlatforms(p || []);
+      try {
+        const p = externalPlatforms && externalPlatforms.length ? externalPlatforms : await getPlatforms();
+        setPlatforms(p || []);
+      } catch (err) {
+        console.error('Erro carregar platforms:', err);
+        setPlatforms([]);
+      }
     })();
-  }, []);
+  }, [externalPlatforms]);
 
   useEffect(() => {
     const carIds = (Array.isArray(cars) ? cars.map(c => c.id) : []).filter(Boolean);
@@ -104,17 +105,22 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
     return () => { mounted = false; };
   }, [cars]);
 
-  const openFor = async (car) => {
-    setSelectedCar(car);
-    setOpen(true);
-    setTab('checklist');
-    await fetchAll(car.id);
-    setFinanceForm({
-      fipe_value: car.fipe_value ?? '',
-      commission: car.commission ?? '',
-      return_to_seller: car.return_to_seller ?? ''
-    });
-  };
+  // If parent requests opening for a given car, open modal and fetch
+  useEffect(() => {
+    if (openCar && openCar.id) {
+      setSelectedCar(openCar);
+      setOpen(true);
+      setTab('checklist');
+      fetchAll(openCar.id);
+      setFinanceForm({
+        fipe_value: openCar.fipe_value ?? '',
+        commission: openCar.commission ?? '',
+        return_to_seller: openCar.return_to_seller ?? ''
+      });
+      // notify parent handled
+      onOpenHandled();
+    }
+  }, [openCar]); // eslint-disable-line
 
   const fetchAll = async (carId) => {
     if (!carId) return;
@@ -125,7 +131,6 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
         getExpensesByCar(carId)
       ]);
 
-      // ensure order by ord if present
       const orderedChecklist = (cl || []).slice().sort((a, b) => {
         const ai = typeof a.ord === 'number' ? a.ord : 0;
         const bi = typeof b.ord === 'number' ? b.ord : 0;
@@ -143,7 +148,6 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
     }
   };
 
-  // checklist toggle
   const toggleChecklist = async (item) => {
     try {
       const patched = { checked: !item.checked, updated_at: new Date().toISOString() };
@@ -196,37 +200,21 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
     }
   };
 
-  // --- Drag & Drop (robusto: usa id e placeholders) ---
-
   const handleDragStart = (e, itemId) => {
     setDraggingId(itemId);
-    try { e.dataTransfer.setData('text/plain', String(itemId)); } catch (err) { /* ignore */ }
+    try { e.dataTransfer.setData('text/plain', String(itemId)); } catch (err) {}
     e.dataTransfer.effectAllowed = 'move';
   };
-
-  const handleDragEnterPlaceholder = (e, index) => {
-    e.preventDefault();
-    setDragOverIndex(index);
-  };
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-  };
-
-  const handleDragEnd = () => {
-    setDraggingId(null);
-    setDragOverIndex(null);
-  };
+  const handleDragEnterPlaceholder = (e, index) => { e.preventDefault(); setDragOverIndex(index); };
+  const handleDragOver = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; };
+  const handleDragEnd = () => { setDraggingId(null); setDragOverIndex(null); };
 
   const saveChecklistOrder = async (newList) => {
     try {
-      await Promise.all(
-        newList.map((it, idx) => {
-          if (!it || !it.id) return Promise.resolve(null);
-          return updateChecklistItem(it.id, { ord: idx });
-        })
-      );
+      await Promise.all(newList.map((it, idx) => {
+        if (!it || !it.id) return Promise.resolve(null);
+        return updateChecklistItem(it.id, { ord: idx });
+      }));
       toast({ title: 'Ordem do checklist salva' });
     } catch (err) {
       console.error('Erro ao salvar ordem do checklist:', err);
@@ -237,52 +225,23 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
   const handleDropOnPlaceholder = async (e, placeholderIndex) => {
     e.preventDefault();
     const draggedId = e.dataTransfer.getData('text/plain') || draggingId;
-    if (!draggedId) {
-      handleDragEnd();
-      return;
-    }
-
-    // find fresh indexes by id (in case list changed)
+    if (!draggedId) { handleDragEnd(); return; }
     const currentIndex = checklist.findIndex(it => String(it.id) === String(draggedId));
-    if (currentIndex === -1) {
-      handleDragEnd();
-      return;
-    }
-
-    // Build new list and insert at placeholderIndex (0..N)
+    if (currentIndex === -1) { handleDragEnd(); return; }
     const working = Array.from(checklist);
     const [moved] = working.splice(currentIndex, 1);
-
-    // If dragging from above to lower position, removing earlier shifts target left
     let insertIndex = placeholderIndex;
-    if (currentIndex < placeholderIndex) {
-      insertIndex = placeholderIndex - 1;
-    }
+    if (currentIndex < placeholderIndex) { insertIndex = placeholderIndex - 1; }
     if (insertIndex < 0) insertIndex = 0;
     if (insertIndex > working.length) insertIndex = working.length;
-
-    // if no change, just reset
-    if (insertIndex === currentIndex) {
-      handleDragEnd();
-      return;
-    }
-
+    if (insertIndex === currentIndex) { handleDragEnd(); return; }
     working.splice(insertIndex, 0, moved);
-
-    // immediate UI update
     setChecklist(working);
     handleDragEnd();
-
-    // persist order
     await saveChecklistOrder(working);
-
-    // ensure server-state consistent
-    if (selectedCar) {
-      await fetchAll(selectedCar.id);
-    }
+    if (selectedCar) { await fetchAll(selectedCar.id); }
   };
 
-  // cria checklist padrão (itens default) PARA O VEÍCULO aberto
   const createDefaultChecklist = async () => {
     if (!selectedCar) return;
     try {
@@ -304,7 +263,6 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
     }
   };
 
-  // SALVAR checklist atual como TEMPLATE GLOBAL (usando Supabase diretamente)
   const saveChecklistAsTemplate = async (templateName = 'Padrão') => {
     try {
       if (!checklist || checklist.length === 0) {
@@ -318,7 +276,6 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
         ord: idx
       }));
 
-      // insere novo template
       const { data, error } = await supabase
         .from('checklist_templates')
         .insert([{ name: templateName, items: itemsPayload }])
@@ -333,7 +290,6 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
     }
   };
 
-  // Aplicar template existente ao veículo aberto (buscar latest)
   const applyLatestTemplateToVehicle = async () => {
     if (!selectedCar) return;
     try {
@@ -344,53 +300,34 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
         .limit(1);
 
       if (error) throw error;
-      if (!tplData || tplData.length === 0) {
-        toast({ title: 'Nenhum template disponível', variant: 'destructive' });
-        return;
-      }
-
+      if (!tplData || tplData.length === 0) { toast({ title: 'Nenhum template disponível', variant: 'destructive' }); return; }
       const items = tplData[0].items || [];
-      if (items.length === 0) {
-        toast({ title: 'Template sem itens', variant: 'destructive' });
-        return;
-      }
+      if (items.length === 0) { toast({ title: 'Template sem itens', variant: 'destructive' }); return; }
 
-      // criar itens para o veículo
       const created = [];
       for (const it of items) {
-        const payload = {
-          car_id: selectedCar.id,
-          label: it.label,
-          notes: it.notes || '',
-          checked: false,
-          item_key: it.item_key || genItemKey()
-        };
+        const payload = { car_id: selectedCar.id, label: it.label, notes: it.notes || '', checked: false, item_key: it.item_key || genItemKey() };
         const { data } = await addChecklistItem(payload);
         if (data) created.push(data);
       }
-
-      if (created.length > 0) {
-        await fetchAll(selectedCar.id);
-        toast({ title: 'Template aplicado ao veículo' });
-      } else {
-        toast({ title: 'Erro ao aplicar template', variant: 'destructive' });
-      }
+      if (created.length > 0) { await fetchAll(selectedCar.id); toast({ title: 'Template aplicado ao veículo' }); }
+      else { toast({ title: 'Erro ao aplicar template', variant: 'destructive' }); }
     } catch (err) {
       console.error('Erro aplicar template:', err);
       toast({ title: 'Erro ao aplicar template', description: err.message || String(err), variant: 'destructive' });
     }
   };
 
-  // PUBLICAÇÕES / ANÚNCIOS
+  // PUBLICAÇÕES
   const submitPublication = async () => {
     if (!selectedCar) return;
     try {
       const platform = platforms.find(p => String(p.id) === String(pubForm.platform_id));
-      const titleFromPlatform = platform ? platform.name : '(Plataforma)';
       const payload = {
         car_id: selectedCar.id,
         platform_id: pubForm.platform_id || null,
-        title: titleFromPlatform,
+        platform_name: platform ? platform.name : pubForm.platform_name || null,
+        platform_type: platform ? platform.platform_type : pubForm.platform_type || null,
         link: pubForm.link,
         status: pubForm.status,
         budget: pubForm.budget ? parseFloat(pubForm.budget) : null,
@@ -401,13 +338,14 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
       const { data } = await addPublication(payload);
       if (data) {
         setPublications(prev => [data, ...prev]);
-        setPubForm({ platform_id: '', link: '', budget: '', spent: '', status: 'draft', published_at: '' });
-        toast({ title: 'Anúncio adicionado' });
+        setPubForm({ platform_id: '', platform_type: '', link: '', budget: '', spent: '', status: 'draft', published_at: '' });
+        toast({ title: 'Publicação adicionada' });
       }
       await fetchAll(selectedCar.id);
+      if (refreshAll) refreshAll();
     } catch (err) {
       console.error(err);
-      toast({ title: 'Erro ao salvar anúncio', description: err.message || String(err), variant: 'destructive' });
+      toast({ title: 'Erro ao salvar publicação', description: err.message || String(err), variant: 'destructive' });
     }
   };
 
@@ -415,10 +353,11 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
     try {
       await deletePublication(id);
       setPublications(prev => prev.filter(p => p.id !== id));
-      toast({ title: 'Anúncio removido' });
+      toast({ title: 'Publicação removida' });
       await fetchAll(selectedCar.id);
+      if (refreshAll) refreshAll();
     } catch (err) {
-      toast({ title: 'Erro ao remover anúncio', description: err.message || String(err), variant: 'destructive' });
+      toast({ title: 'Erro ao remover publicação', description: err.message || String(err), variant: 'destructive' });
     }
   };
 
@@ -440,6 +379,7 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
         toast({ title: 'Gasto registrado' });
       }
       await fetchAll(selectedCar.id);
+      if (refreshAll) refreshAll();
     } catch (err) {
       toast({ title: 'Erro ao salvar gasto', description: err.message || String(err), variant: 'destructive' });
     }
@@ -451,12 +391,12 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
       setExpenses(prev => prev.filter(e => e.id !== id));
       toast({ title: 'Gasto removido' });
       await fetchAll(selectedCar.id);
+      if (refreshAll) refreshAll();
     } catch (err) {
       toast({ title: 'Erro ao remover gasto', description: err.message || String(err), variant: 'destructive' });
     }
   };
 
-  // plataforma
   const handleAddPlatform = async () => {
     if (!newPlatformName || newPlatformName.trim().length < 2) return;
     try {
@@ -471,7 +411,6 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
     }
   };
 
-  // FINANCEIRO
   const computeProfitForSelected = () => {
     if (!selectedCar) return 0;
     const summary = summaryMap[selectedCar.id] || { adSpendTotal: 0, extraExpensesTotal: 0 };
@@ -519,12 +458,8 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
 
   const getSummary = (carId) => summaryMap[carId] || { pubCount: 0, adSpendTotal: 0, extraExpensesTotal: 0 };
 
-  // filtros locais: marcas disponíveis (a partir dos cars props)
-  const brandOptions = useMemo(() => {
-    const brands = Array.from(new Set((cars || []).map(c => (c.brand || '').trim()).filter(Boolean)));
-    brands.sort((a,b) => a.localeCompare(b, 'pt-BR'));
-    return brands;
-  }, [cars]);
+  const marketplacePlatforms = (platforms || []).filter(p => p.platform_type === 'marketplace');
+  const socialPlatforms = (platforms || []).filter(p => p.platform_type === 'social');
 
   const filteredCars = useMemo(() => {
     const term = (searchTerm || '').trim().toLowerCase();
@@ -541,12 +476,11 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
     <div>
       <h2 className="text-2xl font-semibold mb-4">Gestão de Veículos</h2>
 
-      {/* FILTROS LOCAIS */}
       <div className="mb-4 flex flex-col md:flex-row gap-2 items-center">
         <input placeholder="Pesquisar marca ou modelo..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full md:w-1/2 p-2 border rounded" />
         <select value={brandFilter || 'ALL'} onChange={(e) => setBrandFilter(e.target.value === 'ALL' ? '' : e.target.value)} className="w-full md:w-1/4 p-2 border rounded">
           <option value="ALL">Todas as marcas</option>
-          {brandOptions.map(b => <option key={b} value={b}>{b}</option>)}
+          {Array.from(new Set((cars || []).map(c => (c.brand || '').trim()).filter(Boolean))).map(b => <option key={b} value={b}>{b}</option>)}
         </select>
         <div className="ml-auto">
           <Button variant="ghost" size="sm" onClick={() => { setSearchTerm(''); setBrandFilter(''); }}>Limpar</Button>
@@ -618,7 +552,7 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
 
               <div className="flex flex-col items-end gap-2">
                 <div className="flex gap-2">
-                  <Button size="sm" variant="outline" onClick={() => openFor(car)}>Gerenciar</Button>
+                  <Button size="sm" variant="outline" onClick={() => { setSelectedCar(car); setOpen(true); setTab('checklist'); fetchAll(car.id); }}>Gerenciar</Button>
                 </div>
                 <div className="text-xs text-gray-500">Última atualização: {car.updated_at ? new Date(car.updated_at).toLocaleDateString() : '-'}</div>
               </div>
@@ -627,18 +561,18 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
         })}
       </div>
 
-      {/* Modal */}
       <Dialog open={open} onOpenChange={(o) => { if (!o) { setSelectedCar(null); } setOpen(o); }}>
         <DialogContent className="max-w-4xl">
           <DialogHeader>
             <DialogTitle>Gestão - {selectedCar ? `${selectedCar.brand} ${selectedCar.model}` : ''}</DialogTitle>
-            <DialogDescription>Checklist, anúncios, gastos e financeiro por veículo</DialogDescription>
+            <DialogDescription>Checklist, publicações, gastos e financeiro por veículo</DialogDescription>
           </DialogHeader>
 
           <div className="mt-4">
             <div className="flex gap-2 mb-4">
               <button onClick={() => setTab('checklist')} className={`px-3 py-1 rounded ${tab === 'checklist' ? 'bg-yellow-400 text-black' : 'bg-gray-100'}`}>Checklist</button>
-              <button onClick={() => setTab('publications')} className={`px-3 py-1 rounded ${tab === 'publications' ? 'bg-yellow-400 text-black' : 'bg-gray-100'}`}>Anúncios</button>
+              <button onClick={() => setTab('publications_market')} className={`px-3 py-1 rounded ${tab === 'publications_market' ? 'bg-yellow-400 text-black' : 'bg-gray-100'}`}>Anúncios (Marketplaces)</button>
+              <button onClick={() => setTab('publications_social')} className={`px-3 py-1 rounded ${tab === 'publications_social' ? 'bg-yellow-400 text-black' : 'bg-gray-100'}`}>Redes Sociais</button>
               <button onClick={() => setTab('expenses')} className={`px-3 py-1 rounded ${tab === 'expenses' ? 'bg-yellow-400 text-black' : 'bg-gray-100'}`}>Gastos</button>
               <button onClick={() => setTab('finance')} className={`px-3 py-1 rounded ${tab === 'finance' ? 'bg-yellow-400 text-black' : 'bg-gray-100'}`}>Financeiro</button>
             </div>
@@ -655,25 +589,10 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
                 </div>
 
                 <div className="space-y-2">
-                  {/* placeholder before each item (rendered dynamically) */}
                   {checklist.map((item, idx) => (
-                    <React.Fragment key={item.id}>
-                      {/* Placeholder drop zone before item */}
-                      <div
-                        onDragEnter={(e) => handleDragEnterPlaceholder(e, idx)}
-                        onDragOver={handleDragOver}
-                        onDrop={(e) => handleDropOnPlaceholder(e, idx)}
-                        className={dragOverIndex === idx ? "h-10 rounded-md border-2 border-dashed border-yellow-400 bg-yellow-50 transition-all" : "h-2"}
-                      />
-
-                      <div
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, item.id)}
-                        onDragEnd={handleDragEnd}
-                        className={`flex items-center justify-between bg-white p-3 border rounded mb-2 shadow-sm transition-transform duration-150
-                          ${draggingId === item.id ? 'opacity-70 scale-98 border-yellow-200' : 'hover:shadow-md'}`}
-                        style={{ cursor: 'grab', userSelect: 'none' }}
-                      >
+                    <React.Fragment key={item.id || `${idx}`}>
+                      <div onDragEnter={(e) => handleDragEnterPlaceholder(e, idx)} onDragOver={handleDragOver} onDrop={(e) => handleDropOnPlaceholder(e, idx)} className={dragOverIndex === idx ? "h-10 rounded-md border-2 border-dashed border-yellow-400 bg-yellow-50 transition-all" : "h-2"} />
+                      <div draggable onDragStart={(e) => handleDragStart(e, item.id)} onDragEnd={handleDragEnd} className={`flex items-center justify-between bg-white p-3 border rounded mb-2 shadow-sm transition-transform duration-150 ${draggingId === item.id ? 'opacity-70 scale-98 border-yellow-200' : 'hover:shadow-md'}`} style={{ cursor: 'grab', userSelect: 'none' }}>
                         <div className="flex items-center gap-3">
                           <input type="checkbox" checked={!!item.checked} onChange={() => toggleChecklist(item)} />
                           <div>
@@ -689,15 +608,8 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
                     </React.Fragment>
                   ))}
 
-                  {/* placeholder at the end */}
-                  <div
-                    onDragEnter={(e) => handleDragEnterPlaceholder(e, checklist.length)}
-                    onDragOver={handleDragOver}
-                    onDrop={(e) => handleDropOnPlaceholder(e, checklist.length)}
-                    className={dragOverIndex === checklist.length ? "h-10 rounded-md border-2 border-dashed border-yellow-400 bg-yellow-50 transition-all" : "h-2"}
-                  />
+                  <div onDragEnter={(e) => handleDragEnterPlaceholder(e, checklist.length)} onDragOver={handleDragOver} onDrop={(e) => handleDropOnPlaceholder(e, checklist.length)} className={dragOverIndex === checklist.length ? "h-10 rounded-md border-2 border-dashed border-yellow-400 bg-yellow-50 transition-all" : "h-2"} />
 
-                  {/* add new */}
                   <div className="bg-gray-50 p-3 border rounded">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                       <input placeholder="Novo item" value={newChecklistLabel} onChange={(e) => setNewChecklistLabel(e.target.value)} className="p-2 border rounded col-span-2" />
@@ -711,13 +623,13 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
               </div>
             )}
 
-            {tab === 'publications' && (
+            {tab === 'publications_market' && (
               <div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                   <div className="space-y-2">
                     <select value={pubForm.platform_id} onChange={(e) => setPubForm(f => ({ ...f, platform_id: e.target.value }))} className="w-full p-2 border rounded">
-                      <option value="">Plataforma</option>
-                      {platforms.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      <option value="">Plataforma (Marketplaces)</option>
+                      {marketplacePlatforms.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                     </select>
                     <div className="flex gap-2">
                       <input placeholder="Orçamento" type="number" value={pubForm.budget} onChange={(e) => setPubForm(f => ({ ...f, budget: e.target.value }))} className="w-1/2 p-2 border rounded" />
@@ -742,12 +654,51 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
                     </div>
 
                     <div className="space-y-2 max-h-64 overflow-auto">
-                      {publications.map(pub => (
+                      {publications.filter(p => (p.platform_type === 'marketplace' || (p.platform_id && marketplacePlatforms.find(mp => String(mp.id) === String(p.platform_id))))).map(pub => (
                         <div key={pub.id} className="bg-white p-3 border rounded flex items-center justify-between">
                           <div>
-                            <div className="font-medium">{pub.title || '(sem título)'}</div>
+                            <div className="font-medium">{pub.platform_name || '(sem título)'}</div>
                             <div className="text-xs text-gray-500">{pub.link ? <a className="text-blue-600" href={pub.link} target="_blank" rel="noreferrer">Ver anúncio</a> : 'Sem link'}</div>
                             <div className="text-xs text-gray-500">{pub.status} • {pub.published_at ? new Date(pub.published_at).toLocaleDateString() : ''} • Gasto: {Money({ value: pub.spent })}</div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => removePublication(pub.id)} className="text-red-600"><Trash2 /></button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {tab === 'publications_social' && (
+              <div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                  <div className="space-y-2">
+                    <select value={pubForm.platform_id} onChange={(e) => setPubForm(f => ({ ...f, platform_id: e.target.value }))} className="w-full p-2 border rounded">
+                      <option value="">Plataforma (Redes Sociais)</option>
+                      {socialPlatforms.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                    <input placeholder="Link (post / reel / video)" value={pubForm.link} onChange={(e) => setPubForm(f => ({ ...f, link: e.target.value }))} className="w-full p-2 border rounded" />
+                    <input placeholder="Observações" value={pubForm.notes} onChange={(e) => setPubForm(f => ({ ...f, notes: e.target.value }))} className="w-full p-2 border rounded" />
+                    <div className="flex gap-2 items-center">
+                      <select value={pubForm.status} onChange={(e) => setPubForm(f => ({ ...f, status: e.target.value }))} className="p-2 border rounded">
+                        <option value="draft">Rascunho</option>
+                        <option value="active">Publicado</option>
+                      </select>
+                      <Button size="sm" onClick={submitPublication}>Salvar publicação</Button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="space-y-2 max-h-64 overflow-auto">
+                      {publications.filter(p => (p.platform_type === 'social' || (p.link && (p.link.includes('instagram') || p.link.includes('youtube') || p.link.includes('tiktok'))))).map(pub => (
+                        <div key={pub.id} className="bg-white p-3 border rounded flex items-center justify-between">
+                          <div>
+                            <div className="font-medium">{pub.platform_name || '(sem título)'}</div>
+                            <div className="text-xs text-gray-500">{pub.link ? <a className="text-blue-600" href={pub.link} target="_blank" rel="noreferrer">Ver post</a> : 'Sem link'}</div>
+                            <div className="text-xs text-gray-500">{pub.status} • {pub.published_at ? new Date(pub.published_at).toLocaleDateString() : ''}</div>
                           </div>
                           <div className="flex items-center gap-2">
                             <button onClick={() => removePublication(pub.id)} className="text-red-600"><Trash2 /></button>

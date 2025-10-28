@@ -8,7 +8,7 @@ import { getFeaturedCars, getTestimonials } from '@/lib/car-api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import ReactMarkdown from 'react-markdown';
 import BackgroundShape from '@/components/BackgroundShape';
-import heroBackground from '@/assets/ponte.jpg'; // já apontando para a ponte (alta-res)
+import heroBackground from '@/assets/ponte.jpg';
 
 const Home = () => {
   const [featuredCars, setFeaturedCars] = useState([]);
@@ -49,7 +49,8 @@ const Home = () => {
         {/* HERO */}
         <section
           className="relative flex items-center justify-center text-left text-white overflow-hidden"
-          style={{ height: 'clamp(360px, 75vh, 680px)' }} // <- ajuste para acompanhar zoom
+          // Agora a altura acompanha vh E vw (proporcional no zoom mínimo), com limites
+          style={{ height: 'clamp(360px, min(65vh, 45vw), 560px)' }}
         >
           <div className="absolute inset-0 z-0">
             <img
@@ -67,7 +68,8 @@ const Home = () => {
             transition={{ duration: 0.8 }}
             className="relative z-10 w-full px-6 sm:px-8 lg:px-12"
           >
-            <div className="mx-auto max-w-8xl flex items-center justify-between h-full">
+            {/* Alinhado com o restante do site: max-w-7xl */}
+            <div className="mx-auto max-w-7xl flex items-center justify-between h-full">
               <div className="w-full md:w-5/12 flex flex-col justify-center py-12 pl-6 md:pl-12 lg:pl-20">
                 <div
                   className="rounded-2xl p-6 md:p-8"
@@ -163,14 +165,12 @@ const Home = () => {
                         alt={`${car.brand} ${car.model}`}
                         className="w-full h-44 object-cover"
                       />
-                      {/* fuel badge - top left */}
                       {car.fuel && (
                         <div className="absolute top-3 left-3 bg-black/60 text-white text-xs font-bold py-1 px-3 rounded-full flex items-center gap-1.5">
                           <Droplet size={12} />
                           <span className="leading-none">{car.fuel}</span>
                         </div>
                       )}
-                      {/* blindado badge - top right */}
                       {(car.is_blindado || car.isBlindado || car.blindado) && (
                         <div className="absolute top-3 right-3 bg-yellow-400 text-black text-xs font-bold py-1 px-3 rounded-full">
                           BLINDADO

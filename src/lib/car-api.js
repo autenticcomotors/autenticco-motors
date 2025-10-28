@@ -43,7 +43,8 @@ export const getCarBySlug = async (slug) => {
 export const addCar = async (carData) => {
   const carName = `${carData.brand} ${carData.model}`;
   const slug = `${(carData.brand || '').toLowerCase().replace(/ /g, '-')}-${(carData.model || '').toLowerCase().replace(/ /g, '-')}-${Date.now()}`;
-  const payload = { ...carData, name: carName, slug, is_available: true };
+  // garantir booleano para is_blindado
+  const payload = { ...carData, name: carName, slug, is_available: true, is_blindado: !!carData.is_blindado };
   const { data, error } = await supabase
     .from('cars')
     .insert([payload])
@@ -54,9 +55,12 @@ export const addCar = async (carData) => {
 };
 
 export const updateCar = async (id, carData) => {
+  // coercionar is_blindado caso venha como string
+  const patch = { ...carData };
+  if ('is_blindado' in patch) patch.is_blindado = !!patch.is_blindado;
   const { data, error } = await supabase
     .from('cars')
-    .update(carData)
+    .update(patch)
     .eq('id', id)
     .select()
     .single();
@@ -397,6 +401,7 @@ export const deletePublication = async (id) => {
 */
 
 export const getExpensesByCar = async (carId) => {
+  if (!carId) return [];
   const { data, error } = await supabase
     .from('vehicle_expenses')
     .select('*')
@@ -480,32 +485,6 @@ export const deleteChecklistItem = async (id) => {
     .eq('id', id);
   if (error) console.error('Erro ao deletar item checklist:', error);
   return { data, error };
-};
-
-/*
-  -----------------------------
-  FUNÇÕES UTILITÁRIAS: BUSCAS EM BULK (para resumo na listagem)
-  -----------------------------
-*/
-
-export const getPublicationsForCars = async (carIds = []) => {
-  if (!Array.isArray(carIds) || carIds.length === 0) return [];
-  const { data, error } = await supabase
-    .from('vehicle_publications')
-    .select('*')
-    .in('car_id', carIds);
-  if (error) console.error('Erro ao buscar publicações (bulk):', error);
-  return data || [];
-};
-
-export const getExpensesForCars = async (carIds = []) => {
-  if (!Array.isArray(carIds) || carIds.length === 0) return [];
-  const { data, error } = await supabase
-    .from('vehicle_expenses')
-    .select('*')
-    .in('car_id', carIds);
-  if (error) console.error('Erro ao buscar gastos (bulk):', error);
-  return data || [];
 };
 
 /*

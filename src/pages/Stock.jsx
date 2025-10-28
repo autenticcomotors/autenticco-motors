@@ -229,10 +229,19 @@ const Stock = () => {
                         >
                             <div className="relative">
                                 <img src={car.main_photo_url || 'https://placehold.co/400x300/e2e8f0/4a5568?text=Sem+Foto'} alt={`${car.brand} ${car.model}`} className={`w-full h-56 object-cover ${car.is_available === false ? 'filter grayscale contrast-90' : ''}`} />
+                                {/* badge combustivel (direita) */}
                                 <div className="absolute top-4 right-4 bg-black/50 text-white text-xs font-bold py-1 px-3 rounded-full flex items-center gap-1.5">
                                     <Droplet size={12} />
                                     <span>{car.fuel}</span>
                                 </div>
+
+                                {/* badge BLINDADO (quando aplicavel) - posicionado à esquerda da badge de combustível */}
+                                {car.is_blindado && (
+                                  <div className="absolute top-4 right-20 bg-yellow-400 text-black text-xs font-bold py-1 px-3 rounded-full flex items-center gap-1.5">
+                                    <span>BLINDADO</span>
+                                  </div>
+                                )}
+
                                 {car.is_available === false && (
                                     <div className="absolute top-4 left-4 bg-red-600 text-white text-xs font-bold py-1 px-3 rounded-full">VENDIDO</div>
                                 )}

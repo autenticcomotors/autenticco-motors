@@ -32,9 +32,8 @@ const Home = () => {
 
   const TEXT_LIMIT = 20;
 
-  // ajuste da porcentagem de padding-top controla a "altura" responsiva do hero
-  // 40% = altura ~40% da largura; ajuste se quiser hero mais alto/baixo
-  const HERO_ASPECT_PADDING = '40%';
+  // proporção do hero (ajuste se quiser mais alto/baixo)
+  const HERO_ASPECT_PADDING = '40%'; // 40% dá um hero largo; aumente para 50% se quiser mais alto
 
   return (
     <>
@@ -49,26 +48,24 @@ const Home = () => {
       <div className="bg-white">
         <BackgroundShape />
 
-        {/* HERO responsivo: container com padding-top para controlar proporção + img object-fit */}
-        <section className="relative text-left text-white overflow-hidden">
-          {/* wrapper que define a proporção responsiva */}
+        {/* HERO responsivo (usa div com background-image para evitar comportamento "estático") */}
+        <section className="hero-section relative text-left text-white overflow-hidden">
+          {/* wrapper que controla proporção responsiva */}
           <div style={{ width: '100%', paddingTop: HERO_ASPECT_PADDING, position: 'relative' }}>
-            {/* imagem absoluta cobrindo todo o espaço do wrapper */}
-            <img
-              src={heroBackground}
-              alt="Fundo hero"
+            {/* background como DIV (cover) */}
+            <div
+              className="hero-bg absolute inset-0"
               style={{
-                position: 'absolute',
-                inset: 0,
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover',
-                objectPosition: 'right center',
-                display: 'block',
+                backgroundImage: `url(${heroBackground})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'right center',
+                backgroundRepeat: 'no-repeat',
+                backgroundAttachment: 'scroll', // importante: não fixed
               }}
             />
+
             {/* overlay leve */}
-            <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.10)' }} />
+            <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.10)' }} />
 
             {/* conteúdo absoluto sobre a imagem (centro-esquerda) */}
             <motion.div
@@ -128,7 +125,7 @@ const Home = () => {
           </div>
         </section>
 
-        {/* Resto da página */}
+        {/* ========================= RESTANTE DA PÁGINA ========================= */}
         <section className="py-24 bg-white">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center">

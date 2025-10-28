@@ -21,7 +21,7 @@
     /* ... demais variáveis de cor ... */
   }
 }
-
+ 
 @layer base {
   * {
     @apply border-border;
@@ -99,51 +99,5 @@
     animation: none !important;
     transition: none !important;
   }
-}
-
-/* =========================
-   OVERRIDES / FIXES PARA HERO
-   ========================= */
-
-/* Força o background do hero a cobrir corretamente e garante responsividade */
-.hero-section {
-  /* evita que filtros/transformes do resto do site "quebrem" o fluxo do hero */
-  -webkit-transform: none !important;
-  transform: none !important;
-  will-change: auto !important;
-  backface-visibility: visible !important;
-}
-
-/* hero-bg é o elemento com background-image */
-.hero-bg {
-  width: 100%;
-  height: 100%;
-  display: block;
-  background-size: cover !important;
-  background-position: right center !important;
-  background-repeat: no-repeat !important;
-  background-attachment: scroll !important; /* NÃO fixed */
-  -webkit-transform: none !important;
-  transform: none !important;
-  will-change: auto !important;
-}
-
-/* Caso algum ancestor ainda aplique transform, este bloco reduz chance de "isolar" o hero */
-.hero-section, .hero-section * {
-  -webkit-transform: none !important;
-  transform: none !important;
-  will-change: auto !important;
-}
-
-/* Mobile: reduzir altura se necessário */
-@media (max-width: 768px) {
-  /* se quiser o hero mais alto em mobile, aumente o padding-top na Home.jsx */
-}
-
-/* Se quiser ajustar contraste do background facilmente */
-.hero-section .overlay-strong {
-  position: absolute;
-  inset: 0;
-  background: rgba(0,0,0,0.16);
 }
 

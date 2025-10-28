@@ -1,4 +1,3 @@
-// src/pages/Home.jsx
 import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet';
 import { motion } from 'framer-motion';
@@ -8,7 +7,7 @@ import { getFeaturedCars, getTestimonials } from '@/lib/car-api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import ReactMarkdown from 'react-markdown';
 import BackgroundShape from '@/components/BackgroundShape';
-import heroBackground from '@/assets/ponte.jpg';
+import heroBackground from '@/assets/ponte.jpg'; // já apontando para a ponte (alta-res)
 
 const Home = () => {
   const [featuredCars, setFeaturedCars] = useState([]);
@@ -17,25 +16,18 @@ const Home = () => {
 
   useEffect(() => {
     const loadData = async () => {
-      try {
-        const [cars, tests] = await Promise.all([getFeaturedCars(), getTestimonials()]);
-        setFeaturedCars(cars || []);
-        setTestimonials(tests || []);
-      } catch (err) {
-        // não quebrar a página se uma das chamadas falhar
-        setFeaturedCars([]);
-        setTestimonials([]);
-        // opcional: console.error(err);
-      }
+      const [cars, tests] = await Promise.all([getFeaturedCars(), getTestimonials()]);
+      setFeaturedCars(cars || []);
+      setTestimonials(tests || []);
     };
     loadData();
   }, []);
 
   const timelineSteps = [
-    { num: 1, title: 'Você envia as informações do seu carro', description: 'Realizamos um estudo de mercado e sugerimos um valor de venda ideal para o anúncio.' },
-    { num: 2, title: 'Iremos até você tirar as fotos e vídeos do carro', description: 'Anunciamos seu carro em diversas plataformas automotivas e redes sociais, alcançando um público amplo e diversificado.' },
-    { num: 3, title: 'Agendamos e acompanhamos as visitas', description: 'Acompanhamos as visitas de todos os potenciais compradores, garantindo segurança e transparência na negociação.' },
-    { num: 4, title: 'Auxiliamos na documentação e pronto, seu carro está vendido', description: 'Cuidamos de todo o processo de documentação e pagamento garantindo que tudo seja simples e claro para você e o comprador.' },
+    { num: 1, title: 'Vocẽ envia as informações do seu carro', description: 'Realizamos um estudo de mercado e sugerimos um valor de venda ideal para o anúncio.' },
+    { num: 2, title: 'Iremos até você tirar as fotos e videos do carro', description: 'Anunciamos seu carro em diversas plataformas automiotivas e redes sociais, alcançando um publico amplo e diversificado.' },
+    { num: 3, title: 'Agendamos e acompanhamos as visitas', description: 'Agendamos e acompanhamos as visitas de todos os potencias compradores, garantindo segurança e transparencia na negociação.' },
+    { num: 4, title: 'Auxiliamos na documentação e pronto, seu carro está vendido', description: 'Cuidamos de todo o processo de documentação e pagamento garantindo que tudo seja simples e claro para vocẽ e o comprador.' },
   ];
 
   const TEXT_LIMIT = 20;
@@ -53,84 +45,92 @@ const Home = () => {
       <div className="bg-white">
         <BackgroundShape />
 
-        {/* HERO: imagem como elemento de fluxo (img) que escala com zoom e responsividade */}
-        <section className="relative text-left text-white overflow-hidden">
-          <div className="relative w-full">
-            {/* imagem em fluxo: width 100% e height auto => altura do container segue a imagem */}
+        {/* HERO: imagem via <img> (acompanha zoom) + card */}
+        <section
+          className="relative flex items-center justify-center text-left text-white overflow-hidden"
+          style={{ height: '75vh' }}
+        >
+          {/* imagem como elemento normal para acompanhar zoom do navegador */}
+          <div className="absolute inset-0 z-0">
             <img
               src={heroBackground}
-              alt="AutenTicco Motors - destaque"
-              className="w-full block hero-image"
-              style={{ width: '100%', height: 'auto', objectFit: 'cover', objectPosition: 'right center', display: 'block' }}
+              alt="Fundo hero"
+              className="w-full h-full object-cover"
+              style={{ display: 'block' }}
             />
+            {/* overlay leve: pouca opacidade (imagem quase visível) */}
+            <div className="absolute inset-0 bg-black/10" />
+          </div>
 
-            {/* overlay leve sobre a imagem */}
-            <div className="absolute inset-0 pointer-events-none" style={{ background: 'rgba(0,0,0,0.10)' }} />
+          {/* conteúdo */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+            className="relative z-10 w-full px-6 sm:px-8 lg:px-12"
+          >
+            <div className="mx-auto max-w-8xl flex items-center justify-between h-full">
+              {/* bloco esquerdo (ocupa ~40-45% para evitar sobrepor o carro) */}
+              <div className="w-full md:w-5/12 flex flex-col justify-center py-12 pl-6 md:pl-12 lg:pl-20">
+                {/* card quadrado/compacto */}
+                <div
+                  className="rounded-2xl p-6 md:p-8"
+                  style={{
+                    background: 'linear-gradient(rgba(3,3,3,0.48), rgba(3,3,3,0.44))',
+                    backdropFilter: 'saturate(120%) blur(2px)',
+                    border: '1px solid rgba(255,255,255,0.04)',
+                    boxShadow: '0 12px 40px rgba(0,0,0,0.45)',
+                    maxWidth: '520px',
+                    width: '100%',
+                  }}
+                >
+                  {/* título com sombra leve para melhor leitura */}
+                  <h2
+                    className="text-3xl md:text-4xl lg:text-4xl font-extrabold leading-tight"
+                    style={{ color: '#fff', textShadow: '0 6px 18px rgba(0,0,0,0.45)' }}
+                  >
+                    <span className="block">Venda com segurança.</span>
+                    <span className="block" style={{ color: '#F7C93C' }}>Compre com confiança.</span>
+                  </h2>
 
-            {/* conteúdo posicionado sobre a imagem.
-                Usa 'absolute inset-0' para ocupar exatamente a área da imagem (que define a altura do wrapper). */}
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8 }}
-              style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center' }}
-            >
-              <div className="w-full px-6 sm:px-8 lg:px-12">
-                <div className="mx-auto max-w-8xl flex items-center justify-between h-full">
-                  {/* bloco esquerdo: em mobile ocupa quase toda a largura; em desktop ocupa ~5/12 */}
-                  <div className="w-full md:w-5/12 flex flex-col justify-center py-10 md:py-12 pl-4 md:pl-12 lg:pl-20">
-                    <div
-                      className="rounded-2xl p-6 md:p-8"
-                      style={{
-                        background: 'linear-gradient(rgba(3,3,3,0.55), rgba(3,3,3,0.46))',
-                        backdropFilter: 'saturate(120%) blur(4px)',
-                        border: '1px solid rgba(255,255,255,0.04)',
-                        boxShadow: '0 12px 40px rgba(0,0,0,0.45)',
-                        maxWidth: '540px',
-                        width: '100%',
-                      }}
+                  <p className="mt-4 text-sm md:text-base text-gray-200 max-w-2xl">
+                    Assessoria completa, negociação transparente e garantia de melhor valor.
+                  </p>
+
+                  {/* botões: primeiro amarelo, segundo preto com borda amarela */}
+                  <div className="mt-6 flex flex-col sm:flex-row gap-4">
+                    <Link
+                      to="/estoque"
+                      className="inline-block bg-yellow-400 text-black px-6 py-3 rounded-xl text-lg font-semibold shadow-2xl transform transition-all duration-200 hover:-translate-y-1"
                     >
-                      <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-4xl font-extrabold leading-tight" style={{ color: '#fff', textShadow: '0 6px 18px rgba(0,0,0,0.45)' }}>
-                        <span className="block">Venda com segurança.</span>
-                        <span className="block" style={{ color: '#F7C93C' }}>Compre com confiança.</span>
-                      </h1>
+                      Quero Comprar
+                    </Link>
 
-                      <p className="mt-3 text-sm sm:text-base text-gray-200 max-w-2xl">
-                        Assessoria completa, negociação transparente e garantia de melhor valor.
-                      </p>
-
-                      <div className="mt-5 sm:mt-6 flex flex-col sm:flex-row gap-3 sm:gap-4">
-                        <Link
-                          to="/estoque"
-                          className="inline-block bg-yellow-400 text-black px-5 py-3 rounded-xl text-base font-semibold shadow-2xl transform transition-all duration-200 hover:-translate-y-0.5"
-                        >
-                          Quero Comprar
-                        </Link>
-
-                        <Link
-                          to="/vender"
-                          className="inline-block bg-black text-yellow-400 px-5 py-3 rounded-xl text-base font-semibold shadow-md border-2 border-yellow-400 transition-all duration-200 hover:bg-yellow-400 hover:text-black"
-                        >
-                          Quero Vender
-                        </Link>
-                      </div>
-                    </div>
+                    <Link
+                      to="/vender"
+                      className="inline-block bg-black text-yellow-400 px-6 py-3 rounded-xl text-lg font-semibold shadow-md border-2 border-yellow-400 transition-all duration-200 hover:bg-yellow-400 hover:text-black"
+                    >
+                      Quero Vender
+                    </Link>
                   </div>
-
-                  {/* espaço direito (imagem visível) - escondido em telas pequenas */}
-                  <div className="hidden md:block md:w-7/12 h-full" />
                 </div>
               </div>
-            </motion.div>
-          </div>
+
+              {/* espaço direito maior (imagem ocupa o fundo) */}
+              <div className="hidden md:block md:w-7/12 h-full" />
+            </div>
+          </motion.div>
         </section>
 
         {/* ========================= RESTANTE DA PÁGINA ========================= */}
+
+        {/* <-- ALTERAÇÃO: deixar esta section BRANCA (antes era bg-gray-50) -->
+            Section "Quer vender seu carro ?" agora tem fundo branco para diferenciar */}
         <section className="py-24 bg-white">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center">
               <h2 className="text-3xl md:text-4xl font-extrabold text-gray-900">Quer vender seu carro ?</h2>
-              <p className="mt-4 text-lg text-gray-600">Venda seu carro sem sair de casa, com comodidade, transparência e segurança</p>
+              <p className="mt-4 text-lg text-gray-600">Venda seu carro sem sair de casa, com comodidade, transparencia e segurança</p>
             </div>
             <div className="mt-16 grid grid-cols-1 md:grid-cols-4 gap-8">
               {timelineSteps.map((step, index) => (
@@ -139,7 +139,7 @@ const Home = () => {
                   initial={{ opacity: 0, y: 30 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true, amount: 0.5 }}
-                  transition={{ duration: 0.5, delay: index * 0.08 }}
+                  transition={{ duration: 0.5, delay: index * 0.1 }}
                   className="text-center"
                 >
                   <div className="flex items-center justify-center w-16 h-16 bg-yellow-400 rounded-full mx-auto mb-4 ring-8 ring-white shadow-lg">
@@ -172,7 +172,9 @@ const Home = () => {
                       className="w-full h-48 object-cover"
                     />
                     <div className="p-4 flex flex-col flex-grow">
-                      <h3 className="text-lg font-bold text-gray-900">{car.brand} {car.model}</h3>
+                      <h3 className="text-lg font-bold text-gray-900">
+                        {car.brand} {car.model}
+                      </h3>
                       <p className="text-xl font-bold text-gray-800 my-2">
                         {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(car.price)}
                       </p>

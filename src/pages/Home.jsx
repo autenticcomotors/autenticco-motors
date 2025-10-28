@@ -1,4 +1,3 @@
-// src/pages/Home.jsx
 import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet';
 import { motion } from 'framer-motion';
@@ -8,7 +7,7 @@ import { getFeaturedCars, getTestimonials } from '@/lib/car-api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import ReactMarkdown from 'react-markdown';
 import BackgroundShape from '@/components/BackgroundShape';
-import heroBackground from '@/assets/ponte.jpg';
+import heroBackground from '@/assets/ponte.jpg'; // já apontando para a ponte (alta-res)
 
 const Home = () => {
   const [featuredCars, setFeaturedCars] = useState([]);
@@ -25,10 +24,10 @@ const Home = () => {
   }, []);
 
   const timelineSteps = [
-    { num: 1, title: 'Você envia as informações do seu carro', description: 'Realizamos um estudo de mercado e sugerimos um valor de venda ideal para o anúncio.' },
-    { num: 2, title: 'Iremos até você tirar as fotos e vídeos do carro', description: 'Anunciamos seu carro em diversas plataformas automotivas e redes sociais, alcançando um público amplo e diversificado.' },
-    { num: 3, title: 'Agendamos e acompanhamos as visitas', description: 'Agendamos e acompanhamos as visitas de todos os potenciais compradores, garantindo segurança e transparência na negociação.' },
-    { num: 4, title: 'Auxiliamos na documentação e pronto, seu carro está vendido', description: 'Cuidamos de todo o processo de documentação e pagamento garantindo que tudo seja simples e claro.' },
+    { num: 1, title: 'Vocẽ envia as informações do seu carro', description: 'Realizamos um estudo de mercado e sugerimos um valor de venda ideal para o anúncio.' },
+    { num: 2, title: 'Iremos até você tirar as fotos e videos do carro', description: 'Anunciamos seu carro em diversas plataformas automiotivas e redes sociais, alcançando um publico amplo e diversificado.' },
+    { num: 3, title: 'Agendamos e acompanhamos as visitas', description: 'Agendamos e acompanhamos as visitas de todos os potencias compradores, garantindo segurança e transparencia na negociação.' },
+    { num: 4, title: 'Auxiliamos na documentação e pronto, seu carro está vendido', description: 'Cuidamos de todo o processo de documentação e pagamento garantindo que tudo seja simples e claro para vocẽ e o comprador.' },
   ];
 
   const TEXT_LIMIT = 20;
@@ -43,85 +42,95 @@ const Home = () => {
         />
       </Helmet>
 
-      <div className="bg-white relative">
+      <div className="bg-white">
         <BackgroundShape />
 
-        {/* ================= HERO - FULL BLEED ================= */}
-        {/* Section full width (fora do container central) */}
-        <section className="w-full relative overflow-hidden">
-          {/* bloco que define a altura visual do hero (dá o "height" ao section) */}
-          <div className="w-full h-72 md:h-[60vh] lg:h-[70vh]">
+        {/* HERO: imagem via <img> (acompanha zoom) + card */}
+        <section
+          className="relative flex items-center justify-center text-left text-white overflow-hidden"
+          style={{ height: '75vh' }}
+        >
+          {/* imagem como elemento normal para acompanhar zoom do navegador */}
+          <div className="absolute inset-0 z-0">
             <img
               src={heroBackground}
               alt="Fundo hero"
-              className="w-full h-full object-cover object-right"
+              className="w-full h-full object-cover"
               style={{ display: 'block' }}
             />
+            {/* overlay leve: pouca opacidade (imagem quase visível) */}
+            <div className="absolute inset-0 bg-black/10" />
           </div>
 
-          {/* Card sobreposto: usamos absolute para sobrepor a imagem.
-              Ele está responsivo: em telas pequenas ele fica centralizado e "encaixado",
-              em md+ ele fica posicionado à esquerda com offset (sobrepondo a imagem). */}
-          <div className="absolute inset-x-0 top-0 pointer-events-none">
-            <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12">
-              <div className="relative">
+          {/* conteúdo */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+            className="relative z-10 w-full px-6 sm:px-8 lg:px-12"
+          >
+            <div className="mx-auto max-w-8xl flex items-center justify-between h-full">
+              {/* bloco esquerdo (ocupa ~40-45% para evitar sobrepor o carro) */}
+              <div className="w-full md:w-5/12 flex flex-col justify-center py-12 pl-6 md:pl-12 lg:pl-20">
+                {/* card quadrado/compacto */}
                 <div
-                  className={
-                    // mobile: card ocupa 100% e fica com margin-top para aparecer mais abaixo;
-                    // md+: posicionamento absoluto com offset à esquerda para sobrepor imagem.
-                    'mx-auto mt-12 md:mt-0 md:absolute md:top-1/4 md:left-6 lg:left-16 pointer-events-auto'
-                  }
-                  style={{ width: 'min(520px, 92%)' }}
+                  className="rounded-2xl p-6 md:p-8"
+                  style={{
+                    background: 'linear-gradient(rgba(3,3,3,0.48), rgba(3,3,3,0.44))',
+                    backdropFilter: 'saturate(120%) blur(2px)',
+                    border: '1px solid rgba(255,255,255,0.04)',
+                    boxShadow: '0 12px 40px rgba(0,0,0,0.45)',
+                    maxWidth: '520px',
+                    width: '100%',
+                  }}
                 >
-                  <motion.div
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.6 }}
-                    className="rounded-2xl p-6 md:p-8"
-                    style={{
-                      background: 'linear-gradient(rgba(3,3,3,0.5), rgba(3,3,3,0.44))',
-                      backdropFilter: 'saturate(120%) blur(3px)',
-                      border: '1px solid rgba(255,255,255,0.06)',
-                      boxShadow: '0 24px 80px rgba(0,0,0,0.35)',
-                    }}
+                  {/* título com sombra leve para melhor leitura */}
+                  <h2
+                    className="text-3xl md:text-4xl lg:text-4xl font-extrabold leading-tight"
+                    style={{ color: '#fff', textShadow: '0 6px 18px rgba(0,0,0,0.45)' }}
                   >
-                    <h2 className="text-3xl md:text-4xl lg:text-4xl font-extrabold leading-tight text-white" style={{ textShadow: '0 8px 24px rgba(0,0,0,0.45)' }}>
-                      <span className="block">Venda com segurança.</span>
-                      <span className="block" style={{ color: '#F7C93C' }}>Compre com confiança.</span>
-                    </h2>
+                    <span className="block">Venda com segurança.</span>
+                    <span className="block" style={{ color: '#F7C93C' }}>Compre com confiança.</span>
+                  </h2>
 
-                    <p className="mt-4 text-sm md:text-base text-gray-200 max-w-xl">
-                      Assessoria completa, negociação transparente e garantia de melhor valor.
-                    </p>
+                  <p className="mt-4 text-sm md:text-base text-gray-200 max-w-2xl">
+                    Assessoria completa, negociação transparente e garantia de melhor valor.
+                  </p>
 
-                    <div className="mt-6 flex flex-col sm:flex-row gap-4">
-                      <Link
-                        to="/estoque"
-                        className="inline-block bg-yellow-400 text-black px-6 py-3 rounded-xl text-lg font-semibold shadow-2xl transform transition-all duration-200 hover:-translate-y-1"
-                      >
-                        Quero Comprar
-                      </Link>
+                  {/* botões: primeiro amarelo, segundo preto com borda amarela */}
+                  <div className="mt-6 flex flex-col sm:flex-row gap-4">
+                    <Link
+                      to="/estoque"
+                      className="inline-block bg-yellow-400 text-black px-6 py-3 rounded-xl text-lg font-semibold shadow-2xl transform transition-all duration-200 hover:-translate-y-1"
+                    >
+                      Quero Comprar
+                    </Link>
 
-                      <Link
-                        to="/vender"
-                        className="inline-block bg-black text-yellow-400 px-6 py-3 rounded-xl text-lg font-semibold shadow-md border-2 border-yellow-400 transition-all duration-200 hover:bg-yellow-400 hover:text-black"
-                      >
-                        Quero Vender
-                      </Link>
-                    </div>
-                  </motion.div>
+                    <Link
+                      to="/vender"
+                      className="inline-block bg-black text-yellow-400 px-6 py-3 rounded-xl text-lg font-semibold shadow-md border-2 border-yellow-400 transition-all duration-200 hover:bg-yellow-400 hover:text-black"
+                    >
+                      Quero Vender
+                    </Link>
+                  </div>
                 </div>
               </div>
+
+              {/* espaço direito maior (imagem ocupa o fundo) */}
+              <div className="hidden md:block md:w-7/12 h-full" />
             </div>
-          </div>
+          </motion.div>
         </section>
 
-        {/* ================= RESTO DA PÁGINA (conteúdo centralizado igual antes) ================= */}
+        {/* ========================= RESTANTE DA PÁGINA ========================= */}
+
+        {/* <-- ALTERAÇÃO: deixar esta section BRANCA (antes era bg-gray-50) -->
+            Section "Quer vender seu carro ?" agora tem fundo branco para diferenciar */}
         <section className="py-24 bg-white">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center">
               <h2 className="text-3xl md:text-4xl font-extrabold text-gray-900">Quer vender seu carro ?</h2>
-              <p className="mt-4 text-lg text-gray-600">Venda seu carro sem sair de casa, com comodidade, transparência e segurança</p>
+              <p className="mt-4 text-lg text-gray-600">Venda seu carro sem sair de casa, com comodidade, transparencia e segurança</p>
             </div>
             <div className="mt-16 grid grid-cols-1 md:grid-cols-4 gap-8">
               {timelineSteps.map((step, index) => (
@@ -130,7 +139,7 @@ const Home = () => {
                   initial={{ opacity: 0, y: 30 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true, amount: 0.5 }}
-                  transition={{ duration: 0.5, delay: index * 0.08 }}
+                  transition={{ duration: 0.5, delay: index * 0.1 }}
                   className="text-center"
                 >
                   <div className="flex items-center justify-center w-16 h-16 bg-yellow-400 rounded-full mx-auto mb-4 ring-8 ring-white shadow-lg">

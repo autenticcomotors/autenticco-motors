@@ -8,7 +8,7 @@ import { getFeaturedCars, getTestimonials } from '@/lib/car-api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import ReactMarkdown from 'react-markdown';
 import BackgroundShape from '@/components/BackgroundShape';
-import heroBackground from '@/assets/ponte.jpg'; // alta-res
+import heroBackground from '@/assets/ponte.jpg';
 
 const Home = () => {
   const [featuredCars, setFeaturedCars] = useState([]);
@@ -22,10 +22,8 @@ const Home = () => {
         setFeaturedCars(cars || []);
         setTestimonials(tests || []);
       } catch (err) {
-        // se falhar, não quebra a página
         setFeaturedCars([]);
         setTestimonials([]);
-        // console.warn(err);
       }
     };
     loadData();
@@ -50,121 +48,146 @@ const Home = () => {
         />
       </Helmet>
 
-      {/* CSS local do hero: grid responsivo + imagem dentro da caixa */}
       <style>{`
-        /* HERO: grid 2-col no desktop, empilha no mobile */
-        .hero-section { padding: 0; }
-        .hero-container {
+        /* HERO - estrutura full-bleed image à direita */
+        .hero-section {
+          position: relative;
+          width: 100%;
+          box-sizing: border-box;
+          padding: 36px 0;
+          overflow: visible;
+        }
+        .hero-inner {
           max-width: 1200px;
           margin: 0 auto;
-          padding: 28px 20px;
-          box-sizing: border-box;
-        }
-        .hero-grid {
+          padding: 0 20px;
           display: grid;
           grid-template-columns: 1fr;
           gap: 24px;
           align-items: center;
+          position: relative;
+          z-index: 2; /* garante que o conteúdo fique acima da imagem */
+          box-sizing: border-box;
         }
-        /* desktop: duas colunas (texto 5 / imagem 7) */
-        @media (min-width: 768px) {
-          .hero-grid {
-            grid-template-columns: 5fr 7fr;
-            gap: 32px;
-          }
-        }
-        /* card visual */
+        /* coluna do conteúdo (card) */
         .hero-card {
+          width: 100%;
+          box-sizing: border-box;
+        }
+
+        /* caixa que segura a imagem full-bleed (desktop) */
+        .hero-bleed {
+          position: absolute;
+          top: 36px; /* alinha verticalmente com o padding do hero */
+          bottom: 36px;
+          right: 0;
+          width: 50vw; /* ajuste aqui se quiser imagem maior/menor (ex.: 55vw) */
+          z-index: 1;
+          display: block;
+          pointer-events: none; /* evita que a imagem capture cliques quando sobreposta */
+          box-sizing: border-box;
+        }
+        .hero-bleed .img-wrap {
+          width: 100%;
+          height: 100%;
+          overflow: hidden;
+          border-radius: 12px;
+          box-shadow: 0 8px 28px rgba(0,0,0,0.25);
+        }
+        .hero-bleed img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          object-position: right center;
+          display: block;
+          -webkit-user-drag: none;
+        }
+
+        /* MOBILE / TABLET: empilha e faz imagem normal dentro do fluxo */
+        @media (max-width: 768px) {
+          .hero-inner {
+            grid-template-columns: 1fr;
+            gap: 16px;
+          }
+          .hero-bleed {
+            position: static;
+            width: 100%;
+            top: auto;
+            bottom: auto;
+            margin: 0;
+            pointer-events: auto;
+            z-index: 0;
+            padding: 0 20px;
+          }
+          .hero-bleed .img-wrap { border-radius: 10px; height: auto; }
+          .hero-bleed img { height: auto; object-position: center; }
+        }
+
+        /* Pequenos ajustes visuais do card (mantidos) */
+        .hero-card-inner {
           background: linear-gradient(rgba(3,3,3,0.48), rgba(3,3,3,0.44));
           padding: 20px;
           border-radius: 14px;
           color: #fff;
           box-shadow: 0 12px 40px rgba(0,0,0,0.45);
           border: 1px solid rgba(255,255,255,0.04);
-          width: 100%;
-        }
-        /* imagem dentro da caixa: width 100% height auto para acompanhar zoom */
-        .hero-image-wrapper {
-          width: 100%;
-          display: block;
-          border-radius: 12px;
-          overflow: hidden;
-          box-shadow: 0 8px 28px rgba(0,0,0,0.25);
-        }
-        .hero-image-wrapper img {
-          width: 100%;
-          height: auto; /* muito importante: escala com a largura */
-          display: block;
-          object-fit: cover;
-          object-position: right center;
-          -webkit-user-drag: none;
-        }
-        /* se quiser que o card "flutue" parcialmente sobre a imagem em desktop, ajustar esse transform */
-        @media (min-width: 1024px) {
-          .hero-card {
-            /* opcional: deixe comentário abaixo ativo se quiser leve sobreposição */
-            /* transform: translateY(-8%); */
-          }
         }
       `}</style>
 
       <div className="bg-white">
         <BackgroundShape />
 
-        {/* HERO: grid com imagem dentro de uma caixa (sem absolute, sem height fixo) */}
         <section className="hero-section">
-          <div className="hero-container">
-            <div className="hero-grid">
-              {/* LEFT: card / texto */}
-              <div>
-                <motion.div
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.8 }}
-                >
-                  <div className="hero-card">
-                    <h2
-                      className="text-3xl md:text-4xl lg:text-4xl font-extrabold leading-tight"
-                      style={{ color: '#fff', textShadow: '0 6px 18px rgba(0,0,0,0.45)' }}
+          {/* conteúdo central limitado */}
+          <div className="hero-inner">
+            <div className="hero-card">
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.8 }}
+              >
+                <div className="hero-card-inner">
+                  <h2
+                    className="text-3xl md:text-4xl lg:text-4xl font-extrabold leading-tight"
+                    style={{ color: '#fff', textShadow: '0 6px 18px rgba(0,0,0,0.45)' }}
+                  >
+                    <span className="block">Venda com segurança.</span>
+                    <span className="block" style={{ color: '#F7C93C' }}>Compre com confiança.</span>
+                  </h2>
+
+                  <p className="mt-4 text-sm md:text-base text-gray-200 max-w-2xl">
+                    Assessoria completa, negociação transparente e garantia de melhor valor.
+                  </p>
+
+                  <div className="mt-6 flex flex-col sm:flex-row gap-4">
+                    <Link
+                      to="/estoque"
+                      className="inline-block bg-yellow-400 text-black px-6 py-3 rounded-xl text-lg font-semibold shadow-2xl transform transition-all duration-200 hover:-translate-y-1"
                     >
-                      <span className="block">Venda com segurança.</span>
-                      <span className="block" style={{ color: '#F7C93C' }}>Compre com confiança.</span>
-                    </h2>
+                      Quero Comprar
+                    </Link>
 
-                    <p className="mt-4 text-sm md:text-base text-gray-200 max-w-2xl">
-                      Assessoria completa, negociação transparente e garantia de melhor valor.
-                    </p>
-
-                    <div className="mt-6 flex flex-col sm:flex-row gap-4">
-                      <Link
-                        to="/estoque"
-                        className="inline-block bg-yellow-400 text-black px-6 py-3 rounded-xl text-lg font-semibold shadow-2xl transform transition-all duration-200 hover:-translate-y-1"
-                      >
-                        Quero Comprar
-                      </Link>
-
-                      <Link
-                        to="/vender"
-                        className="inline-block bg-black text-yellow-400 px-6 py-3 rounded-xl text-lg font-semibold shadow-md border-2 border-yellow-400 transition-all duration-200 hover:bg-yellow-400 hover:text-black"
-                      >
-                        Quero Vender
-                      </Link>
-                    </div>
+                    <Link
+                      to="/vender"
+                      className="inline-block bg-black text-yellow-400 px-6 py-3 rounded-xl text-lg font-semibold shadow-md border-2 border-yellow-400 transition-all duration-200 hover:bg-yellow-400 hover:text-black"
+                    >
+                      Quero Vender
+                    </Link>
                   </div>
-                </motion.div>
-              </div>
-
-              {/* RIGHT: image box (dentro do fluxo) */}
-              <div>
-                <div className="hero-image-wrapper" aria-hidden="false">
-                  <img src={heroBackground} alt="Carro na ponte - AutenTicco" />
                 </div>
-              </div>
+              </motion.div>
+            </div>
+          </div>
+
+          {/* imagem full-bleed à direita (desktop). No mobile ela vira estática dentro do fluxo) */}
+          <div className="hero-bleed" aria-hidden="false">
+            <div className="img-wrap">
+              <img src={heroBackground} alt="Carro na ponte - AutenTicco" />
             </div>
           </div>
         </section>
 
-        {/* RESTANTE DA PÁGINA (mantive seu markup original) */}
+        {/* resto da página (mantive tudo) */}
         <section className="py-24 bg-white">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center">

@@ -49,7 +49,7 @@ const Home = () => {
         {/* HERO */}
         <section
           className="relative flex items-center justify-center text-left text-white overflow-hidden"
-          style={{ height: '75vh' }}
+          style={{ height: 'clamp(360px, 75vh, 680px)' }} // <- ajuste para acompanhar zoom
         >
           <div className="absolute inset-0 z-0">
             <img

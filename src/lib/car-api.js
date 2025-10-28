@@ -43,8 +43,7 @@ export const getCarBySlug = async (slug) => {
 export const addCar = async (carData) => {
   const carName = `${carData.brand} ${carData.model}`;
   const slug = `${(carData.brand || '').toLowerCase().replace(/ /g, '-')}-${(carData.model || '').toLowerCase().replace(/ /g, '-')}-${Date.now()}`;
-  // garantir booleano para is_blindado
-  const payload = { ...carData, name: carName, slug, is_available: true, is_blindado: !!carData.is_blindado };
+  const payload = { ...carData, name: carName, slug, is_available: true };
   const { data, error } = await supabase
     .from('cars')
     .insert([payload])
@@ -55,12 +54,9 @@ export const addCar = async (carData) => {
 };
 
 export const updateCar = async (id, carData) => {
-  // coercionar is_blindado caso venha como string
-  const patch = { ...carData };
-  if ('is_blindado' in patch) patch.is_blindado = !!patch.is_blindado;
   const { data, error } = await supabase
     .from('cars')
-    .update(patch)
+    .update(carData)
     .eq('id', id)
     .select()
     .single();
@@ -401,7 +397,6 @@ export const deletePublication = async (id) => {
 */
 
 export const getExpensesByCar = async (carId) => {
-  if (!carId) return [];
   const { data, error } = await supabase
     .from('vehicle_expenses')
     .select('*')
@@ -489,6 +484,32 @@ export const deleteChecklistItem = async (id) => {
 
 /*
   -----------------------------
+  FUNÇÕES UTILITÁRIAS: BUSCAS EM BULK (para resumo na listagem)
+  -----------------------------
+*/
+
+export const getPublicationsForCars = async (carIds = []) => {
+  if (!Array.isArray(carIds) || carIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from('vehicle_publications')
+    .select('*')
+    .in('car_id', carIds);
+  if (error) console.error('Erro ao buscar publicações (bulk):', error);
+  return data || [];
+};
+
+export const getExpensesForCars = async (carIds = []) => {
+  if (!Array.isArray(carIds) || carIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from('vehicle_expenses')
+    .select('*')
+    .in('car_id', carIds);
+  if (error) console.error('Erro ao buscar gastos (bulk):', error);
+  return data || [];
+};
+
+/*
+  -----------------------------
   FUNÇÕES: CHECKLIST TEMPLATES (global templates)
   -----------------------------
 */
@@ -497,7 +518,7 @@ export const saveChecklistTemplate = async (name = 'Padrão', items = []) => {
   try {
     const payload = {
       name: name,
-      template: items, // armazenamos o array JSON na coluna `template`
+      template: items,
       created_at: new Date().toISOString()
     };
     const { data, error } = await supabase

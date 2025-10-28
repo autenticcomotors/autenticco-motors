@@ -19,6 +19,7 @@ import BackgroundShape from '@/components/BackgroundShape';
 import VehicleManager from '@/components/VehicleManager';
 import Reports from '@/pages/Reports';
 
+// FormFields agora inclui o campo Blindado (checkbox)
 const FormFields = React.memo(({ carData, onChange, carOptions }) => (
   <>
     <input name="brand" value={carData.brand || ''} onChange={onChange} placeholder="Marca *" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none" />
@@ -49,11 +50,10 @@ const FormFields = React.memo(({ carData, onChange, carOptions }) => (
       <textarea name="full_description" value={carData.full_description || ''} onChange={onChange} placeholder="Descrição detalhada..." rows={4} className="w-full bg-white border border-gray-300 rounded-lg p-3 resize-none text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none" />
     </div>
 
-    {/* Checkbox Blindado */}
-    <div className="flex items-center gap-3 col-span-1 md:col-span-3">
+    {/* CHECKBOX: Blindado */}
+    <div className="flex items-center gap-3">
       <input id="is_blindado" name="is_blindado" type="checkbox" checked={!!carData.is_blindado} onChange={onChange} className="h-4 w-4" />
       <label htmlFor="is_blindado" className="text-sm font-medium text-gray-700">Blindado</label>
-      <p className="text-xs text-gray-500">Marque se o veículo for blindado (exibe badge no catálogo)</p>
     </div>
   </>
 ));
@@ -68,14 +68,7 @@ const AdminDashboard = () => {
   const [leadFilters, setLeadFilters] = useState({ status: '', startDate: '', endDate: '' });
   const [leadToDelete, setLeadToDelete] = useState(null);
   const [newTestimonial, setNewTestimonial] = useState({ client_name: '', testimonial_text: '', car_sold: '' });
-
-  // NOTE: newCar initialize with is_blindado false
-  const [newCar, setNewCar] = useState({
-    brand: '', model: '', year: '', price: '', mileage: '', fuel: '',
-    photo_urls: [], youtube_link: '', full_description: '', transmission: '',
-    body_type: '', color: '', is_blindado: false
-  });
-
+  const [newCar, setNewCar] = useState({ brand: '', model: '', year: '', price: '', mileage: '', fuel: '', photo_urls: [], youtube_link: '', full_description: '', transmission: '', body_type: '', color: '', is_blindado: false });
   const [editingCar, setEditingCar] = useState(null);
   const [photosToUpload, setPhotosToUpload] = useState([]);
   const [photosToDelete, setPhotosToDelete] = useState([]);
@@ -157,11 +150,11 @@ const AdminDashboard = () => {
 
   const handleLogout = async () => { await supabase.auth.signOut(); navigate('/admin'); };
 
-  // handleInputChange agora trata checkbox para setState generico
+  // handleInputChange agora suporta checkbox corretamente
   const handleInputChange = (e, setStateFunc) => {
-    const { name, type, value, checked } = e.target;
-    const newVal = type === 'checkbox' ? checked : value;
-    setStateFunc(prev => ({ ...prev, [name]: newVal }));
+    const { name, type, checked, value } = e.target;
+    const finalValue = type === 'checkbox' ? checked : value;
+    setStateFunc(prev => ({ ...prev, [name]: finalValue }));
   };
   const handleNewCarInputChange = useCallback((e) => handleInputChange(e, setNewCar), []);
   const handleEditingCarInputChange = useCallback((e) => handleInputChange(e, setEditingCar), []);
@@ -211,17 +204,7 @@ const AdminDashboard = () => {
         const { data: { publicUrl } } = supabase.storage.from('car_photos').getPublicUrl(data.path);
         photoUrls.push(publicUrl);
       }
-
-      // garantir is_blindado boolean
-      const carData = {
-        ...newCar,
-        photo_urls: photoUrls,
-        main_photo_url: photoUrls[mainPhotoIndex] || null,
-        price: parseFloat(newCar.price || 0),
-        is_available: true,
-        is_blindado: !!newCar.is_blindado
-      };
-
+      const carData = { ...newCar, photo_urls: photoUrls, main_photo_url: photoUrls[mainPhotoIndex] || null, price: parseFloat(newCar.price || 0), is_available: true };
       const { data: addedCar, error } = await addCar(carData);
       if (error) { toast({ title: 'Erro ao adicionar.', description: error.message, variant: 'destructive' }); }
       else {
@@ -241,9 +224,7 @@ const AdminDashboard = () => {
 
         // prepend active car to UI (and resort)
         setCars(prevCars => sortCarsActiveFirst([...(prevCars || []), addedCar]));
-        setNewCar({
-          brand: '', model: '', year: '', price: '', mileage: '', fuel: '', photo_urls: [], youtube_link: '', full_description: '', transmission: '', body_type: '', color: '', is_blindado: false
-        });
+        setNewCar({ brand: '', model: '', year: '', price: '', mileage: '', fuel: '', photo_urls: [], youtube_link: '', full_description: '', transmission: '', body_type: '', color: '', is_blindado: false });
         setPhotosToUpload([]);
         setMainPhotoIndex(0);
         if (fileInputRef.current) fileInputRef.current.value = "";
@@ -283,10 +264,6 @@ const AdminDashboard = () => {
       if (!finalCarData.photo_urls || !finalCarData.photo_urls.includes(finalCarData.main_photo_url)) {
         finalCarData.main_photo_url = (finalCarData.photo_urls && finalCarData.photo_urls[0]) || null;
       }
-
-      // garantir is_blindado boolean
-      finalCarData.is_blindado = !!finalCarData.is_blindado;
-
       const { error } = await updateCar(finalCarData.id, { ...finalCarData, price: parseFloat(finalCarData.price || 0) });
       if (error) { toast({ title: 'Erro ao atualizar.', description: error.message, variant: 'destructive' }); }
       else {
@@ -503,6 +480,7 @@ const AdminDashboard = () => {
                         <div className="relative">
                           <img src={car.main_photo_url || 'https://placehold.co/96x64/e2e8f0/4a5568?text=Sem+Foto'} alt={`${car.brand} ${car.model}`} className={`h-16 w-24 object-cover rounded-md ${car.is_available === false ? 'filter grayscale contrast-90' : ''}`} />
                           {car.is_available === false && <div className="absolute top-1 left-1 bg-red-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">VENDIDO</div>}
+                          {/* Badge BLINDADO in admin small preview */}
                           {car.is_blindado && <div className="absolute top-1 right-1 bg-yellow-400 text-black text-xs font-bold px-2 py-0.5 rounded-full">BLINDADO</div>}
                         </div>
                         <div>

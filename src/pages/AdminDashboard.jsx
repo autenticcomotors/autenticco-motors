@@ -1,5 +1,5 @@
 // src/pages/AdminDashboard.jsx
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Helmet } from 'react-helmet';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -80,6 +80,10 @@ const AdminDashboard = () => {
   const [saleForm, setSaleForm] = useState({ platform_id: '', sale_price: '', sale_date: '', notes: '' });
   const fileInputRef = useRef(null);
   const navigate = useNavigate();
+
+  // novos states de filtro de veiculos
+  const [carSearch, setCarSearch] = useState('');
+  const [brandFilter, setBrandFilter] = useState('');
 
   const carOptions = {
     transmissions: ['Automático', 'Manual'],
@@ -365,6 +369,25 @@ const AdminDashboard = () => {
     }
   };
 
+  // --- FILTROS (Admin - VEÍCULOS)
+  const brandOptions = useMemo(() => {
+    const brands = Array.from(new Set((cars || []).map(c => (c.brand || '').trim()).filter(Boolean)));
+    brands.sort((a,b) => a.localeCompare(b, 'pt-BR'));
+    return brands;
+  }, [cars]);
+
+  const filteredCars = useMemo(() => {
+    const term = (carSearch || '').trim().toLowerCase();
+    return (cars || []).filter(c => {
+      if (brandFilter && brandFilter !== 'ALL' && String((c.brand || '')).toLowerCase() !== String(brandFilter).toLowerCase()) return false;
+      if (!term) return true;
+      const brand = (c.brand || '').toLowerCase();
+      const model = (c.model || '').toLowerCase();
+      const combined = `${brand} ${model}`;
+      return brand.includes(term) || model.includes(term) || combined.includes(term);
+    });
+  }, [cars, carSearch, brandFilter]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex justify-center items-center">
@@ -449,7 +472,7 @@ const AdminDashboard = () => {
           {/* VEÍCULOS */}
           {activeTab === 'cars' && (
             <>
-              <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-8 mb-12 shadow-xl border">
+              <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-8 mb-6 shadow-xl border">
                 <h2 className="text-2xl font-semibold mb-6 flex items-center"><PlusCircle className="mr-3 text-yellow-500" /> Adicionar Novo Veículo</h2>
                 <form onSubmit={handleAddCar} className="space-y-6">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6"><FormFields carData={newCar} onChange={handleNewCarInputChange} carOptions={carOptions} /></div>
@@ -460,6 +483,7 @@ const AdminDashboard = () => {
                       <div key={index} className="relative cursor-pointer" onClick={() => setMainPhotoIndex(index)}>
                         <img src={URL.createObjectURL(file)} alt={`Preview ${index}`} className={`h-24 w-24 object-cover rounded-lg ${mainPhotoIndex === index ? 'ring-2 ring-yellow-500' : ''}`} />
                         {mainPhotoIndex === index && <div className="absolute top-1 right-1 bg-yellow-500 text-black rounded-full p-1"><Check className="h-3 w-3" /></div>}
+                        {mainPhotoIndex === index && <div />}
                         <button type="button" onClick={(e) => { e.stopPropagation(); removePhoto(index); }} className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1"><Trash2 className="h-3 w-3" /></button>
                       </div>
                     ))}</div>
@@ -468,13 +492,24 @@ const AdminDashboard = () => {
                 </form>
               </div>
 
-              <div>
+              <div className="mb-8">
                 <div className="flex justify-between items-center mb-6">
                   <h2 className="text-2xl font-semibold flex items-center"><Car className="mr-3 text-yellow-500" /> Estoque Atual ({cars.length})</h2>
                   <Button variant="outline" size="sm" asChild><CSVLink data={cars} filename={"estoque-autenticco.csv"} className="flex items-center"><Download className="mr-2 h-4 w-4" /> Exportar para CSV</CSVLink></Button>
                 </div>
+
+                {/* CONTROLES DE FILTRO */}
+                <div className="flex flex-col md:flex-row gap-3 items-center mb-4">
+                  <input placeholder="Pesquisar marca ou modelo..." value={carSearch} onChange={(e) => setCarSearch(e.target.value)} className="w-full md:w-1/2 p-2 border rounded" />
+                  <select value={brandFilter || 'ALL'} onChange={(e) => setBrandFilter(e.target.value === 'ALL' ? '' : e.target.value)} className="w-full md:w-1/4 p-2 border rounded">
+                    <option value="ALL">Todas as marcas</option>
+                    {brandOptions.map(b => <option key={b} value={b}>{b}</option>)}
+                  </select>
+                  <Button variant="ghost" size="sm" onClick={() => { setCarSearch(''); setBrandFilter(''); }}>Limpar</Button>
+                </div>
+
                 <div className="space-y-4">
-                  {cars && cars.map(car => (
+                  {filteredCars && filteredCars.map(car => (
                     <motion.div key={car.id} layout className={`bg-white rounded-2xl p-4 flex items-center justify-between shadow border ${car.is_available === false ? 'opacity-90' : ''}`}>
                       <div className="flex items-center gap-4">
                         <div className="relative">

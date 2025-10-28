@@ -1,5 +1,5 @@
 // src/components/VehicleManager.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
@@ -52,6 +52,10 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
   // drag state (uses id for robustness)
   const [draggingId, setDraggingId] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
+
+  // FILTROS LOCAIS (marca + pesquisa)
+  const [searchTerm, setSearchTerm] = useState('');
+  const [brandFilter, setBrandFilter] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -515,12 +519,42 @@ const VehicleManager = ({ cars = [], refreshAll }) => {
 
   const getSummary = (carId) => summaryMap[carId] || { pubCount: 0, adSpendTotal: 0, extraExpensesTotal: 0 };
 
+  // filtros locais: marcas disponíveis (a partir dos cars props)
+  const brandOptions = useMemo(() => {
+    const brands = Array.from(new Set((cars || []).map(c => (c.brand || '').trim()).filter(Boolean)));
+    brands.sort((a,b) => a.localeCompare(b, 'pt-BR'));
+    return brands;
+  }, [cars]);
+
+  const filteredCars = useMemo(() => {
+    const term = (searchTerm || '').trim().toLowerCase();
+    return (cars || []).filter(c => {
+      if (brandFilter && brandFilter !== 'ALL' && String((c.brand || '')).toLowerCase() !== String(brandFilter).toLowerCase()) return false;
+      if (!term) return true;
+      const brand = (c.brand || '').toLowerCase();
+      const model = (c.model || '').toLowerCase();
+      return brand.includes(term) || model.includes(term) || `${brand} ${model}`.includes(term);
+    });
+  }, [cars, searchTerm, brandFilter]);
+
   return (
     <div>
       <h2 className="text-2xl font-semibold mb-4">Gestão de Veículos</h2>
 
+      {/* FILTROS LOCAIS */}
+      <div className="mb-4 flex flex-col md:flex-row gap-2 items-center">
+        <input placeholder="Pesquisar marca ou modelo..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full md:w-1/2 p-2 border rounded" />
+        <select value={brandFilter || 'ALL'} onChange={(e) => setBrandFilter(e.target.value === 'ALL' ? '' : e.target.value)} className="w-full md:w-1/4 p-2 border rounded">
+          <option value="ALL">Todas as marcas</option>
+          {brandOptions.map(b => <option key={b} value={b}>{b}</option>)}
+        </select>
+        <div className="ml-auto">
+          <Button variant="ghost" size="sm" onClick={() => { setSearchTerm(''); setBrandFilter(''); }}>Limpar</Button>
+        </div>
+      </div>
+
       <div className="space-y-4">
-        {Array.isArray(cars) && cars.map(car => {
+        {Array.isArray(filteredCars) && filteredCars.map(car => {
           const summary = getSummary(car.id);
           const sold = !!car.is_sold || car.is_available === false;
           const profit = Number(car.profit ?? ((car.commission ?? 0) - (summary.adSpendTotal + summary.extraExpensesTotal)));

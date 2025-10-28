@@ -46,12 +46,11 @@ const Home = () => {
       <div className="bg-white">
         <BackgroundShape />
 
-        {/* HERO: imagem via <img> (acompanha zoom) + card */}
+        {/* HERO */}
         <section
           className="relative flex items-center justify-center text-left text-white overflow-hidden"
           style={{ height: '75vh' }}
         >
-          {/* imagem como elemento normal para acompanhar zoom do navegador */}
           <div className="absolute inset-0 z-0">
             <img
               src={heroBackground}
@@ -59,11 +58,9 @@ const Home = () => {
               className="w-full h-full object-cover"
               style={{ display: 'block' }}
             />
-            {/* overlay leve: pouca opacidade (imagem quase visível) */}
             <div className="absolute inset-0 bg-black/10" />
           </div>
 
-          {/* conteúdo */}
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -71,9 +68,7 @@ const Home = () => {
             className="relative z-10 w-full px-6 sm:px-8 lg:px-12"
           >
             <div className="mx-auto max-w-8xl flex items-center justify-between h-full">
-              {/* bloco esquerdo (ocupa ~40-45% para evitar sobrepor o carro) */}
               <div className="w-full md:w-5/12 flex flex-col justify-center py-12 pl-6 md:pl-12 lg:pl-20">
-                {/* card quadrado/compacto */}
                 <div
                   className="rounded-2xl p-6 md:p-8"
                   style={{
@@ -85,7 +80,6 @@ const Home = () => {
                     width: '100%',
                   }}
                 >
-                  {/* título com sombra leve para melhor leitura */}
                   <h2
                     className="text-3xl md:text-4xl lg:text-4xl font-extrabold leading-tight"
                     style={{ color: '#fff', textShadow: '0 6px 18px rgba(0,0,0,0.45)' }}
@@ -98,7 +92,6 @@ const Home = () => {
                     Assessoria completa, negociação transparente e garantia de melhor valor.
                   </p>
 
-                  {/* botões: primeiro amarelo, segundo preto com borda amarela */}
                   <div className="mt-6 flex flex-col sm:flex-row gap-4">
                     <Link
                       to="/estoque"
@@ -117,16 +110,12 @@ const Home = () => {
                 </div>
               </div>
 
-              {/* espaço direito maior (imagem ocupa o fundo) */}
               <div className="hidden md:block md:w-7/12 h-full" />
             </div>
           </motion.div>
         </section>
 
-        {/* ========================= RESTANTE DA PÁGINA ========================= */}
-
-        {/* <-- ALTERAÇÃO: deixar esta section BRANCA (antes era bg-gray-50) -->
-            Section "Quer vender seu carro ?" agora tem fundo branco para diferenciar */}
+        {/* "Quer vender seu carro ?" */}
         <section className="py-24 bg-white">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center">
@@ -154,6 +143,7 @@ const Home = () => {
           </div>
         </section>
 
+        {/* Veículos em Destaque */}
         <section className="py-24 bg-gray-50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center mb-12">
@@ -161,35 +151,31 @@ const Home = () => {
               <p className="mt-4 text-lg text-gray-600">Uma amostra do nosso estoque selecionado.</p>
             </div>
             {featuredCars.length > 0 && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-8">
                 {featuredCars.map((car) => (
                   <motion.div
                     key={car.id}
                     className="bg-white rounded-2xl overflow-hidden shadow-lg border flex flex-col transition-transform duration-300 hover:-translate-y-2"
                   >
-                    {/* imagem com badges (combustível + blindado) */}
                     <div className="relative">
                       <img
                         src={car.main_photo_url || 'https://placehold.co/400x300/e2e8f0/4a5568?text=Sem+Foto'}
                         alt={`${car.brand} ${car.model}`}
-                        className="w-full h-48 object-cover"
+                        className="w-full h-44 object-cover"
                       />
-
-                      {/* BLINDADO badge - amarelo (igual ao estoque) */}
-                      {car.is_blindado && (
-                        <div className="absolute top-4 right-4 bg-yellow-400 text-black text-xs font-bold py-1 px-3 rounded-full">
+                      {/* fuel badge - top left */}
+                      {car.fuel && (
+                        <div className="absolute top-3 left-3 bg-black/60 text-white text-xs font-bold py-1 px-3 rounded-full flex items-center gap-1.5">
+                          <Droplet size={12} />
+                          <span className="leading-none">{car.fuel}</span>
+                        </div>
+                      )}
+                      {/* blindado badge - top right */}
+                      {(car.is_blindado || car.isBlindado || car.blindado) && (
+                        <div className="absolute top-3 right-3 bg-yellow-400 text-black text-xs font-bold py-1 px-3 rounded-full">
                           BLINDADO
                         </div>
                       )}
-
-                      {/* Combustível (placa escura com ícone) - posicionada à esquerda do badge se ambos existirem */}
-                      <div
-                        className={`absolute top-4 ${car.is_blindado ? 'right-20' : 'right-4'} bg-black/50 text-white text-xs font-bold py-1 px-3 rounded-full flex items-center gap-1.5`}
-                      >
-                        <Droplet size={12} />
-                        <span>{car.fuel || '—'}</span>
-                      </div>
-
                     </div>
 
                     <div className="p-4 flex flex-col flex-grow">

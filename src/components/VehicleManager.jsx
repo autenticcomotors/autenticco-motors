@@ -13,10 +13,25 @@ import {
   updateCar
 } from '@/lib/car-api';
 import { supabase } from '@/lib/supabase';
+import { getFipeValue } from '@/lib/fipe-api';
 
 const Money = ({ value }) => {
   const v = Number(value || 0);
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
+};
+
+const pctDiff = (price, fipe) => {
+  const p = Number(price), f = Number(fipe);
+  if (!Number.isFinite(p) || !Number.isFinite(f) || f === 0) return null;
+  return ((p - f) / f) * 100; // positivo = acima da FIPE
+};
+
+const diffBadgeClass = (diff) => {
+  if (diff === null) return 'bg-gray-100 text-gray-600';
+  // zonas: dentro de ±5% (neutro), muito acima > +5% (laranja), abaixo < -5% (verde)
+  if (diff > 5) return 'bg-orange-100 text-orange-700';
+  if (diff < -5) return 'bg-green-100 text-green-700';
+  return 'bg-gray-100 text-gray-700';
 };
 
 const defaultChecklistItems = [
@@ -52,6 +67,9 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
 
   const [searchTerm, setSearchTerm] = useState('');
   const [brandFilter, setBrandFilter] = useState('');
+
+  const [fipeLoading, setFipeLoading] = useState(false);
+  const [lastFipeDebug, setLastFipeDebug] = useState(null); // opcional para inspeção se precisar
 
   useEffect(() => {
     (async () => {
@@ -117,7 +135,6 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
         commission: openCar.commission ?? '',
         return_to_seller: openCar.return_to_seller ?? ''
       });
-      // notify parent handled
       onOpenHandled();
     }
   }, [openCar]); // eslint-disable-line
@@ -391,7 +408,6 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
       setExpenses(prev => prev.filter(e => e.id !== id));
       toast({ title: 'Gasto removido' });
       await fetchAll(selectedCar.id);
-      if (refreshAll) refreshAll();
     } catch (err) {
       toast({ title: 'Erro ao remover gasto', description: err.message || String(err), variant: 'destructive' });
     }
@@ -494,6 +510,8 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
           const profit = Number(car.profit ?? ((car.commission ?? 0) - (summary.adSpendTotal + summary.extraExpensesTotal)));
           const profitDisplay = Number.isFinite(profit) ? profit : null;
 
+          const diff = pctDiff(car.price, car.fipe_value);
+
           return (
             <div key={car.id} className={`bg-white rounded-xl p-4 flex items-center justify-between shadow transition hover:shadow-lg ${sold ? 'opacity-80' : ''}`}>
               <div className="flex items-start gap-4">
@@ -534,7 +552,14 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
 
                     <div>
                       <div className="text-xs">FIPE</div>
-                      <div className="font-medium">{car.fipe_value ? Money({ value: car.fipe_value }) : '-'}</div>
+                      <div className="font-medium flex items-center gap-2">
+                        {car.fipe_value ? Money({ value: car.fipe_value }) : '-'}
+                        {car.fipe_value && Number.isFinite(Number(car.price)) && (
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${diffBadgeClass(diff)}`}>
+                            {diff !== null ? `${diff.toFixed(1)}%` : ''}
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     <div>
@@ -552,7 +577,7 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
 
               <div className="flex flex-col items-end gap-2">
                 <div className="flex gap-2">
-                  <Button size="sm" variant="outline" onClick={() => { setSelectedCar(car); setOpen(true); setTab('checklist'); fetchAll(car.id); }}>Gerenciar</Button>
+                  <Button size="sm" variant="outline" onClick={() => { setSelectedCar(car); setOpen(true); setTab('checklist'); fetchAll(car.id); setFinanceForm({ fipe_value: car.fipe_value ?? '', commission: car.commission ?? '', return_to_seller: car.return_to_seller ?? '' }); }}>Gerenciar</Button>
                 </div>
                 <div className="text-xs text-gray-500">Última atualização: {car.updated_at ? new Date(car.updated_at).toLocaleDateString() : '-'}</div>
               </div>
@@ -745,7 +770,55 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                   <div>
                     <label className="text-sm text-gray-700">Valor FIPE</label>
-                    <input type="number" step="0.01" value={financeForm.fipe_value ?? ''} onChange={(e) => setFinanceForm(f => ({ ...f, fipe_value: e.target.value }))} className="w-full p-2 border rounded" />
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={financeForm.fipe_value ?? ''}
+                        onChange={(e) => setFinanceForm(f => ({ ...f, fipe_value: e.target.value }))}
+                        className="w-full p-2 border rounded"
+                      />
+                      <Button
+                        variant="outline"
+                        onClick={async () => {
+                          if (!selectedCar) return;
+                          try {
+                            setFipeLoading(true);
+                            const { value, debug } = await getFipeValue({
+                              brand: selectedCar.brand,
+                              model: selectedCar.model,
+                              year: selectedCar.year,
+                              fuel: selectedCar.fuel || selectedCar.fuel_type || selectedCar.combustivel || ''
+                            });
+                            setLastFipeDebug(debug || null);
+                            if (!value) {
+                              toast({ title: 'FIPE não encontrada', description: 'Verifique marca/modelo/ano/combustível.', variant: 'destructive' });
+                              return;
+                            }
+                            setFinanceForm(f => ({ ...f, fipe_value: String(value) }));
+                            toast({ title: 'FIPE atualizada', description: `Valor: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)}` });
+                          } catch (err) {
+                            console.error('Erro FIPE:', err);
+                            toast({ title: 'Erro ao consultar FIPE', description: String(err), variant: 'destructive' });
+                          } finally {
+                            setFipeLoading(false);
+                          }
+                        }}
+                        disabled={fipeLoading}
+                      >
+                        {fipeLoading ? 'Buscando…' : 'Buscar na FIPE'}
+                      </Button>
+                    </div>
+                    {Number.isFinite(Number(selectedCar?.price)) && Number.isFinite(Number(financeForm?.fipe_value)) && (
+                      <div className="mt-2 text-sm">
+                        Diferença vs. preço:{" "}
+                        <span
+                          className={`px-2 py-0.5 rounded-full ${diffBadgeClass(pctDiff(selectedCar.price, financeForm.fipe_value))}`}
+                        >
+                          {pctDiff(selectedCar.price, financeForm.fipe_value)?.toFixed(1)}%
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   <div>
@@ -772,6 +845,13 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
                   <Button variant="ghost" onClick={() => { setOpen(false); setSelectedCar(null); }}>Cancelar</Button>
                   <Button onClick={saveFinance}>Salvar Financeiro</Button>
                 </div>
+
+                {/* Opcional: debug compacto da FIPE (esconde por padrão, útil pra diagnosticar) */}
+                {false && lastFipeDebug && (
+                  <pre className="mt-4 max-h-40 overflow-auto text-xs bg-gray-50 p-2 border rounded text-gray-700">
+                    {lastFipeDebug.map((l, i) => `${i+1}. ${l}`).join('\n')}
+                  </pre>
+                )}
               </div>
             )}
           </div>

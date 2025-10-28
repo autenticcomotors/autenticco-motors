@@ -1,8 +1,9 @@
+// src/pages/Home.jsx
 import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { Star, ArrowRight } from 'lucide-react';
+import { Star, ArrowRight, Droplet } from 'lucide-react';
 import { getFeaturedCars, getTestimonials } from '@/lib/car-api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import ReactMarkdown from 'react-markdown';
@@ -166,17 +167,37 @@ const Home = () => {
                     key={car.id}
                     className="bg-white rounded-2xl overflow-hidden shadow-lg border flex flex-col transition-transform duration-300 hover:-translate-y-2"
                   >
-                    <img
-                      src={car.main_photo_url || 'https://placehold.co/400x300/e2e8f0/4a5568?text=Sem+Foto'}
-                      alt={`${car.brand} ${car.model}`}
-                      className="w-full h-48 object-cover"
-                    />
+                    {/* imagem com badges (combustível + blindado) */}
+                    <div className="relative">
+                      <img
+                        src={car.main_photo_url || 'https://placehold.co/400x300/e2e8f0/4a5568?text=Sem+Foto'}
+                        alt={`${car.brand} ${car.model}`}
+                        className="w-full h-48 object-cover"
+                      />
+
+                      {/* BLINDADO badge - amarelo (igual ao estoque) */}
+                      {car.is_blindado && (
+                        <div className="absolute top-4 right-4 bg-yellow-400 text-black text-xs font-bold py-1 px-3 rounded-full">
+                          BLINDADO
+                        </div>
+                      )}
+
+                      {/* Combustível (placa escura com ícone) - posicionada à esquerda do badge se ambos existirem */}
+                      <div
+                        className={`absolute top-4 ${car.is_blindado ? 'right-20' : 'right-4'} bg-black/50 text-white text-xs font-bold py-1 px-3 rounded-full flex items-center gap-1.5`}
+                      >
+                        <Droplet size={12} />
+                        <span>{car.fuel || '—'}</span>
+                      </div>
+
+                    </div>
+
                     <div className="p-4 flex flex-col flex-grow">
                       <h3 className="text-lg font-bold text-gray-900">
                         {car.brand} {car.model}
                       </h3>
                       <p className="text-xl font-bold text-gray-800 my-2">
-                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(car.price)}
+                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(car.price) || 0)}
                       </p>
                       <Link
                         to={`/carro/${car.slug}`}

@@ -3,14 +3,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { CSVLink } from 'react-csv';
 import { getPlatforms, getPublicationsForCars } from '@/lib/car-api';
-import { Money } from '@/components/Money' || null; // optional, fallback handled below
 
-// fallback Money simple (caso não exista)
+// fallback Money simples
 const MoneyFallback = ({ value }) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value || 0));
 
 const OverviewBoard = ({ cars = [], onOpenGestaoForCar = (car) => {}, refreshAll = () => {} }) => {
   const [platforms, setPlatforms] = useState([]);
-  const [pubsMap, setPubsMap] = useState({}); // { carId: { platformId: [pubs...] , platformSlugOrName: [...] } }
+  const [pubsMap, setPubsMap] = useState({}); // { carId: { platformKey: [pubs...] } }
   const [search, setSearch] = useState('');
   const [brandFilter, setBrandFilter] = useState('');
   const [enabledCols, setEnabledCols] = useState({}); // { colKey: true/false }
@@ -21,10 +20,8 @@ const OverviewBoard = ({ cars = [], onOpenGestaoForCar = (car) => {}, refreshAll
       try {
         const p = await getPlatforms();
         setPlatforms(p || []);
-        // initialize enabledCols default: all platforms + socials
         const defaults = {};
         (p || []).forEach(pp => { defaults[`platform_${pp.id}`] = true; });
-        // some default socials/columns
         ['instagram', 'youtube', 'video', 'site', 'olx', 'webmotors', 'mercadolivre'].forEach(k => { if (!(k in defaults)) defaults[k] = true; });
         setEnabledCols(defaults);
       } catch (err) {
@@ -49,7 +46,6 @@ const OverviewBoard = ({ cars = [], onOpenGestaoForCar = (car) => {}, refreshAll
           const platformKey = p.platform_id ? `platform_${p.platform_id}` : (p.title || 'manual').toLowerCase();
           if (!map[id][platformKey]) map[id][platformKey] = [];
           map[id][platformKey].push(p);
-          // also mark common names (instagram/youtube/site) if link contains them
           if (p.link) {
             const l = (p.link || '').toLowerCase();
             if (l.includes('instagram.com')) {
@@ -60,13 +56,10 @@ const OverviewBoard = ({ cars = [], onOpenGestaoForCar = (car) => {}, refreshAll
               map[id]['youtube'] = map[id]['youtube'] || [];
               map[id]['youtube'].push(p);
             }
-            if (l.includes('olx') || l.includes('webmotors') || l.includes('mercadolivre') || l.includes('mercado livre') || l.includes('mercadolivre.com')) {
-              if (l.includes('olx')) { map[id]['olx'] = map[id]['olx'] || []; map[id]['olx'].push(p); }
-              if (l.includes('webmotors')) { map[id]['webmotors'] = map[id]['webmotors'] || []; map[id]['webmotors'].push(p); }
-              if (l.includes('mercadolivre')) { map[id]['mercadolivre'] = map[id]['mercadolivre'] || []; map[id]['mercadolivre'].push(p); }
-            }
+            if (l.includes('olx')) { map[id]['olx'] = map[id]['olx'] || []; map[id]['olx'].push(p); }
+            if (l.includes('webmotors')) { map[id]['webmotors'] = map[id]['webmotors'] || []; map[id]['webmotors'].push(p); }
+            if (l.includes('mercadolivre') || l.includes('mercado livre')) { map[id]['mercadolivre'] = map[id]['mercadolivre'] || []; map[id]['mercadolivre'].push(p); }
           }
-          // if platform name hints video
           if ((p.title || '').toLowerCase().includes('youtube') || (p.title || '').toLowerCase().includes('video')) {
             map[id]['video'] = map[id]['video'] || [];
             map[id]['video'].push(p);
@@ -101,9 +94,7 @@ const OverviewBoard = ({ cars = [], onOpenGestaoForCar = (car) => {}, refreshAll
 
   const allColumnKeys = useMemo(() => {
     const keys = [];
-    // platform columns
     (platforms || []).forEach(p => keys.push({ key: `platform_${p.id}`, label: p.name }));
-    // extras
     const extras = [
       { key: 'instagram', label: 'Instagram' },
       { key: 'youtube', label: 'YouTube' },
@@ -113,15 +104,12 @@ const OverviewBoard = ({ cars = [], onOpenGestaoForCar = (car) => {}, refreshAll
       { key: 'webmotors', label: 'Webmotors' },
       { key: 'mercadolivre', label: 'Mercado Livre' }
     ];
-    extras.forEach(e => {
-      if (!keys.find(k => k.key === e.key)) keys.push(e);
-    });
+    extras.forEach(e => { if (!keys.find(k => k.key === e.key)) keys.push(e); });
     return keys;
   }, [platforms]);
 
   const toggleCol = (key) => setEnabledCols(prev => ({ ...prev, [key]: !prev[key] }));
 
-  // CSV export build
   const csvData = useMemo(() => {
     const header = ['Marca', 'Modelo', 'Ano', 'Preco', ...allColumnKeys.filter(c => enabledCols[c.key]).map(c => c.label)];
     const rows = (filtered || []).map(car => {
@@ -199,7 +187,7 @@ const OverviewBoard = ({ cars = [], onOpenGestaoForCar = (car) => {}, refreshAll
                     <div className="font-semibold">{car.brand} {car.model} <span className="text-xs text-gray-500">({car.year})</span></div>
                     <div className="text-xs text-gray-500">{car.mileage ? `${car.mileage} km` : ''} {car.is_blindado ? ' • BLINDADO' : ''}</div>
                   </td>
-                  <td className="p-3">{Money ? <Money value={car.price} /> : <MoneyFallback value={car.price} />}</td>
+                  <td className="p-3"><MoneyFallback value={car.price} /></td>
 
                   {allColumnKeys.filter(c => enabledCols[c.key]).map(col => {
                     const exists = Array.isArray(map[col.key]) && map[col.key].length > 0;
@@ -216,10 +204,7 @@ const OverviewBoard = ({ cars = [], onOpenGestaoForCar = (car) => {}, refreshAll
 
                   <td className="p-3 text-right">
                     <div className="flex items-center gap-2 justify-end">
-                      <Button size="sm" variant="outline" onClick={() => {
-                        // abre a aba de gestão e pesquisa o carro para facilitar
-                        onOpenGestaoForCar(car);
-                      }}>Gerenciar</Button>
+                      <Button size="sm" variant="outline" onClick={() => { onOpenGestaoForCar(car); }}>Gerenciar</Button>
                     </div>
                     <div className="text-xs text-gray-400 mt-1 text-right">Atualizado: {car.updated_at ? new Date(car.updated_at).toLocaleDateString() : '-'}</div>
                   </td>

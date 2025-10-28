@@ -49,15 +49,16 @@ const Home = () => {
         {/* HERO */}
         <section
           className="relative flex items-center justify-center text-left text-white overflow-hidden"
-          // Agora a altura acompanha vh E vw (proporcional no zoom mínimo), com limites
-          style={{ height: 'clamp(360px, min(65vh, 45vw), 560px)' }}
+          // Altura proporcional (vh + vw) com limites para não estourar no zoom mínimo
+          style={{ height: 'clamp(380px, min(65vh, 42vw), 560px)' }}
         >
           <div className="absolute inset-0 z-0">
             <img
               src={heroBackground}
               alt="Fundo hero"
               className="w-full h-full object-cover"
-              style={{ display: 'block' }}
+              // ligeiro foco mais ao topo pra evitar cortar texto em alturas menores
+              style={{ display: 'block', objectPosition: 'center 35%' }}
             />
             <div className="absolute inset-0 bg-black/10" />
           </div>
@@ -66,13 +67,14 @@ const Home = () => {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8 }}
-            className="relative z-10 w-full px-6 sm:px-8 lg:px-12"
+            // 👇 padding-top apenas no mobile para não ficar sob o header fixo
+            className="relative z-10 w-full px-4 sm:px-6 lg:px-12 pt-[calc(env(safe-area-inset-top)+72px)] md:pt-0"
           >
-            {/* Alinhado com o restante do site: max-w-7xl */}
+            {/* Alinhado ao restante do site */}
             <div className="mx-auto max-w-7xl flex items-center justify-between h-full">
-              <div className="w-full md:w-5/12 flex flex-col justify-center py-12 pl-6 md:pl-12 lg:pl-20">
+              <div className="w-full md:w-5/12 flex flex-col justify-center py-8 md:py-12 pl-2 sm:pl-6 md:pl-12 lg:pl-20">
                 <div
-                  className="rounded-2xl p-6 md:p-8"
+                  className="rounded-2xl p-5 sm:p-6 md:p-8"
                   style={{
                     background: 'linear-gradient(rgba(3,3,3,0.48), rgba(3,3,3,0.44))',
                     backdropFilter: 'saturate(120%) blur(2px)',
@@ -83,28 +85,28 @@ const Home = () => {
                   }}
                 >
                   <h2
-                    className="text-3xl md:text-4xl lg:text-4xl font-extrabold leading-tight"
+                    className="text-2xl sm:text-3xl md:text-4xl font-extrabold leading-tight"
                     style={{ color: '#fff', textShadow: '0 6px 18px rgba(0,0,0,0.45)' }}
                   >
                     <span className="block">Venda com segurança.</span>
                     <span className="block" style={{ color: '#F7C93C' }}>Compre com confiança.</span>
                   </h2>
 
-                  <p className="mt-4 text-sm md:text-base text-gray-200 max-w-2xl">
+                  <p className="mt-3 sm:mt-4 text-sm md:text-base text-gray-200 max-w-2xl">
                     Assessoria completa, negociação transparente e garantia de melhor valor.
                   </p>
 
-                  <div className="mt-6 flex flex-col sm:flex-row gap-4">
+                  <div className="mt-5 sm:mt-6 flex flex-col sm:flex-row gap-3 sm:gap-4">
                     <Link
                       to="/estoque"
-                      className="inline-block bg-yellow-400 text-black px-6 py-3 rounded-xl text-lg font-semibold shadow-2xl transform transition-all duration-200 hover:-translate-y-1"
+                      className="inline-block bg-yellow-400 text-black px-6 py-3 rounded-xl text-base sm:text-lg font-semibold shadow-2xl transform transition-all duration-200 hover:-translate-y-1 text-center"
                     >
                       Quero Comprar
                     </Link>
 
                     <Link
                       to="/vender"
-                      className="inline-block bg-black text-yellow-400 px-6 py-3 rounded-xl text-lg font-semibold shadow-md border-2 border-yellow-400 transition-all duration-200 hover:bg-yellow-400 hover:text-black"
+                      className="inline-block bg-black text-yellow-400 px-6 py-3 rounded-xl text-base sm:text-lg font-semibold shadow-md border-2 border-yellow-400 transition-all duration-200 hover:bg-yellow-400 hover:text-black text-center"
                     >
                       Quero Vender
                     </Link>
@@ -125,7 +127,12 @@ const Home = () => {
               <p className="mt-4 text-lg text-gray-600">Venda seu carro sem sair de casa, com comodidade, transparencia e segurança</p>
             </div>
             <div className="mt-16 grid grid-cols-1 md:grid-cols-4 gap-8">
-              {timelineSteps.map((step, index) => (
+              {[
+                { num: 1, title: 'Vocẽ envia as informações do seu carro', description: 'Realizamos um estudo de mercado e sugerimos um valor de venda ideal para o anúncio.' },
+                { num: 2, title: 'Iremos até você tirar as fotos e videos do carro', description: 'Anunciamos seu carro em diversas plataformas automiotivas e redes sociais, alcançando um publico amplo e diversificado.' },
+                { num: 3, title: 'Agendamos e acompanhamos as visitas', description: 'Agendamos e acompanhamos as visitas de todos os potencias compradores, garantindo segurança e transparencia na negociação.' },
+                { num: 4, title: 'Auxiliamos na documentação e pronto, seu carro está vendido', description: 'Cuidamos de todo o processo de documentação e pagamento garantindo que tudo seja simples e claro para vocẽ e o comprador.' },
+              ].map((step, index) => (
                 <motion.div
                   key={step.num}
                   initial={{ opacity: 0, y: 30 }}

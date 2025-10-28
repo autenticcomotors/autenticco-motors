@@ -22,6 +22,7 @@ const Home = () => {
         setFeaturedCars(cars || []);
         setTestimonials(tests || []);
       } catch (err) {
+        // se falhar, não quebra a página
         setFeaturedCars([]);
         setTestimonials([]);
         // console.warn(err);
@@ -49,122 +50,121 @@ const Home = () => {
         />
       </Helmet>
 
-      {/* Pequeno bloco de CSS específico do hero — inline para não tocar index.css */}
+      {/* CSS local do hero: grid responsivo + imagem dentro da caixa */}
       <style>{`
-        /* wrapper mantém a proporção no fluxo: fallback por padding-top */
-        .hero-wrapper {
-          width: 100%;
-          --hero-ratio: 40%; /* default: altura = 40% da largura */
-          padding-top: var(--hero-ratio);
-          position: relative;
-          overflow: hidden;
+        /* HERO: grid 2-col no desktop, empilha no mobile */
+        .hero-section { padding: 0; }
+        .hero-container {
+          max-width: 1200px;
+          margin: 0 auto;
+          padding: 28px 20px;
+          box-sizing: border-box;
         }
-        /* imagem cobre todo o wrapper */
-        .hero-wrapper img.hero-img {
-          position: absolute;
-          inset: 0;
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-          object-position: right center;
-          display: block;
-        }
-        /* overlay leve */
-        .hero-overlay {
-          position: absolute;
-          inset: 0;
-          background: rgba(0,0,0,0.10);
-          pointer-events: none;
-        }
-        /* conteúdo sobre a imagem */
-        .hero-content {
-          position: absolute;
-          inset: 0;
-          display: flex;
+        .hero-grid {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 24px;
           align-items: center;
         }
-        /* Ajustes por breakpoint: mobile precisa de proporção maior (mais alto) */
-        @media (max-width: 640px) {
-          .hero-wrapper { --hero-ratio: 70%; } /* mais alto em mobile */
+        /* desktop: duas colunas (texto 5 / imagem 7) */
+        @media (min-width: 768px) {
+          .hero-grid {
+            grid-template-columns: 5fr 7fr;
+            gap: 32px;
+          }
         }
+        /* card visual */
+        .hero-card {
+          background: linear-gradient(rgba(3,3,3,0.48), rgba(3,3,3,0.44));
+          padding: 20px;
+          border-radius: 14px;
+          color: #fff;
+          box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+          border: 1px solid rgba(255,255,255,0.04);
+          width: 100%;
+        }
+        /* imagem dentro da caixa: width 100% height auto para acompanhar zoom */
+        .hero-image-wrapper {
+          width: 100%;
+          display: block;
+          border-radius: 12px;
+          overflow: hidden;
+          box-shadow: 0 8px 28px rgba(0,0,0,0.25);
+        }
+        .hero-image-wrapper img {
+          width: 100%;
+          height: auto; /* muito importante: escala com a largura */
+          display: block;
+          object-fit: cover;
+          object-position: right center;
+          -webkit-user-drag: none;
+        }
+        /* se quiser que o card "flutue" parcialmente sobre a imagem em desktop, ajustar esse transform */
         @media (min-width: 1024px) {
-          .hero-wrapper { --hero-ratio: 45%; } /* padrão desktop um pouco maior */
+          .hero-card {
+            /* opcional: deixe comentário abaixo ativo se quiser leve sobreposição */
+            /* transform: translateY(-8%); */
+          }
         }
-        /* quando precisar, ajuste a variável --hero-ratio acima para maior/menor altura */
       `}</style>
 
       <div className="bg-white">
         <BackgroundShape />
 
-        {/* HERO: imagem no fluxo (wrapper com padding-top) */}
-        <section className="relative text-left text-white overflow-hidden" aria-label="Hero">
-          <div className="hero-wrapper" role="img" aria-label="Carro na ponte">
-            {/* imagem em fluxo mas posicionada absoluta dentro do wrapper */}
-            <img src={heroBackground} alt="Fundo hero AutenTicco" className="hero-img" />
-
-            {/* overlay */}
-            <div className="hero-overlay" />
-
-            {/* conteúdo posicionado sobre a imagem */}
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8 }}
-              className="hero-content"
-            >
-              <div className="w-full px-6 sm:px-8 lg:px-12">
-                <div className="mx-auto max-w-8xl flex items-center justify-between h-full">
-                  <div className="w-full md:w-5/12 flex flex-col justify-center py-10 md:py-12 pl-4 md:pl-12 lg:pl-20">
-                    <div
-                      className="rounded-2xl p-6 md:p-8"
-                      style={{
-                        background: 'linear-gradient(rgba(3,3,3,0.48), rgba(3,3,3,0.44))',
-                        backdropFilter: 'saturate(120%) blur(2px)',
-                        border: '1px solid rgba(255,255,255,0.04)',
-                        boxShadow: '0 12px 40px rgba(0,0,0,0.45)',
-                        maxWidth: '520px',
-                        width: '100%',
-                      }}
+        {/* HERO: grid com imagem dentro de uma caixa (sem absolute, sem height fixo) */}
+        <section className="hero-section">
+          <div className="hero-container">
+            <div className="hero-grid">
+              {/* LEFT: card / texto */}
+              <div>
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.8 }}
+                >
+                  <div className="hero-card">
+                    <h2
+                      className="text-3xl md:text-4xl lg:text-4xl font-extrabold leading-tight"
+                      style={{ color: '#fff', textShadow: '0 6px 18px rgba(0,0,0,0.45)' }}
                     >
-                      <h2
-                        className="text-3xl md:text-4xl lg:text-4xl font-extrabold leading-tight"
-                        style={{ color: '#fff', textShadow: '0 6px 18px rgba(0,0,0,0.45)' }}
+                      <span className="block">Venda com segurança.</span>
+                      <span className="block" style={{ color: '#F7C93C' }}>Compre com confiança.</span>
+                    </h2>
+
+                    <p className="mt-4 text-sm md:text-base text-gray-200 max-w-2xl">
+                      Assessoria completa, negociação transparente e garantia de melhor valor.
+                    </p>
+
+                    <div className="mt-6 flex flex-col sm:flex-row gap-4">
+                      <Link
+                        to="/estoque"
+                        className="inline-block bg-yellow-400 text-black px-6 py-3 rounded-xl text-lg font-semibold shadow-2xl transform transition-all duration-200 hover:-translate-y-1"
                       >
-                        <span className="block">Venda com segurança.</span>
-                        <span className="block" style={{ color: '#F7C93C' }}>Compre com confiança.</span>
-                      </h2>
+                        Quero Comprar
+                      </Link>
 
-                      <p className="mt-4 text-sm md:text-base text-gray-200 max-w-2xl">
-                        Assessoria completa, negociação transparente e garantia de melhor valor.
-                      </p>
-
-                      <div className="mt-6 flex flex-col sm:flex-row gap-4">
-                        <Link
-                          to="/estoque"
-                          className="inline-block bg-yellow-400 text-black px-6 py-3 rounded-xl text-lg font-semibold shadow-2xl transform transition-all duration-200 hover:-translate-y-1"
-                        >
-                          Quero Comprar
-                        </Link>
-
-                        <Link
-                          to="/vender"
-                          className="inline-block bg-black text-yellow-400 px-6 py-3 rounded-xl text-lg font-semibold shadow-md border-2 border-yellow-400 transition-all duration-200 hover:bg-yellow-400 hover:text-black"
-                        >
-                          Quero Vender
-                        </Link>
-                      </div>
+                      <Link
+                        to="/vender"
+                        className="inline-block bg-black text-yellow-400 px-6 py-3 rounded-xl text-lg font-semibold shadow-md border-2 border-yellow-400 transition-all duration-200 hover:bg-yellow-400 hover:text-black"
+                      >
+                        Quero Vender
+                      </Link>
                     </div>
                   </div>
+                </motion.div>
+              </div>
 
-                  {/* espaço direito - apenas visual (escondido em telas pequenas) */}
-                  <div className="hidden md:block md:w-7/12 h-full" />
+              {/* RIGHT: image box (dentro do fluxo) */}
+              <div>
+                <div className="hero-image-wrapper" aria-hidden="false">
+                  <img src={heroBackground} alt="Carro na ponte - AutenTicco" />
                 </div>
               </div>
-            </motion.div>
+            </div>
           </div>
         </section>
 
-        {/* RESTANTE DA PÁGINA (mantive o seu markup original abaixo) */}
+        {/* RESTANTE DA PÁGINA (mantive seu markup original) */}
         <section className="py-24 bg-white">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center">

@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Helmet } from 'react-helmet';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Car, PlusCircle, Trash2, Edit, LogOut, Download, MessageSquare, Users, Image as ImageIcon, FileText, Check, Star, BarChart2 } from 'lucide-react';
+import { Car, PlusCircle, Trash2, Megaphone, Wallet, DollarSign, Edit, LogOut, Download, MessageSquare, Users, Image as ImageIcon, FileText, Check, Star, BarChart2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
 import { CSVLink } from 'react-csv';
@@ -18,8 +18,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import BackgroundShape from '@/components/BackgroundShape';
 import VehicleManager from '@/components/VehicleManager';
 import Reports from '@/pages/Reports';
+import OverviewBoard from '@/components/OverviewBoard';
 
-// FormFields agora inclui o campo Blindado (checkbox)
+// FormFields (mesmo que você tinha)
 const FormFields = React.memo(({ carData, onChange, carOptions }) => (
   <>
     <input name="brand" value={carData.brand || ''} onChange={onChange} placeholder="Marca *" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none" />
@@ -59,7 +60,7 @@ const FormFields = React.memo(({ carData, onChange, carOptions }) => (
 ));
 
 const AdminDashboard = () => {
-  const [activeTab, setActiveTab] = useState('leads');
+  const [activeTab, setActiveTab] = useState('leads'); // agora inclui 'matriz'
   const [cars, setCars] = useState([]);
   const [leads, setLeads] = useState([]);
   const [testimonials, setTestimonials] = useState([]);
@@ -104,7 +105,6 @@ const AdminDashboard = () => {
     });
   };
 
-  // fetchAllData now accepts options to avoid showing full-screen loading (used by VehicleManager)
   const fetchAllData = useCallback(async (opts = { showLoading: true }) => {
     if (opts.showLoading) setLoading(true);
     try {
@@ -154,7 +154,6 @@ const AdminDashboard = () => {
 
   const handleLogout = async () => { await supabase.auth.signOut(); navigate('/admin'); };
 
-  // handleInputChange agora suporta checkbox corretamente
   const handleInputChange = (e, setStateFunc) => {
     const { name, type, checked, value } = e.target;
     const finalValue = type === 'checkbox' ? checked : value;
@@ -212,7 +211,6 @@ const AdminDashboard = () => {
       const { data: addedCar, error } = await addCar(carData);
       if (error) { toast({ title: 'Erro ao adicionar.', description: error.message, variant: 'destructive' }); }
       else {
-        // try to apply latest checklist template (global) to new car, fallback to DEFAULT_CHECKLIST
         try {
           const { data: tplArr, error: tplErr } = await getLatestChecklistTemplate();
           let itemsToCreate = DEFAULT_CHECKLIST;
@@ -226,7 +224,6 @@ const AdminDashboard = () => {
           console.warn('Erro ao criar checklist padrão:', err);
         }
 
-        // prepend active car to UI (and resort)
         setCars(prevCars => sortCarsActiveFirst([...(prevCars || []), addedCar]));
         setNewCar({ brand: '', model: '', year: '', price: '', mileage: '', fuel: '', photo_urls: [], youtube_link: '', full_description: '', transmission: '', body_type: '', color: '', is_blindado: false });
         setPhotosToUpload([]);
@@ -304,7 +301,6 @@ const AdminDashboard = () => {
     }
   };
 
-  // --- VENDAS: abrir modal
   const openSaleDialog = (car) => {
     setCarToSell(car);
     setSaleForm({
@@ -388,6 +384,17 @@ const AdminDashboard = () => {
     });
   }, [cars, carSearch, brandFilter]);
 
+  // função chamada pelo OverviewBoard para abrir a aba de Gestão e pré-pesquisar o carro
+  const handleOpenGestaoForCar = (car) => {
+    // altera a aba para Gestão e filtra o estoque para facilitar localizar o carro
+    setActiveTab('gestao');
+    setCarSearch(`${car.brand} ${car.model}`);
+    setTimeout(() => {
+      // opcional: scroll para baixo onde está a lista (se quiser)
+      window.scrollTo({ top: 300, behavior: 'smooth' });
+    }, 120);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex justify-center items-center">
@@ -412,6 +419,7 @@ const AdminDashboard = () => {
             <button className={`px-4 py-2 font-semibold ${activeTab === 'cars' ? 'border-b-2 border-yellow-500 text-yellow-500' : 'text-gray-500 hover:text-gray-900'}`} onClick={() => setActiveTab('cars')}><Car className="inline mr-2" /> Veículos</button>
             <button className={`px-4 py-2 font-semibold ${activeTab === 'testimonials' ? 'border-b-2 border-yellow-500 text-yellow-500' : 'text-gray-500 hover:text-gray-900'}`} onClick={() => setActiveTab('testimonials')}><MessageSquare className="inline mr-2" /> Depoimentos</button>
             <button className={`px-4 py-2 font-semibold ${activeTab === 'gestao' ? 'border-b-2 border-yellow-500 text-yellow-500' : 'text-gray-500 hover:text-gray-900'}`} onClick={() => setActiveTab('gestao')}><FileText className="inline mr-2" /> Gestão</button>
+            <button className={`px-4 py-2 font-semibold ${activeTab === 'matriz' ? 'border-b-2 border-yellow-500 text-yellow-500' : 'text-gray-500 hover:text-gray-900'}`} onClick={() => setActiveTab('matriz')}><BarChart2 className="inline mr-2" /> Matriz</button>
             <button className={`px-4 py-2 font-semibold ${activeTab === 'reports' ? 'border-b-2 border-yellow-500 text-yellow-500' : 'text-gray-500 hover:text-gray-900'}`} onClick={() => setActiveTab('reports')}><BarChart2 className="inline mr-2" /> Relatórios</button>
           </div>
 
@@ -515,7 +523,6 @@ const AdminDashboard = () => {
                         <div className="relative">
                           <img src={car.main_photo_url || 'https://placehold.co/96x64/e2e8f0/4a5568?text=Sem+Foto'} alt={`${car.brand} ${car.model}`} className={`h-16 w-24 object-cover rounded-md ${car.is_available === false ? 'filter grayscale contrast-90' : ''}`} />
                           {car.is_available === false && <div className="absolute top-1 left-1 bg-red-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">VENDIDO</div>}
-                          {/* Badge BLINDADO in admin small preview */}
                           {car.is_blindado && <div className="absolute top-1 right-1 bg-yellow-400 text-black text-xs font-bold px-2 py-0.5 rounded-full">BLINDADO</div>}
                         </div>
                         <div>
@@ -568,8 +575,14 @@ const AdminDashboard = () => {
           {/* GESTÃO (VehicleManager) */}
           {activeTab === 'gestao' && (
             <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-xl border">
-              {/* passamos refreshAll sem loading para não fechar modal */}
               <VehicleManager cars={cars} refreshAll={() => fetchAllData({ showLoading: false })} />
+            </div>
+          )}
+
+          {/* MATRIZ: visão geral tipo planilha */}
+          {activeTab === 'matriz' && (
+            <div className="mb-8">
+              <OverviewBoard cars={cars} refreshAll={() => fetchAllData({ showLoading: false })} onOpenGestaoForCar={(car) => handleOpenGestaoForCar(car)} />
             </div>
           )}
 
@@ -612,7 +625,7 @@ const AdminDashboard = () => {
         </motion.div>
       </div>
 
-      {/* EDIT DIALOG */}
+      {/* EDIT DIALOG (mantido como antes) */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="bg-white text-gray-900">
           <DialogHeader><DialogTitle>Editar Veículo</DialogTitle></DialogHeader>
@@ -643,7 +656,7 @@ const AdminDashboard = () => {
         </DialogContent>
       </Dialog>
 
-      {/* SALE DIALOG */}
+      {/* SALE DIALOG (mantido) */}
       <Dialog open={saleDialogOpen} onOpenChange={setSaleDialogOpen}>
         <DialogContent className="bg-white text-gray-900">
           <DialogHeader><DialogTitle>Registrar Venda</DialogTitle></DialogHeader>

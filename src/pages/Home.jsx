@@ -17,23 +17,18 @@ const Home = () => {
 
   useEffect(() => {
     const loadData = async () => {
-      try {
-        const [cars, tests] = await Promise.all([getFeaturedCars(), getTestimonials()]);
-        setFeaturedCars(cars || []);
-        setTestimonials(tests || []);
-      } catch (err) {
-        setFeaturedCars([]);
-        setTestimonials([]);
-      }
+      const [cars, tests] = await Promise.all([getFeaturedCars(), getTestimonials()]);
+      setFeaturedCars(cars || []);
+      setTestimonials(tests || []);
     };
     loadData();
   }, []);
 
   const timelineSteps = [
-    { num: 1, title: 'Vocẽ envia as informações do seu carro', description: 'Realizamos um estudo de mercado e sugerimos um valor de venda ideal para o anúncio.' },
-    { num: 2, title: 'Iremos até você tirar as fotos e videos do carro', description: 'Anunciamos seu carro em diversas plataformas automiotivas e redes sociais, alcançando um publico amplo e diversificado.' },
-    { num: 3, title: 'Agendamos e acompanhamos as visitas', description: 'Agendamos e acompanhamos as visitas de todos os potencias compradores, garantindo segurança e transparencia na negociação.' },
-    { num: 4, title: 'Auxiliamos na documentação e pronto, seu carro está vendido', description: 'Cuidamos de todo o processo de documentação e pagamento garantindo que tudo seja simples e claro para vocẽ e o comprador.' },
+    { num: 1, title: 'Você envia as informações do seu carro', description: 'Realizamos um estudo de mercado e sugerimos um valor de venda ideal para o anúncio.' },
+    { num: 2, title: 'Iremos até você tirar as fotos e vídeos do carro', description: 'Anunciamos seu carro em diversas plataformas automotivas e redes sociais, alcançando um público amplo e diversificado.' },
+    { num: 3, title: 'Agendamos e acompanhamos as visitas', description: 'Agendamos e acompanhamos as visitas de todos os potenciais compradores, garantindo segurança e transparência na negociação.' },
+    { num: 4, title: 'Auxiliamos na documentação e pronto, seu carro está vendido', description: 'Cuidamos de todo o processo de documentação e pagamento garantindo que tudo seja simples e claro.' },
   ];
 
   const TEXT_LIMIT = 20;
@@ -48,114 +43,31 @@ const Home = () => {
         />
       </Helmet>
 
-      <style>{`
-        /* HERO - estrutura full-bleed image à direita */
-        .hero-section {
-          position: relative;
-          width: 100%;
-          box-sizing: border-box;
-          padding: 36px 0;
-          overflow: visible;
-        }
-        .hero-inner {
-          max-width: 1200px;
-          margin: 0 auto;
-          padding: 0 20px;
-          display: grid;
-          grid-template-columns: 1fr;
-          gap: 24px;
-          align-items: center;
-          position: relative;
-          z-index: 2; /* garante que o conteúdo fique acima da imagem */
-          box-sizing: border-box;
-        }
-        /* coluna do conteúdo (card) */
-        .hero-card {
-          width: 100%;
-          box-sizing: border-box;
-        }
-
-        /* caixa que segura a imagem full-bleed (desktop) */
-        .hero-bleed {
-          position: absolute;
-          top: 36px; /* alinha verticalmente com o padding do hero */
-          bottom: 36px;
-          right: 0;
-          width: 50vw; /* ajuste aqui se quiser imagem maior/menor (ex.: 55vw) */
-          z-index: 1;
-          display: block;
-          pointer-events: none; /* evita que a imagem capture cliques quando sobreposta */
-          box-sizing: border-box;
-        }
-        .hero-bleed .img-wrap {
-          width: 100%;
-          height: 100%;
-          overflow: hidden;
-          border-radius: 12px;
-          box-shadow: 0 8px 28px rgba(0,0,0,0.25);
-        }
-        .hero-bleed img {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-          object-position: right center;
-          display: block;
-          -webkit-user-drag: none;
-        }
-
-        /* MOBILE / TABLET: empilha e faz imagem normal dentro do fluxo */
-        @media (max-width: 768px) {
-          .hero-inner {
-            grid-template-columns: 1fr;
-            gap: 16px;
-          }
-          .hero-bleed {
-            position: static;
-            width: 100%;
-            top: auto;
-            bottom: auto;
-            margin: 0;
-            pointer-events: auto;
-            z-index: 0;
-            padding: 0 20px;
-          }
-          .hero-bleed .img-wrap { border-radius: 10px; height: auto; }
-          .hero-bleed img { height: auto; object-position: center; }
-        }
-
-        /* Pequenos ajustes visuais do card (mantidos) */
-        .hero-card-inner {
-          background: linear-gradient(rgba(3,3,3,0.48), rgba(3,3,3,0.44));
-          padding: 20px;
-          border-radius: 14px;
-          color: #fff;
-          box-shadow: 0 12px 40px rgba(0,0,0,0.45);
-          border: 1px solid rgba(255,255,255,0.04);
-        }
-      `}</style>
-
-      <div className="bg-white">
+      <div className="bg-white relative">
         <BackgroundShape />
 
-        <section className="hero-section">
-          {/* conteúdo central limitado */}
-          <div className="hero-inner">
-            <div className="hero-card">
-              <motion.div
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.8 }}
+        {/* ================= HERO ================= */}
+        {/* Grid: mobile 1 coluna (card acima, imagem abaixo). Desktop: 12 colunas, card 5/12 e imagem 7/12 */}
+        <section className="max-w-[1400px] mx-auto px-6 sm:px-8 lg:px-12 py-8">
+          <div className="grid grid-cols-1 md:grid-cols-12 items-center gap-6">
+            {/* LEFT: Card (no mobile fica acima, no desktop ocupa 5 colunas e sobrepõe a imagem via translateX) */}
+            <div className="md:col-span-5 flex items-center">
+              <div
+                className="w-full rounded-2xl p-6 md:p-8"
+                style={{
+                  background: 'linear-gradient(rgba(3,3,3,0.48), rgba(3,3,3,0.44))',
+                  backdropFilter: 'saturate(120%) blur(2px)',
+                  border: '1px solid rgba(255,255,255,0.06)',
+                  boxShadow: '0 20px 60px rgba(0,0,0,0.35)',
+                }}
               >
-                <div className="hero-card-inner">
-                  <h2
-                    className="text-3xl md:text-4xl lg:text-4xl font-extrabold leading-tight"
-                    style={{ color: '#fff', textShadow: '0 6px 18px rgba(0,0,0,0.45)' }}
-                  >
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
+                  <h2 className="text-3xl md:text-4xl lg:text-5xl font-extrabold leading-tight text-white" style={{ textShadow: '0 8px 22px rgba(0,0,0,0.45)' }}>
                     <span className="block">Venda com segurança.</span>
                     <span className="block" style={{ color: '#F7C93C' }}>Compre com confiança.</span>
                   </h2>
 
-                  <p className="mt-4 text-sm md:text-base text-gray-200 max-w-2xl">
+                  <p className="mt-4 text-sm md:text-base text-gray-200 max-w-xl">
                     Assessoria completa, negociação transparente e garantia de melhor valor.
                   </p>
 
@@ -174,25 +86,34 @@ const Home = () => {
                       Quero Vender
                     </Link>
                   </div>
-                </div>
-              </motion.div>
+                </motion.div>
+              </div>
             </div>
-          </div>
 
-          {/* imagem full-bleed à direita (desktop). No mobile ela vira estática dentro do fluxo) */}
-          <div className="hero-bleed" aria-hidden="false">
-            <div className="img-wrap">
-              <img src={heroBackground} alt="Carro na ponte - AutenTicco" />
+            {/* RIGHT: Imagem (no mobile fica abaixo do card; no desktop ocupa 7 colunas) */}
+            <div className="md:col-span-7">
+              {/* Box que define altura responsiva da imagem.
+                  - mobile: h-72 (aprox 288px)
+                  - md+: h-[60vh] para ocupar altura visual grande
+                  rounded + overflow-hidden para cantos arredondados */}
+              <div className="w-full h-72 md:h-[60vh] overflow-hidden rounded-2xl shadow-lg">
+                <img
+                  src={heroBackground}
+                  alt="Fundo hero"
+                  className="w-full h-full object-cover object-right"
+                  style={{ display: 'block' }}
+                />
+              </div>
             </div>
           </div>
         </section>
 
-        {/* resto da página (mantive tudo) */}
+        {/* ================= RESTO DA PÁGINA ================= */}
         <section className="py-24 bg-white">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center">
               <h2 className="text-3xl md:text-4xl font-extrabold text-gray-900">Quer vender seu carro ?</h2>
-              <p className="mt-4 text-lg text-gray-600">Venda seu carro sem sair de casa, com comodidade, transparencia e segurança</p>
+              <p className="mt-4 text-lg text-gray-600">Venda seu carro sem sair de casa, com comodidade, transparência e segurança</p>
             </div>
             <div className="mt-16 grid grid-cols-1 md:grid-cols-4 gap-8">
               {timelineSteps.map((step, index) => (
@@ -201,7 +122,7 @@ const Home = () => {
                   initial={{ opacity: 0, y: 30 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true, amount: 0.5 }}
-                  transition={{ duration: 0.5, delay: index * 0.1 }}
+                  transition={{ duration: 0.5, delay: index * 0.08 }}
                   className="text-center"
                 >
                   <div className="flex items-center justify-center w-16 h-16 bg-yellow-400 rounded-full mx-auto mb-4 ring-8 ring-white shadow-lg">

@@ -46,69 +46,77 @@ const Home = () => {
       <div className="bg-white relative">
         <BackgroundShape />
 
-        {/* ================= HERO ================= */}
-        {/* Grid: mobile 1 coluna (card acima, imagem abaixo). Desktop: 12 colunas, card 5/12 e imagem 7/12 */}
-        <section className="max-w-[1400px] mx-auto px-6 sm:px-8 lg:px-12 py-8">
-          <div className="grid grid-cols-1 md:grid-cols-12 items-center gap-6">
-            {/* LEFT: Card (no mobile fica acima, no desktop ocupa 5 colunas e sobrepõe a imagem via translateX) */}
-            <div className="md:col-span-5 flex items-center">
-              <div
-                className="w-full rounded-2xl p-6 md:p-8"
-                style={{
-                  background: 'linear-gradient(rgba(3,3,3,0.48), rgba(3,3,3,0.44))',
-                  backdropFilter: 'saturate(120%) blur(2px)',
-                  border: '1px solid rgba(255,255,255,0.06)',
-                  boxShadow: '0 20px 60px rgba(0,0,0,0.35)',
-                }}
-              >
-                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
-                  <h2 className="text-3xl md:text-4xl lg:text-5xl font-extrabold leading-tight text-white" style={{ textShadow: '0 8px 22px rgba(0,0,0,0.45)' }}>
-                    <span className="block">Venda com segurança.</span>
-                    <span className="block" style={{ color: '#F7C93C' }}>Compre com confiança.</span>
-                  </h2>
+        {/* ================= HERO - FULL BLEED ================= */}
+        {/* Section full width (fora do container central) */}
+        <section className="w-full relative overflow-hidden">
+          {/* bloco que define a altura visual do hero (dá o "height" ao section) */}
+          <div className="w-full h-72 md:h-[60vh] lg:h-[70vh]">
+            <img
+              src={heroBackground}
+              alt="Fundo hero"
+              className="w-full h-full object-cover object-right"
+              style={{ display: 'block' }}
+            />
+          </div>
 
-                  <p className="mt-4 text-sm md:text-base text-gray-200 max-w-xl">
-                    Assessoria completa, negociação transparente e garantia de melhor valor.
-                  </p>
+          {/* Card sobreposto: usamos absolute para sobrepor a imagem.
+              Ele está responsivo: em telas pequenas ele fica centralizado e "encaixado",
+              em md+ ele fica posicionado à esquerda com offset (sobrepondo a imagem). */}
+          <div className="absolute inset-x-0 top-0 pointer-events-none">
+            <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12">
+              <div className="relative">
+                <div
+                  className={
+                    // mobile: card ocupa 100% e fica com margin-top para aparecer mais abaixo;
+                    // md+: posicionamento absoluto com offset à esquerda para sobrepor imagem.
+                    'mx-auto mt-12 md:mt-0 md:absolute md:top-1/4 md:left-6 lg:left-16 pointer-events-auto'
+                  }
+                  style={{ width: 'min(520px, 92%)' }}
+                >
+                  <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.6 }}
+                    className="rounded-2xl p-6 md:p-8"
+                    style={{
+                      background: 'linear-gradient(rgba(3,3,3,0.5), rgba(3,3,3,0.44))',
+                      backdropFilter: 'saturate(120%) blur(3px)',
+                      border: '1px solid rgba(255,255,255,0.06)',
+                      boxShadow: '0 24px 80px rgba(0,0,0,0.35)',
+                    }}
+                  >
+                    <h2 className="text-3xl md:text-4xl lg:text-4xl font-extrabold leading-tight text-white" style={{ textShadow: '0 8px 24px rgba(0,0,0,0.45)' }}>
+                      <span className="block">Venda com segurança.</span>
+                      <span className="block" style={{ color: '#F7C93C' }}>Compre com confiança.</span>
+                    </h2>
 
-                  <div className="mt-6 flex flex-col sm:flex-row gap-4">
-                    <Link
-                      to="/estoque"
-                      className="inline-block bg-yellow-400 text-black px-6 py-3 rounded-xl text-lg font-semibold shadow-2xl transform transition-all duration-200 hover:-translate-y-1"
-                    >
-                      Quero Comprar
-                    </Link>
+                    <p className="mt-4 text-sm md:text-base text-gray-200 max-w-xl">
+                      Assessoria completa, negociação transparente e garantia de melhor valor.
+                    </p>
 
-                    <Link
-                      to="/vender"
-                      className="inline-block bg-black text-yellow-400 px-6 py-3 rounded-xl text-lg font-semibold shadow-md border-2 border-yellow-400 transition-all duration-200 hover:bg-yellow-400 hover:text-black"
-                    >
-                      Quero Vender
-                    </Link>
-                  </div>
-                </motion.div>
-              </div>
-            </div>
+                    <div className="mt-6 flex flex-col sm:flex-row gap-4">
+                      <Link
+                        to="/estoque"
+                        className="inline-block bg-yellow-400 text-black px-6 py-3 rounded-xl text-lg font-semibold shadow-2xl transform transition-all duration-200 hover:-translate-y-1"
+                      >
+                        Quero Comprar
+                      </Link>
 
-            {/* RIGHT: Imagem (no mobile fica abaixo do card; no desktop ocupa 7 colunas) */}
-            <div className="md:col-span-7">
-              {/* Box que define altura responsiva da imagem.
-                  - mobile: h-72 (aprox 288px)
-                  - md+: h-[60vh] para ocupar altura visual grande
-                  rounded + overflow-hidden para cantos arredondados */}
-              <div className="w-full h-72 md:h-[60vh] overflow-hidden rounded-2xl shadow-lg">
-                <img
-                  src={heroBackground}
-                  alt="Fundo hero"
-                  className="w-full h-full object-cover object-right"
-                  style={{ display: 'block' }}
-                />
+                      <Link
+                        to="/vender"
+                        className="inline-block bg-black text-yellow-400 px-6 py-3 rounded-xl text-lg font-semibold shadow-md border-2 border-yellow-400 transition-all duration-200 hover:bg-yellow-400 hover:text-black"
+                      >
+                        Quero Vender
+                      </Link>
+                    </div>
+                  </motion.div>
+                </div>
               </div>
             </div>
           </div>
         </section>
 
-        {/* ================= RESTO DA PÁGINA ================= */}
+        {/* ================= RESTO DA PÁGINA (conteúdo centralizado igual antes) ================= */}
         <section className="py-24 bg-white">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center">

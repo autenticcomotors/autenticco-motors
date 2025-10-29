@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Helmet } from 'react-helmet';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Car, PlusCircle, Trash2, Megaphone, Wallet, DollarSign, Edit, LogOut, Download, MessageSquare, Users, Image as ImageIcon, FileText, Check, Star, BarChart2 } from 'lucide-react';
+import { Car, PlusCircle, Trash2, Edit, LogOut, Download, MessageSquare, Users, Image as ImageIcon, FileText, Check, Star, BarChart2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
 import { CSVLink } from 'react-csv';
@@ -13,14 +13,17 @@ import {
   getLeads, updateLead, deleteLead, getPlatforms, markCarAsSold, unmarkCarAsSold,
   addChecklistItem, getLatestChecklistTemplate
 } from '@/lib/car-api';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
+} from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import BackgroundShape from '@/components/BackgroundShape';
 import VehicleManager from '@/components/VehicleManager';
 import Reports from '@/pages/Reports';
 import OverviewBoard from '@/components/OverviewBoard';
 
-// FormFields agora inclui o campo Blindado (checkbox)
+// FormFields (igual)
 const FormFields = React.memo(({ carData, onChange, carOptions }) => (
   <>
     <input name="brand" value={carData.brand || ''} onChange={onChange} placeholder="Marca *" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none" />
@@ -50,8 +53,6 @@ const FormFields = React.memo(({ carData, onChange, carOptions }) => (
     <div className="relative md:col-span-3">
       <textarea name="full_description" value={carData.full_description || ''} onChange={onChange} placeholder="Descrição detalhada..." rows={4} className="w-full bg-white border border-gray-300 rounded-lg p-3 resize-none text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none" />
     </div>
-
-    {/* CHECKBOX: Blindado */}
     <div className="flex items-center gap-3">
       <input id="is_blindado" name="is_blindado" type="checkbox" checked={!!carData.is_blindado} onChange={onChange} className="h-4 w-4" />
       <label htmlFor="is_blindado" className="text-sm font-medium text-gray-700">Blindado</label>
@@ -79,13 +80,10 @@ const AdminDashboard = () => {
   const [saleDialogOpen, setSaleDialogOpen] = useState(false);
   const [carToSell, setCarToSell] = useState(null);
   const [saleForm, setSaleForm] = useState({ platform_id: '', sale_price: '', sale_date: '', notes: '' });
+  const [matrixCarToManage, setMatrixCarToManage] = useState(null); // <- NOVO: abre modal a partir da Matriz
   const fileInputRef = useRef(null);
   const navigate = useNavigate();
 
-  // >>> NOVO: controle para abrir VehicleManager a partir da Matriz
-  const [openCarForManager, setOpenCarForManager] = useState(null);
-
-  // novos states de filtro de veiculos
   const [carSearch, setCarSearch] = useState('');
   const [brandFilter, setBrandFilter] = useState('');
 
@@ -108,7 +106,6 @@ const AdminDashboard = () => {
     });
   };
 
-  // fetchAllData now accepts options to avoid showing full-screen loading (used by VehicleManager)
   const fetchAllData = useCallback(async (opts = { showLoading: true }) => {
     if (opts.showLoading) setLoading(true);
     try {
@@ -121,10 +118,7 @@ const AdminDashboard = () => {
       setPlatforms(platformsData || []);
     } catch (err) {
       console.error('Erro fetchAllData:', err);
-      setCars([]);
-      setTestimonials([]);
-      setLeads([]);
-      setPlatforms([]);
+      setCars([]); setTestimonials([]); setLeads([]); setPlatforms([]);
     } finally {
       if (opts.showLoading) setLoading(false);
     }
@@ -158,7 +152,6 @@ const AdminDashboard = () => {
 
   const handleLogout = async () => { await supabase.auth.signOut(); navigate('/admin'); };
 
-  // handleInputChange agora suporta checkbox corretamente
   const handleInputChange = (e, setStateFunc) => {
     const { name, type, checked, value } = e.target;
     const finalValue = type === 'checkbox' ? checked : value;
@@ -216,10 +209,9 @@ const AdminDashboard = () => {
       const { data: addedCar, error } = await addCar(carData);
       if (error) { toast({ title: 'Erro ao adicionar.', description: error.message, variant: 'destructive' }); }
       else {
-        // try to apply latest checklist template (global) to new car, fallback to DEFAULT_CHECKLIST
         try {
           const { data: tplArr, error: tplErr } = await getLatestChecklistTemplate();
-          let itemsToCreate = DEFAULT_CHECKLIST;
+        let itemsToCreate = DEFAULT_CHECKLIST;
           if (!tplErr && tplArr && tplArr.template && Array.isArray(tplArr.template) && tplArr.template.length > 0) {
             itemsToCreate = tplArr.template.map(it => ({ label: it.label || it.label, notes: it.notes || '', checked: false }));
           }
@@ -229,21 +221,16 @@ const AdminDashboard = () => {
         } catch (err) {
           console.warn('Erro ao criar checklist padrão:', err);
         }
-
-        // prepend active car to UI (and resort)
         setCars(prevCars => sortCarsActiveFirst([...(prevCars || []), addedCar]));
         setNewCar({ brand: '', model: '', year: '', price: '', mileage: '', fuel: '', photo_urls: [], youtube_link: '', full_description: '', transmission: '', body_type: '', color: '', is_blindado: false });
-        setPhotosToUpload([]);
-        setMainPhotoIndex(0);
+        setPhotosToUpload([]); setMainPhotoIndex(0);
         if (fileInputRef.current) fileInputRef.current.value = "";
         toast({ title: 'Veículo adicionado!' });
       }
     } catch (err) {
       console.error('Erro handleAddCar:', err);
       toast({ title: 'Erro ao adicionar veículo', description: err.message || String(err), variant: 'destructive' });
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   const handleEditCarClick = (car) => { setPhotosToUpload([]); setPhotosToDelete([]); setEditingCar(JSON.parse(JSON.stringify(car))); setIsEditDialogOpen(true); };
@@ -283,9 +270,7 @@ const AdminDashboard = () => {
     } catch (err) {
       console.error('Erro handleUpdateCar:', err);
       toast({ title: 'Erro ao atualizar veículo', description: err.message || String(err), variant: 'destructive' });
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   const handleDeleteCar = async (id) => {
@@ -302,13 +287,9 @@ const AdminDashboard = () => {
     } catch (err) {
       console.error('Erro handleDeleteCar:', err);
       toast({ title: 'Erro ao remover veículo', description: err.message || String(err), variant: 'destructive' });
-    } finally {
-      setCarToDelete(null);
-      setLoading(false);
-    }
+    } finally { setCarToDelete(null); setLoading(false); }
   };
 
-  // --- VENDAS: abrir modal
   const openSaleDialog = (car) => {
     setCarToSell(car);
     setSaleForm({
@@ -320,10 +301,7 @@ const AdminDashboard = () => {
     setSaleDialogOpen(true);
   };
 
-  const handleSaleFormChange = (e) => {
-    const { name, value } = e.target;
-    setSaleForm(prev => ({ ...prev, [name]: value }));
-  };
+  const handleSaleFormChange = (e) => { const { name, value } = e.target; setSaleForm(prev => ({ ...prev, [name]: value })); };
 
   const handleConfirmSell = async (e) => {
     e?.preventDefault();
@@ -338,20 +316,12 @@ const AdminDashboard = () => {
         notes: saleForm.notes || null
       };
       const res = await markCarAsSold(payload);
-      if (res?.error) {
-        toast({ title: 'Erro ao marcar como vendido', description: String(res.error), variant: 'destructive' });
-      } else {
-        toast({ title: 'Veículo marcado como vendido!' });
-        await fetchAllData();
-        setSaleDialogOpen(false);
-        setCarToSell(null);
-      }
+      if (res?.error) { toast({ title: 'Erro ao marcar como vendido', description: String(res.error), variant: 'destructive' }); }
+      else { toast({ title: 'Veículo marcado como vendido!' }); await fetchAllData(); setSaleDialogOpen(false); setCarToSell(null); }
     } catch (err) {
       console.error('Erro handleConfirmSell:', err);
       toast({ title: 'Erro ao marcar como vendido', description: err.message || String(err), variant: 'destructive' });
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   const handleUndoSale = async (car) => {
@@ -359,21 +329,14 @@ const AdminDashboard = () => {
     setLoading(true);
     try {
       const res = await unmarkCarAsSold(car.id, { deleteAllSales: true });
-      if (res?.error) {
-        toast({ title: 'Erro ao reverter venda', description: String(res.error), variant: 'destructive' });
-      } else {
-        toast({ title: 'Venda revertida — carro voltou ao estoque.' });
-        await fetchAllData();
-      }
+      if (res?.error) { toast({ title: 'Erro ao reverter venda', description: String(res.error), variant: 'destructive' }); }
+      else { toast({ title: 'Venda revertida — carro voltou ao estoque.' }); await fetchAllData(); }
     } catch (err) {
       console.error('Erro handleUndoSale:', err);
       toast({ title: 'Erro ao reverter venda', description: err.message || String(err), variant: 'destructive' });
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
-  // --- FILTROS (Admin - VEÍCULOS)
   const brandOptions = useMemo(() => {
     const brands = Array.from(new Set((cars || []).map(c => (c.brand || '').trim()).filter(Boolean)));
     brands.sort((a,b) => a.localeCompare(b, 'pt-BR'));
@@ -405,15 +368,6 @@ const AdminDashboard = () => {
       <Helmet><title>Dashboard - AutenTicco Motors</title></Helmet>
       <BackgroundShape />
 
-      {/* >>> VehicleManager global: abre modal a partir da Matriz sem trocar de aba */}
-      <VehicleManager
-        cars={cars}
-        platforms={platforms}
-        openCar={openCarForManager}
-        onOpenHandled={() => setOpenCarForManager(null)}
-        refreshAll={() => fetchAllData({ showLoading: false })}
-      />
-
       <div className="relative z-10 w-full px-4 sm:px-6 lg:px-12 py-12">
         <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
           <div className="flex justify-between items-center mb-8">
@@ -433,16 +387,146 @@ const AdminDashboard = () => {
           {/* LEADS */}
           {activeTab === 'leads' && (
             <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-xl border">
-              {/* ... (sem alterações) ... */}
-              {/* (conteúdo existente dos LEADS permanece) */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
+                <div className="text-lg font-bold">Exibindo <span className="text-yellow-500">{leads.length}</span> lead(s)</div>
+                <div className="flex flex-wrap items-center justify-center gap-4">
+                  <div className='flex gap-2 items-center'>
+                    <label htmlFor="startDate" className='text-sm font-medium'>De:</label>
+                    <input type="date" id="startDate" name="startDate" value={leadFilters.startDate} onChange={(e) => setLeadFilters(f => ({...f, startDate: e.target.value}))} className="bg-white border-gray-300 rounded-md p-2 h-10 text-sm" />
+                  </div>
+                  <div className='flex gap-2 items-center'>
+                    <label htmlFor="endDate" className='text-sm font-medium'>Até:</label>
+                    <input type="date" id="endDate" name="endDate" value={leadFilters.endDate} onChange={(e) => setLeadFilters(f => ({...f, endDate: e.target.value}))} className="bg-white border-gray-300 rounded-md p-2 h-10 text-sm" />
+                  </div>
+                  <select value={leadFilters.status} onChange={(e) => setLeadFilters(f => ({...f, status: e.target.value}))} className="bg-white border-gray-300 rounded-md p-2 h-10 text-sm">
+                    <option value="">Filtrar por Status</option>
+                    {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <Button variant="outline" size="sm" asChild><CSVLink data={leadsForCSV(leads)} filename={"leads-autenticco.csv"} className="flex items-center"><Download className="mr-2 h-4 w-4" /> Exportar</CSVLink></Button>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                {leads.map(lead => (
+                  <motion.div key={lead.id} layout className="bg-white rounded-lg p-4 shadow border">
+                    <div className="flex justify-between items-start gap-4">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-lg text-gray-900 truncate">{lead.client_name} - <span className="text-yellow-500 text-sm font-normal">{lead.lead_type}</span></p>
+                        <p className="text-gray-600 truncate">{lead.client_contact}</p>
+                        {lead.cars && lead.cars.slug && <p className="text-sm mt-2">Interesse: <Link to={`/carro/{lead.cars.slug}`} target="_blank" className="text-blue-600 hover:underline">{lead.cars.brand} {lead.cars.model}</Link></p>}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <select value={lead.status} onChange={(e) => handleStatusChange(lead.id, e.target.value)} className="bg-gray-100 border-gray-300 rounded p-2 text-sm flex-shrink-0">
+                          {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                        <AlertDialog open={leadToDelete === lead.id} onOpenChange={(isOpen) => !isOpen && setLeadToDelete(null)}>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="ghost" size="icon" onClick={() => setLeadToDelete(lead.id)}>
+                              <Trash2 className="h-5 w-5 text-red-500 hover:text-red-400" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent className="bg-white">
+                            <AlertDialogHeader><AlertDialogTitle>Tem certeza?</AlertDialogTitle><AlertDialogDescription>Esta ação removerá o lead permanentemente.</AlertDialogDescription></AlertDialogHeader>
+                            <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={handleDeleteLead}>Sim, Excluir</AlertDialogAction></AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
             </div>
           )}
 
           {/* VEÍCULOS */}
           {activeTab === 'cars' && (
             <>
-              {/* ... (sem alterações) ... */}
-              {/* (conteúdo existente dos VEÍCULOS permanece) */}
+              <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-8 mb-6 shadow-xl border">
+                <h2 className="text-2xl font-semibold mb-6 flex items-center"><PlusCircle className="mr-3 text-yellow-500" /> Adicionar Novo Veículo</h2>
+                <form onSubmit={handleAddCar} className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6"><FormFields carData={newCar} onChange={handleNewCarInputChange} carOptions={carOptions} /></div>
+                  <div>
+                    <Button type="button" onClick={() => fileInputRef.current && fileInputRef.current.click()}><ImageIcon className="mr-2 h-4 w-4" /> Adicionar Fotos</Button>
+                    <input type="file" ref={fileInputRef} onChange={handlePhotoUpload} multiple accept="image/*" className="hidden"/>
+                    <div className="mt-4 flex flex-wrap gap-4">{photosToUpload.map((file, index) => (
+                      <div key={index} className="relative cursor-pointer" onClick={() => setMainPhotoIndex(index)}>
+                        <img src={URL.createObjectURL(file)} alt={`Preview ${index}`} className={`h-24 w-24 object-cover rounded-lg ${mainPhotoIndex === index ? 'ring-2 ring-yellow-500' : ''}`} />
+                        {mainPhotoIndex === index && <div className="absolute top-1 right-1 bg-yellow-500 text-black rounded-full p-1"><Check className="h-3 w-3" /></div>}
+                        <button type="button" onClick={(e) => { e.stopPropagation(); removePhoto(index); }} className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1"><Trash2 className="h-3 w-3" /></button>
+                      </div>
+                    ))}</div>
+                  </div>
+                  <Button type="submit" className="w-full bg-yellow-400 text-black font-bold py-3" disabled={loading}>{loading ? 'Salvando...' : 'Salvar Veículo'}</Button>
+                </form>
+              </div>
+
+              <div className="mb-8">
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-2xl font-semibold flex items-center"><Car className="mr-3 text-yellow-500" /> Estoque Atual ({cars.length})</h2>
+                  <Button variant="outline" size="sm" asChild><CSVLink data={cars} filename={"estoque-autenticco.csv"} className="flex items-center"><Download className="mr-2 h-4 w-4" /> Exportar para CSV</CSVLink></Button>
+                </div>
+
+                {/* FILTROS */}
+                <div className="flex flex-col md:flex-row gap-3 items-center mb-4">
+                  <input placeholder="Pesquisar marca ou modelo..." value={carSearch} onChange={(e) => setCarSearch(e.target.value)} className="w-full md:w-1/2 p-2 border rounded" />
+                  <select value={brandFilter || 'ALL'} onChange={(e) => setBrandFilter(e.target.value === 'ALL' ? '' : e.target.value)} className="w-full md:w-1/4 p-2 border rounded">
+                    <option value="ALL">Todas as marcas</option>
+                    {brandOptions.map(b => <option key={b} value={b}>{b}</option>)}
+                  </select>
+                  <Button variant="ghost" size="sm" onClick={() => { setCarSearch(''); setBrandFilter(''); }}>Limpar</Button>
+                </div>
+
+                <div className="space-y-4">
+                  {filteredCars && filteredCars.map(car => (
+                    <motion.div key={car.id} layout className={`bg-white rounded-2xl p-4 flex items-center justify-between shadow border ${car.is_available === false ? 'opacity-90' : ''}`}>
+                      <div className="flex items-center gap-4">
+                        <div className="relative">
+                          <img src={car.main_photo_url || 'https://placehold.co/96x64/e2e8f0/4a5568?text=Sem+Foto'} alt={`${car.brand} ${car.model}`} className={`h-16 w-24 object-cover rounded-md ${car.is_available === false ? 'filter grayscale contrast-90' : ''}`} />
+                          {car.is_available === false && <div className="absolute top-1 left-1 bg-red-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">VENDIDO</div>}
+                          {car.is_blindado && <div className="absolute top-1 right-1 bg-yellow-400 text-black text-xs font-bold px-2 py-0.5 rounded-full">BLINDADO</div>}
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-lg text-gray-900">{car.brand} {car.model} ({car.year})</h3>
+                          <p className="text-gray-800 font-semibold">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(car.price || 0)}</p>
+                          {car.is_available === false && (
+                            <p className="text-sm text-red-600 mt-1">
+                              Vendido em {car.sold_at ? new Date(car.sold_at).toLocaleDateString('pt-BR') : '-'} - {car.sale_price ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(car.sale_price) : '-'}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <Button variant="ghost" size="icon" onClick={() => handleToggleFeatured(car.id, car.is_featured)} title={car.is_featured ? 'Remover dos destaques' : 'Adicionar aos destaques'}><Star className={`h-5 w-5 transition-colors ${car.is_featured ? 'text-yellow-500 fill-yellow-500' : 'text-gray-400 hover:text-yellow-500'}`} /></Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleEditCarClick(car)}><Edit className="h-5 w-5 text-blue-500 hover:text-blue-400" /></Button>
+                        {car.is_available === true ? (
+                          <Button size="sm" variant="outline" onClick={() => openSaleDialog(car)} className="flex items-center gap-2">
+                            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none"><path d="M3 12h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                            Marcar como vendido
+                          </Button>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <Button size="sm" variant="ghost" onClick={() => handleUndoSale(car)} title="Reverter venda">
+                              <svg className="h-4 w-4 text-gray-600" viewBox="0 0 24 24" fill="none"><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                            </Button>
+                          </div>
+                        )}
+
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="ghost" size="icon" onClick={() => setCarToDelete(car)}><Trash2 className="h-5 w-5 text-red-500 hover:text-red-400" /></Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent className="bg-white">
+                            <AlertDialogHeader><AlertDialogTitle>Tem certeza?</AlertDialogTitle><AlertDialogDescription>Esta ação removerá o veículo.</AlertDialogDescription></AlertDialogHeader>
+                            <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteCar(carToDelete?.id)}>Excluir</AlertDialogAction></AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
             </>
           )}
 
@@ -455,43 +539,45 @@ const AdminDashboard = () => {
 
           {/* MATRIZ (OverviewBoard) */}
           {activeTab === 'matriz' && (
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-xl border">
-              {/* Wrapper com rolagem + cabeçalho sticky */}
-              <div className="matrix-scroll max-h-[70vh] overflow-auto rounded-xl">
-                <OverviewBoard
-                  cars={cars}
-                  platforms={platforms}
-                  onOpenGestaoForCar={(car) => {
-                    // agora abre o MODAL da gestão aqui mesmo
-                    setOpenCarForManager(car);
-                  }}
-                />
-              </div>
-
-              {/* Estilo local para fixar o cabeçalho da tabela da Matriz */}
-              <style>{`
-                .matrix-scroll thead th {
-                  position: sticky;
-                  top: 0;
-                  z-index: 30;
-                  background: #f9fafb; /* cinza claro para destacar o header */
-                  box-shadow: inset 0 -1px 0 rgba(0,0,0,0.06);
-                }
-                /* Se sua primeira coluna tiver classe .sticky-col, isso fixa ela também (opcional e não quebra nada se não existir) */
-                .matrix-scroll .sticky-col {
-                  position: sticky;
-                  left: 0;
-                  z-index: 31;
-                  background: #ffffff;
-                }
-              `}</style>
+            <div className="mb-8">
+              <OverviewBoard
+                cars={cars}
+                platforms={platforms}
+                onOpenGestaoForCar={(car) => {
+                  // AGORA: abre o MESMO modal da Gestão sem trocar de aba
+                  setMatrixCarToManage(car);
+                }}
+              />
             </div>
           )}
 
           {/* DEPOIMENTOS */}
           {activeTab === 'testimonials' && (
             <>
-              {/* ... (sem alterações) ... */}
+              <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-8 mb-12 shadow-xl border">
+                <h2 className="text-2xl font-semibold mb-6 flex items-center"><PlusCircle className="mr-3 text-yellow-500" /> Adicionar Novo Depoimento</h2>
+                <form onSubmit={handleAddTestimonial} className="space-y-6">
+                  <input name="client_name" value={newTestimonial.client_name} onChange={handleNewTestimonialInputChange} placeholder="Nome do Cliente *" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900" />
+                  <input name="car_sold" value={newTestimonial.car_sold} onChange={handleNewTestimonialInputChange} placeholder="Carro (Ex: BMW X5 2021)" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900" />
+                  <textarea name="testimonial_text" value={newTestimonial.testimonial_text} onChange={handleNewTestimonialInputChange} placeholder="Texto do depoimento *" rows={4} className="w-full p-3 bg-white border border-gray-300 rounded-lg" />
+                  <Button type="submit" className="w-full bg-yellow-400 text-black hover:bg-yellow-500 font-bold py-3">Salvar Depoimento</Button>
+                </form>
+              </div>
+
+              <div>
+                <h2 className="text-2xl font-semibold mb-6 flex items-center"><MessageSquare className="mr-3 text-yellow-500" /> Depoimentos Cadastrados ({testimonials.length})</h2>
+                <div className="space-y-4">
+                  {testimonials.map(item => (
+                    <motion.div key={item.id} layout className="bg-white rounded-2xl p-4 flex items-center justify-between shadow border">
+                      <div>
+                        <p className="italic text-gray-600">"{item.testimonial_text}"</p>
+                        <p className="font-bold mt-2 text-gray-800">{item.client_name} - <span className="text-sm font-normal text-gray-500">{item.car_sold}</span></p>
+                      </div>
+                      <Button variant="ghost" size="icon" onClick={() => handleDeleteTestimonial(item.id)}><Trash2 className="h-5 w-5 text-red-500" /></Button>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
             </>
           )}
 
@@ -508,7 +594,30 @@ const AdminDashboard = () => {
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="bg-white text-gray-900">
           <DialogHeader><DialogTitle>Editar Veículo</DialogTitle></DialogHeader>
-          {/* ... (sem alterações no formulário de edição) ... */}
+          {editingCar && (
+            <form onSubmit={handleUpdateCar} className="space-y-4 max-h-[80vh] overflow-y-auto pr-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4"><FormFields carData={editingCar} onChange={handleEditingCarInputChange} carOptions={carOptions} /></div>
+              <div className="space-y-2">
+                <label className="font-medium text-sm text-gray-700">Fotos</label>
+                <div className="flex flex-wrap gap-4 p-2 bg-gray-100 rounded-lg min-h-[112px]">
+                  {editingCar.photo_urls && editingCar.photo_urls.map((url, index) => (
+                    <div key={url} className="relative">
+                      <img src={url} alt={`Foto ${index + 1}`} className="h-24 w-24 object-cover rounded-md" />
+                      <button type="button" onClick={() => removePhoto(index, true)} className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1"><Trash2 className="h-3 w-3" /></button>
+                    </div>
+                  ))}
+                  {photosToUpload.map((file, index) => (
+                    <div key={index} className="relative">
+                      <img src={URL.createObjectURL(file)} alt={`Preview ${index}`} className="h-24 w-24 object-cover rounded-lg" />
+                      <button type="button" onClick={() => removePhoto(index)} className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1"><Trash2 className="h-3 w-3" /></button>
+                    </div>
+                  ))}
+                </div>
+                <Button type="button" onClick={() => fileInputRef.current && fileInputRef.current.click()} className="bg-transparent border border-yellow-500 text-yellow-500 hover:bg-yellow-500 hover:text-black text-xs px-3 py-1.5 h-auto"><ImageIcon className="mr-2 h-4 w-4" /> Adicionar</Button>
+              </div>
+              <DialogFooter className="pt-4"><Button type="button" variant="ghost" onClick={() => setIsEditDialogOpen(false)}>Cancelar</Button><Button type="submit" className="bg-yellow-400 text-black hover:bg-yellow-500" disabled={loading}>{loading ? 'Salvando...' : 'Salvar Alterações'}</Button></DialogFooter>
+            </form>
+          )}
         </DialogContent>
       </Dialog>
 
@@ -516,9 +625,54 @@ const AdminDashboard = () => {
       <Dialog open={saleDialogOpen} onOpenChange={setSaleDialogOpen}>
         <DialogContent className="bg-white text-gray-900">
           <DialogHeader><DialogTitle>Registrar Venda</DialogTitle></DialogHeader>
-          {/* ... (sem alterações no modal de venda) ... */}
+          <form onSubmit={handleConfirmSell} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Veículo</label>
+              <div className="mt-1 text-sm">{carToSell ? `${carToSell.brand} ${carToSell.model} (${carToSell.year})` : '-'}</div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Plataforma</label>
+              <select name="platform_id" value={saleForm.platform_id} onChange={handleSaleFormChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2">
+                <option value="">-- Selecione --</option>
+                {platforms.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Preço final (R$)</label>
+                <input name="sale_price" value={saleForm.sale_price} onChange={handleSaleFormChange} type="number" step="0.01" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Data da venda</label>
+                <input name="sale_date" value={saleForm.sale_date} onChange={handleSaleFormChange} type="date" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2" />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Notas (opcional)</label>
+              <textarea name="notes" value={saleForm.notes} onChange={handleSaleFormChange} rows={3} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2" />
+            </div>
+
+            <DialogFooter>
+              <Button type="button" variant="ghost" onClick={() => setSaleDialogOpen(false)}>Cancelar</Button>
+              <Button type="submit" className="bg-yellow-400 text-black hover:bg-yellow-500" disabled={loading}>{loading ? 'Registrando...' : 'Confirmar Venda'}</Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
+
+      {/* VEHICLE MANAGER ESCONDIDO (para abrir modal a partir da Matriz) */}
+      <div className="hidden">
+        <VehicleManager
+          cars={cars}
+          platforms={platforms}
+          openCar={matrixCarToManage}
+          onOpenHandled={() => setMatrixCarToManage(null)}
+          refreshAll={() => fetchAllData({ showLoading: false })}
+        />
+      </div>
 
     </div>
   );

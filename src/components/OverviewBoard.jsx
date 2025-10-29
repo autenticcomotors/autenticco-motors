@@ -5,7 +5,6 @@ import { RefreshCcw, FileSpreadsheet, Search, SlidersHorizontal, ExternalLink } 
 import { getPublicationsForCars } from '@/lib/car-api';
 
 // --- CONFIG ---
-// nomes a excluir (insensível a maiúsculas). Ajuste aqui se quiser remover mais colunas.
 const EXCLUDE_COL_NAMES = ['indicação', 'indicacao', 'outro', 'outros'];
 
 const Badge = ({ text, positive }) => (
@@ -15,7 +14,6 @@ const Badge = ({ text, positive }) => (
 );
 
 const Money = ({ value }) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value || 0));
-
 const normalize = (s = '') => String(s || '').trim().toLowerCase();
 
 const OverviewBoard = ({ cars = [], platforms = [], onOpenGestaoForCar = () => {} }) => {
@@ -43,7 +41,6 @@ const OverviewBoard = ({ cars = [], platforms = [], onOpenGestaoForCar = () => {
     const seenLabels = new Set();
     const result = [];
 
-    // plataformas do banco (cada uma vira platform_<id>)
     (platforms || []).forEach(p => {
       const label = (p.name || '').trim();
       if (!label) return;
@@ -54,7 +51,6 @@ const OverviewBoard = ({ cars = [], platforms = [], onOpenGestaoForCar = () => {
       result.push({ key: `platform_${p.id}`, label, type: (p.platform_type || 'other') });
     });
 
-    // extras (adiciona apenas se label não estiver entre os vistos)
     extras.forEach(e => {
       const nl = normalize(e.label);
       if (EXCLUDE_COL_NAMES.includes(nl)) return;
@@ -66,20 +62,16 @@ const OverviewBoard = ({ cars = [], platforms = [], onOpenGestaoForCar = () => {
     return result;
   }, [platforms, extras]);
 
-  // inicializa colunas visíveis (tentativa de leitura local ou por padrão true)
+  // inicializa colunas visíveis
   useEffect(() => {
     try {
       const saved = JSON.parse(window.localStorage.getItem('overview_enabled_cols') || '{}');
       if (saved && Object.keys(saved).length) {
-        // apenas manter chaves existentes
         const filtered = {};
         Object.keys(saved).forEach(k => { if (allColumnKeys.find(c => c.key === k)) filtered[k] = saved[k]; });
-        // se nenhum salvamento válido, cair no padrão
         if (Object.keys(filtered).length) { setEnabledCols(prev => ({ ...prev, ...filtered })); return; }
       }
-    } catch (e) { /* ignore */ }
-
-    // default: todas visíveis
+    } catch (e) {}
     const defaults = {};
     allColumnKeys.forEach(k => { defaults[k.key] = true; });
     setEnabledCols(defaults);
@@ -101,13 +93,14 @@ const OverviewBoard = ({ cars = [], platforms = [], onOpenGestaoForCar = () => {
           const platformKey = p.platform_id ? `platform_${p.platform_id}` : (p.platform_name || '').toLowerCase();
           if (!map[id][platformKey]) map[id][platformKey] = [];
           map[id][platformKey].push(p);
+
           const link = (p.link || '').toLowerCase();
-          if (link.includes('instagram.com')) map[id].instagram = map[id].instagram || [], map[id].instagram.push(p);
-          if (link.includes('youtube.com') || link.includes('youtu.be')) map[id].youtube = map[id].youtube || [], map[id].youtube.push(p);
-          if (link.includes('tiktok')) map[id].tiktok = map[id].tiktok || [], map[id].tiktok.push(p);
-          if (link.includes('webmotors')) map[id].webmotors = map[id].webmotors || [], map[id].webmotors.push(p);
-          if (link.includes('olx')) map[id].olx = map[id].olx || [], map[id].olx.push(p);
-          if (link.includes('mercadolivre') || link.includes('mercado livre')) map[id].mercadolivre = map[id].mercadolivre || [], map[id].mercadolivre.push(p);
+          if (link.includes('instagram.com')) (map[id].instagram = map[id].instagram || []).push(p);
+          if (link.includes('youtube.com') || link.includes('youtu.be')) (map[id].youtube = map[id].youtube || []).push(p);
+          if (link.includes('tiktok')) (map[id].tiktok = map[id].tiktok || []).push(p);
+          if (link.includes('webmotors')) (map[id].webmotors = map[id].webmotors || []).push(p);
+          if (link.includes('olx')) (map[id].olx = map[id].olx || []).push(p);
+          if (link.includes('mercadolivre') || link.includes('mercado livre')) (map[id].mercadolivre = map[id].mercadolivre || []).push(p);
         });
         setPubsMap(map);
       } catch (err) {
@@ -133,8 +126,8 @@ const OverviewBoard = ({ cars = [], platforms = [], onOpenGestaoForCar = () => {
     });
   }, [cars, search, brandFilter]);
 
-  // separar colunas por tipo para o layout
-  const marketplaceCols = allColumnKeys.filter(c => enabledCols[c.key] && (c.type === 'marketplace' || c.type === 'other' && /(mercado|olx|webmotor)/i.test(c.label)));
+  // separar colunas por tipo
+  const marketplaceCols = allColumnKeys.filter(c => enabledCols[c.key] && (c.type === 'marketplace' || (c.type === 'other' && /(mercado|olx|webmotor)/i.test(c.label))));
   const socialCols = allColumnKeys.filter(c => enabledCols[c.key] && c.type === 'social');
 
   const csvData = useMemo(() => {
@@ -202,7 +195,6 @@ const OverviewBoard = ({ cars = [], platforms = [], onOpenGestaoForCar = () => {
               <div className="ml-auto text-xs text-gray-400">Seleção salva localmente</div>
             </div>
 
-            {/* badges em 2 linhas (compacto) */}
             <div className="flex flex-wrap gap-2 max-h-[72px] overflow-hidden">
               {allColumnKeys.map(col => (
                 <button key={col.key} onClick={() => toggleCol(col.key)} className={`text-xs px-2 py-1 rounded-full border inline-flex items-center gap-2 ${enabledCols[col.key] ? 'bg-yellow-50 border-yellow-300 text-yellow-800' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
@@ -215,34 +207,33 @@ const OverviewBoard = ({ cars = [], platforms = [], onOpenGestaoForCar = () => {
         </div>
       </div>
 
-      {/* tabela full-width */}
-      <div className="bg-white rounded-lg border overflow-auto">
+      {/* tabela com cabeçalho fixo */}
+      <div className="bg-white rounded-lg border overflow-auto max-h-[70vh]">
         <table className="w-full border-collapse min-w-[1100px]">
-          <thead className="sticky top-0 z-10">
-            <tr>
-              <th className="p-3 text-left w-80 bg-white">Veículo</th>
-              <th className="p-3 text-left w-36 bg-white">Preço</th>
+          <thead className="z-30">
+            {/* HEADER PRINCIPAL (altura fixa para sticky previsível) */}
+            <tr className="sticky top-0 z-30 bg-white h-12">
+              <th className="p-3 text-left w-80 border-b bg-white">Veículo</th>
+              <th className="p-3 text-left w-36 border-b bg-white">Preço</th>
 
-              {/* grupo ANÚNCIOS (fundo levemente amarelado) */}
               {marketplaceCols.length > 0 && (
-                <th className="p-3 text-center bg-yellow-50" colSpan={marketplaceCols.length}>Anúncios</th>
+                <th className="p-3 text-center border-b bg-yellow-50" colSpan={marketplaceCols.length}>Anúncios</th>
               )}
 
-              {/* grupo REDES SOCIAIS (fundo levemente azulado) */}
               {socialCols.length > 0 && (
-                <th className="p-3 text-center bg-blue-50" colSpan={socialCols.length}>Redes Sociais</th>
+                <th className="p-3 text-center border-b bg-blue-50" colSpan={socialCols.length}>Redes Sociais</th>
               )}
 
-              <th className="p-3 text-center w-32 bg-white">Ações</th>
+              <th className="p-3 text-center w-32 border-b bg-white">Ações</th>
             </tr>
 
-            {/* sub-headers com cor de fundo por tipo */}
-            <tr className="text-xs text-gray-600">
-              <th className="p-2 bg-white" />
-              <th className="p-2 bg-white" />
-              {marketplaceCols.map(col => <th key={col.key} className="p-2 text-center bg-yellow-25/10">{col.label}</th>)}
-              {socialCols.map(col => <th key={col.key} className="p-2 text-center bg-blue-25/10">{col.label}</th>)}
-              <th className="p-2 bg-white" />
+            {/* SUB-HEADER (também fixo, posicionado abaixo do principal) */}
+            <tr className="sticky z-20 bg-white text-xs text-gray-600" style={{ top: '3rem' /* 48px = h-12 */ }}>
+              <th className="p-2 bg-white border-b" />
+              <th className="p-2 bg-white border-b" />
+              {marketplaceCols.map(col => <th key={col.key} className="p-2 text-center bg-yellow-50 border-b">{col.label}</th>)}
+              {socialCols.map(col => <th key={col.key} className="p-2 text-center bg-blue-50 border-b">{col.label}</th>)}
+              <th className="p-2 bg-white border-b" />
             </tr>
           </thead>
 
@@ -259,7 +250,9 @@ const OverviewBoard = ({ cars = [], platforms = [], onOpenGestaoForCar = () => {
                       <img src={car.main_photo_url || 'https://placehold.co/96x64/e2e8f0/4a5568?text=Sem+Foto'} alt={`${car.brand} ${car.model}`} className="h-20 w-28 object-cover rounded-md shadow-sm" />
                       <div>
                         <div className="font-semibold text-gray-800">{car.brand} <span className="text-gray-700">{car.model}</span></div>
-                        <div className="text-xs text-gray-500 mt-1">{car.year ? `${car.year} • ${car.mileage ? `${car.mileage} km` : ''}` : ''} {car.is_blindado ? ' • BLINDADO' : ''}</div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          {car.year ? `${car.year} • ${car.mileage ? `${car.mileage} km` : ''}` : ''} {car.is_blindado ? ' • BLINDADO' : ''}
+                        </div>
                         {car.updated_at && <div className="text-xs text-gray-400 mt-2">Atualizado: {new Date(car.updated_at).toLocaleDateString()}</div>}
                       </div>
                     </div>

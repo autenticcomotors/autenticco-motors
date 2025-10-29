@@ -520,3 +520,9 @@ export const getLatestChecklistTemplate = async () => {
   }
 };
 
+// ---- LEGADO: compat para não quebrar builds antigos (Checklist desativado) ----
+export const addChecklistItem = async (..._args) => {
+  console.warn('[LEGADO] addChecklistItem chamado — checklist foi desativado. Ignorando.');
+  return { data: null, error: null };
+};
+

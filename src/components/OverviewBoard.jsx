@@ -438,4 +438,3 @@ const OverviewBoard = ({ cars = [], platforms = [], onOpenGestaoForCar = () => {
 };
 
 export default OverviewBoard;
-

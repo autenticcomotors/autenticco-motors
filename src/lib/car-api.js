@@ -48,8 +48,9 @@ export const addCar = async (carData) => {
     name: carName,
     slug,
     is_available: true,
-    // se não vier, usa agora como data de entrada no estoque
-    stock_entry_at: carData.stock_entry_at || new Date().toISOString(),
+    is_sold: false,
+    // se não vier entrada, registra agora
+    entered_at: carData.entered_at || new Date().toISOString()
   };
   const { data, error } = await supabase
     .from('cars')
@@ -78,6 +79,16 @@ export const deleteCar = async (id) => {
     .eq('id', id);
   if (error) console.error('Erro ao deletar carro:', error);
   return { data, error };
+};
+
+// marcar/editar data de entrada
+export const setCarEnteredAt = async (id, enteredAtISO) => {
+  return updateCar(id, { entered_at: enteredAtISO });
+};
+
+// marcar como entregue (somente registra data/hora de entrega)
+export const setCarDeliveredAt = async (id, deliveredAtISO) => {
+  return updateCar(id, { delivered_at: deliveredAtISO });
 };
 
 /*
@@ -132,9 +143,7 @@ export const getLeads = async (filters = {}) => {
     .select(`*, cars(slug, brand, model)`)
     .order('created_at', { ascending: false });
 
-  if (filters.status) {
-    query = query.eq('status', filters.status);
-  }
+  if (filters.status) query = query.eq('status', filters.status);
 
   if (filters.startDate) {
     const startDate = new Date(filters.startDate);
@@ -311,18 +320,6 @@ export const unmarkCarAsSold = async (carId, { deleteAllSales = true } = {}) => 
   }
 };
 
-// entrega (somente registrar data/hora de entrega)
-export const markCarAsDelivered = async (carId, delivered_at_iso) => {
-  const { data, error } = await supabase
-    .from('cars')
-    .update({ delivered_at: delivered_at_iso })
-    .eq('id', carId)
-    .select()
-    .single();
-  if (error) console.error('Erro ao marcar entregue:', error);
-  return { data, error };
-};
-
 export const getSalesByCar = async (carId) => {
   const { data, error } = await supabase
     .from('sales')
@@ -340,9 +337,7 @@ export const getSales = async (filters = {}) => {
       .select('*, platforms(name), cars(brand, model, year, slug)')
       .order('sale_date', { ascending: false });
 
-    if (filters.platform_id) {
-      query = query.eq('platform_id', filters.platform_id);
-    }
+    if (filters.platform_id) query = query.eq('platform_id', filters.platform_id);
     if (filters.startDate) {
       const start = new Date(filters.startDate);
       start.setUTCHours(0, 0, 0, 0);
@@ -380,6 +375,7 @@ export const getPublicationsByCar = async (carId) => {
 };
 
 export const addPublication = async (pub) => {
+  // pub esperado: { car_id, platform_id?, platform_name?, platform_type?, link?, status?, spent?, published_at?, notes? }
   const payload = {
     car_id: pub.car_id,
     platform_id: pub.platform_id ?? null,
@@ -495,7 +491,7 @@ export const getExpensesForCars = async (carIds = []) => {
 
 /*
   -----------------------------
-  CHECKLIST TEMPLATE (LEGADO)
+  FUNÇÕES: CHECKLIST TEMPLATES (LEGADO – não usados)
   -----------------------------
 */
 
@@ -538,7 +534,7 @@ export const getLatestChecklistTemplate = async () => {
   }
 };
 
-// ---- LEGADO compat ----
+// ---- LEGADO: compat para não quebrar builds antigos (Checklist desativado) ----
 export const addChecklistItem = async (..._args) => {
   console.warn('[LEGADO] addChecklistItem chamado — checklist foi desativado. Ignorando.');
   return { data: null, error: null };

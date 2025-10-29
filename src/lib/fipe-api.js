@@ -1,7 +1,7 @@
 // src/lib/fipe-api.js
 // Busca determinística por Marca + Modelo + (Versão) + Ano + Combustível.
-// Sem fallback “pro ano mais próximo”. Evita tokens de 1 letra (ex.: "S").
-// Se não achar combinação exata (ano+combustível) dentro do modelo escolhido, retorna null.
+// Regra especial para Porsche: permite token de 1 letra "S" (ex.: "Macan S").
+// Sem fallback para outro ano/versão. Se não casar, retorna null.
 
 const BASE = 'https://parallelum.com.br/fipe/api/v1';
 
@@ -14,12 +14,13 @@ const normalize = (s = '') =>
     .trim()
     .toLowerCase();
 
-// tokens >= 2 chars; remove “palavras vazias” comuns
 const STOP = new Set(['de','da','do','e','com','para','por','the','and']);
-const tokenize = (s = '') =>
+
+// tokenizador com opção de manter tokens de 1 letra
+const tokenize = (s = '', { allowSingles = false } = {}) =>
   normalize(s)
     .split(' ')
-    .filter(t => t && t.length >= 2 && !STOP.has(t));
+    .filter(t => t && !STOP.has(t) && (allowSingles ? t.length >= 1 : t.length >= 2));
 
 const levenshtein = (a, b) => {
   a = String(a || ''); b = String(b || '');
@@ -53,7 +54,6 @@ const parseValueString = (valorStr) => {
   return Number.isFinite(n) ? n : null;
 };
 
-// normaliza combustível
 const fuelTokenFor = (fuel) => {
   if (!fuel) return '';
   const n = normalize(fuel);
@@ -66,21 +66,19 @@ const fuelTokenFor = (fuel) => {
   return n.split(' ')[0] || n;
 };
 
-// regra: TODOS os tokens de modelo+versão devem existir no nome FIPE (subset)
-// (ignorando tokens muito curtos, o que já filtramos acima)
-const containsAllTokens = (candidateName, requiredTokens) => {
-  const candTokens = new Set(tokenize(candidateName));
+// todos tokens requeridos precisam estar no nome FIPE
+const containsAllTokens = (candidateName, requiredTokens, { allowSingles = false } = {}) => {
+  const candTokens = new Set(tokenize(candidateName, { allowSingles }));
   return requiredTokens.every(t => candTokens.has(t));
 };
 
-// função principal
 export const getFipeValue = async ({
   brand,
   model,
   year,
   fuel,
-  version = '',      // <<< novo: versão ajuda a cravar modelo certo (ex.: "S 3.0 V6 PDK 4WD")
-  vehicleType = 'carros' // 'carros' | 'motos' | 'caminhoes'
+  version = '',
+  vehicleType = 'carros'
 } = {}) => {
   const debug = [];
   try {
@@ -95,59 +93,62 @@ export const getFipeValue = async ({
     const yearStr = String(year);
     const fuelTok = fuelTokenFor(fuel);
 
+    const brandNorm = normalize(inputBrand);
+    const allowSingleLetterTokens =
+      brandNorm === 'porsche'; // habilita aceitar "s" como token válido
+
     debug.push(`Entrada: brand="${inputBrand}", model="${inputModel}", version="${inputVersion}", year=${yearStr}, fuel="${fuelTok}", type=${vehicleType}`);
 
-    // 1) marca
+    // 1) Marca
     const brandsRes = await fetch(`${BASE}/${vehicleType}/marcas`);
     const brands = await brandsRes.json();
-    const normBrand = normalize(inputBrand);
 
     let brandMatch =
-      brands.find(b => normalize(b.nome) === normBrand) ||
-      brands.find(b => normalize(b.nome).includes(normBrand) || normBrand.includes(normalize(b.nome))) ||
+      brands.find(b => normalize(b.nome) === brandNorm) ||
+      brands.find(b => normalize(b.nome).includes(brandNorm) || brandNorm.includes(normalize(b.nome))) ||
       null;
 
     if (!brandMatch) {
-      // fallback um pouco fuzzy, mas alto
       let best = null, bestScore = 0;
       for (const b of brands) {
-        const score = levRatio(normalize(b.nome), normBrand);
+        const score = levRatio(normalize(b.nome), brandNorm);
         if (score > bestScore) { best = b; bestScore = score; }
       }
-      if (bestScore >= 0.9) brandMatch = best; // exigente
+      if (bestScore >= 0.9) brandMatch = best;
     }
-
     if (!brandMatch) {
       debug.push(`Marca não encontrada: ${inputBrand}`);
       return { value: null, raw: null, debug };
     }
-    debug.push(`Marca: ${brandMatch.nome} (codigo=${brandMatch.codigo})`);
     const brandId = brandMatch.codigo;
+    debug.push(`Marca: ${brandMatch.nome} (codigo=${brandId})`);
 
-    // 2) modelos
+    // 2) Modelos
     const modelsRes = await fetch(`${BASE}/${vehicleType}/marcas/${brandId}/modelos`);
     const modelsObj = await modelsRes.json();
     const modelos = Array.isArray(modelsObj) ? modelsObj : (modelsObj.modelos || []);
     debug.push(`Modelos carregados: ${modelos.length}`);
 
-    // tokens de cravação = modelo + versão
-    const requiredTokens = [...tokenize(inputModel), ...tokenize(inputVersion)];
-    // se só tiver “macan” e “s”, “s” cai fora por ter 1 char. bom.
-
-    // primeiro: filtro estrito (todos tokens precisam existir no nome do FIPE)
-    let strict = modelos.filter(m => containsAllTokens(m.nome || '', requiredTokens));
-
-    // se o strict zerar (ex.: não tem "versão" no cadastro do carro), cai para filtro por modelo apenas
-    if (strict.length === 0) {
-      const onlyModelTokens = tokenize(inputModel);
-      strict = modelos.filter(m => containsAllTokens(m.nome || '', onlyModelTokens));
+    // tokens obrigatórios = modelo + versão (se houver)
+    const reqTokens = [
+      ...tokenize(inputModel, { allowSingles: allowSingleLetterTokens }),
+      ...tokenize(inputVersion, { allowSingles: allowSingleLetterTokens })
+    ];
+    // se versão vier vazia, usa só os do modelo (ok para "Macan S" porque manteremos o "s" quando Porsche)
+    if (reqTokens.length === 0) {
+      reqTokens.push(...tokenize(inputModel, { allowSingles: allowSingleLetterTokens }));
     }
 
-    // se ainda assim ficar vazio, como última chance (sem quebrar), usa top por similaridade MAS ainda exigindo que contenha o nome base do modelo
+    // filtro estrito: candidato precisa conter TODOS os tokens
+    let strict = modelos.filter(m =>
+      containsAllTokens(m.nome || '', reqTokens, { allowSingles: allowSingleLetterTokens })
+    );
+
+    // fallback leve: se vazio, exige ao menos conter o nome base do modelo e escolhe top 3 por similaridade
     if (strict.length === 0) {
       const nmModel = normalize(inputModel);
       const candidates = modelos
-        .filter(m => normalize(m.nome || '').includes(nmModel)) // precisa conter o nome base
+        .filter(m => normalize(m.nome || '').includes(nmModel))
         .map(m => ({
           m,
           score: levRatio(normalize(m.nome || ''), normalize(`${inputModel} ${inputVersion}`.trim()))
@@ -163,14 +164,13 @@ export const getFipeValue = async ({
 
     debug.push(`Modelos pós-filtro: ${strict.map(s => s.nome).join(' | ')}`);
 
-    // 3) dentro de cada modelo compatível, procurar ANO + COMBUSTÍVEL
+    // 3) Dentro de cada modelo, exigir ANO + (COMBUSTÍVEL se informado)
     const pickByYearAndFuel = async (m) => {
       const mid = m.codigo;
       const yearsRes = await fetch(`${BASE}/${vehicleType}/marcas/${brandId}/modelos/${mid}/anos`);
       const years = await yearsRes.json();
       if (!Array.isArray(years)) return null;
 
-      // match EXATO por ano e combustível (quando fuelTok informado)
       const exact = years.find(y => {
         const n = normalize(y.nome || '');
         const hasYear = n.includes(yearStr);
@@ -179,7 +179,6 @@ export const getFipeValue = async ({
       });
       if (exact) return { yearMatch: exact, model: m };
 
-      // se não informou combustível no cadastro, aceita só ano
       if (!fuelTok) {
         const onlyYear = years.find(y => normalize(y.nome || '').includes(yearStr));
         if (onlyYear) return { yearMatch: onlyYear, model: m };
@@ -198,10 +197,9 @@ export const getFipeValue = async ({
       return { value: null, raw: null, debug };
     }
 
-    // 4) preço FIPE para o par modelo/ano
+    // 4) Preço
     const modelId = chosen.model.codigo;
     const yearCode = chosen.yearMatch.codigo;
-    debug.push(`Modelo escolhido: "${chosen.model.nome}" | YearCode="${chosen.yearMatch.nome}"`);
 
     const priceRes = await fetch(`${BASE}/${vehicleType}/marcas/${brandId}/modelos/${modelId}/anos/${encodeURIComponent(yearCode)}`);
     const priceObj = await priceRes.json();
@@ -219,6 +217,6 @@ export const getFipeValue = async ({
   }
 };
 
-// alias compat
+// compat
 export const fetchFipeForVehicle = getFipeValue;
 

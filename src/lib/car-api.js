@@ -43,7 +43,14 @@ export const getCarBySlug = async (slug) => {
 export const addCar = async (carData) => {
   const carName = `${carData.brand} ${carData.model}`;
   const slug = `${(carData.brand || '').toLowerCase().replace(/ /g, '-')}-${(carData.model || '').toLowerCase().replace(/ /g, '-')}-${Date.now()}`;
-  const payload = { ...carData, name: carName, slug, is_available: true };
+  const payload = {
+    ...carData,
+    name: carName,
+    slug,
+    is_available: true,
+    // se não vier, usa agora como data de entrada no estoque
+    stock_entry_at: carData.stock_entry_at || new Date().toISOString(),
+  };
   const { data, error } = await supabase
     .from('cars')
     .insert([payload])
@@ -304,6 +311,18 @@ export const unmarkCarAsSold = async (carId, { deleteAllSales = true } = {}) => 
   }
 };
 
+// entrega (somente registrar data/hora de entrega)
+export const markCarAsDelivered = async (carId, delivered_at_iso) => {
+  const { data, error } = await supabase
+    .from('cars')
+    .update({ delivered_at: delivered_at_iso })
+    .eq('id', carId)
+    .select()
+    .single();
+  if (error) console.error('Erro ao marcar entregue:', error);
+  return { data, error };
+};
+
 export const getSalesByCar = async (carId) => {
   const { data, error } = await supabase
     .from('sales')
@@ -346,31 +365,6 @@ export const getSales = async (filters = {}) => {
 
 /*
   -----------------------------
-  ENTREGA (cars.delivered_at)
-  -----------------------------
-*/
-
-export const markCarAsDelivered = async (car_id, delivered_at) => {
-  try {
-    const { data, error } = await supabase
-      .from('cars')
-      .update({ delivered_at })
-      .eq('id', car_id)
-      .select()
-      .single();
-    if (error) {
-      console.error('Erro ao marcar entrega:', error);
-      return { error };
-    }
-    return { data };
-  } catch (err) {
-    console.error('Erro em markCarAsDelivered:', err);
-    return { error: err };
-  }
-};
-
-/*
-  -----------------------------
   FUNÇÕES: PUBLICAÇÕES (vehicle_publications)
   -----------------------------
 */
@@ -386,7 +380,6 @@ export const getPublicationsByCar = async (carId) => {
 };
 
 export const addPublication = async (pub) => {
-  // pub esperado: { car_id, platform_id?, platform_name?, platform_type?, link?, status?, spent?, published_at?, notes? }
   const payload = {
     car_id: pub.car_id,
     platform_id: pub.platform_id ?? null,
@@ -502,7 +495,7 @@ export const getExpensesForCars = async (carIds = []) => {
 
 /*
   -----------------------------
-  FUNÇÕES: CHECKLIST TEMPLATES (LEGADO – não usados)
+  CHECKLIST TEMPLATE (LEGADO)
   -----------------------------
 */
 
@@ -545,7 +538,7 @@ export const getLatestChecklistTemplate = async () => {
   }
 };
 
-// ---- LEGADO: compat (Checklist desativado) ----
+// ---- LEGADO compat ----
 export const addChecklistItem = async (..._args) => {
   console.warn('[LEGADO] addChecklistItem chamado — checklist foi desativado. Ignorando.');
   return { data: null, error: null };

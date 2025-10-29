@@ -3,14 +3,13 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
-import { Check, Trash2, Megaphone, Wallet, DollarSign, Instagram, Youtube, Globe, Music2, Calendar as CalendarIcon, PackageCheck } from 'lucide-react';
+import { Check, Trash2, Megaphone, Wallet, DollarSign, Instagram, Youtube, Globe, Music2, Pencil } from 'lucide-react';
 import {
-  getPublicationsByCar, addPublication, deletePublication,
-  getExpensesByCar, addExpense, deleteExpense,
+  getPublicationsByCar, addPublication, deletePublication, updatePublication,
+  getExpensesByCar, addExpense, deleteExpense, updateExpense,
   getPlatforms,
   getPublicationsForCars, getExpensesForCars,
-  updateCar,
-  markCarAsDelivered
+  updateCar, markCarAsDelivered
 } from '@/lib/car-api';
 import { supabase } from '@/lib/supabase';
 import { getFipeValue } from '@/lib/fipe-api';
@@ -30,29 +29,6 @@ const SocialIcon = ({ name = '', link = '' }) => {
   return <Globe className="h-4 w-4" />;
 };
 
-// helpers datas
-const toInputDT = (isoOrNull) => {
-  if (!isoOrNull) return '';
-  const d = new Date(isoOrNull);
-  const pad = (x) => String(x).padStart(2, '0');
-  const yyyy = d.getFullYear();
-  const mm = pad(d.getMonth() + 1);
-  const dd = pad(d.getDate());
-  const hh = pad(d.getHours());
-  const mi = pad(d.getMinutes());
-  return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
-};
-const fromInputDT = (value) => (value ? new Date(value).toISOString() : null);
-
-const diffDays = (startISO, endISO) => {
-  if (!startISO) return null;
-  const a = new Date(startISO).getTime();
-  const b = endISO ? new Date(endISO).getTime() : Date.now();
-  if (Number.isNaN(a) || Number.isNaN(b)) return null;
-  const ms = Math.max(0, b - a);
-  return Math.floor(ms / (1000 * 60 * 60 * 24));
-};
-
 const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled = () => {}, platforms: externalPlatforms = [] }) => {
   const [selectedCar, setSelectedCar] = useState(null);
   const [open, setOpen] = useState(false);
@@ -64,14 +40,17 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
   const [summaryMap, setSummaryMap] = useState({});
 
   const [pubForm, setPubForm] = useState({ platform_id: '', link: '', spent: '', status: 'active', published_at: '', notes: '' });
-  const [expenseForm, setExpenseForm] = useState({ category: '', amount: '', description: '', incurred_at: '' });
+  const [expenseForm, setExpenseForm] = useState({ category: '', amount: '', charged_amount: '', description: '', incurred_at: '' });
   const [financeForm, setFinanceForm] = useState({ fipe_value: '', commission: '', return_to_seller: '' });
 
-  // dialogs de datas
-  const [stockDialogOpen, setStockDialogOpen] = useState(false);
-  const [deliverDialogOpen, setDeliverDialogOpen] = useState(false);
-  const [stockForm, setStockForm] = useState({ stock_in_at: '' });
-  const [deliverForm, setDeliverForm] = useState({ delivered_at: '' });
+  // edição inline
+  const [editingPubId, setEditingPubId] = useState(null);
+  const [pubEdit, setPubEdit] = useState({});
+  const [editingExpId, setEditingExpId] = useState(null);
+  const [expEdit, setExpEdit] = useState({});
+
+  // entrega
+  const [deliverModal, setDeliverModal] = useState({ open: false, iso: '' });
 
   // carrega plataformas
   useEffect(() => {
@@ -86,7 +65,7 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
     })();
   }, [externalPlatforms]);
 
-  // agrupa resumos (marketplaces + redes)
+  // agrega resumos
   useEffect(() => {
     const carIds = (Array.isArray(cars) ? cars.map(c => c.id) : []).filter(Boolean);
     if (carIds.length === 0) { setSummaryMap({}); return; }
@@ -104,12 +83,13 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
 
         const map = {};
         carIds.forEach(id => {
-          map[id] = { 
-            adsCount: 0, 
-            adSpendTotal: 0, 
-            socialCount: 0, 
-            socialSet: new Set(), 
-            extraExpensesTotal: 0 
+          map[id] = {
+            adsCount: 0,
+            adSpendTotal: 0,
+            socialCount: 0,
+            socialSet: new Set(),
+            extraExpensesTotal: 0,
+            extraGainsTotal: 0,
           };
         });
 
@@ -125,14 +105,18 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
           } else {
             map[id].socialCount += 1;
             const guessName = pf?.name || (p.link || '').split('/')[2] || 'rede';
-            map[id].socialSet.add(String(guessName).toLowerCase());
+            map[id].socialSet.add(guessName.toLowerCase());
           }
         });
 
         (exps || []).forEach(e => {
           const id = e.car_id;
           if (!map[id]) return;
-          map[id].extraExpensesTotal += Number(e.amount || 0);
+          const amount = Number(e.amount || 0);
+          const charged = Number(e.charged_amount || 0);
+          map[id].extraExpensesTotal += amount;
+          const diff = charged - amount;
+          if (diff > 0) map[id].extraGainsTotal += diff;
         });
 
         const finalMap = {};
@@ -142,7 +126,8 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
             adSpendTotal: map[id].adSpendTotal,
             socialCount: map[id].socialCount,
             socialList: Array.from(map[id].socialSet || []),
-            extraExpensesTotal: map[id].extraExpensesTotal
+            extraExpensesTotal: map[id].extraExpensesTotal,
+            extraGainsTotal: map[id].extraGainsTotal,
           };
         });
 
@@ -171,7 +156,6 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
     }
   }, [openCar]); // eslint-disable-line
 
-  // fetch dos dados de um carro
   const fetchAll = async (carId) => {
     if (!carId) return;
     try {
@@ -188,7 +172,6 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
     }
   };
 
-  // abrir modal pelo botão da lista
   const handleOpenFromList = (car) => {
     setSelectedCar(car);
     setOpen(true);
@@ -221,10 +204,41 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
         toast({ title: 'Publicação salva' });
       }
       await fetchAll(selectedCar.id);
-      if (refreshAll) refreshAll();
+      refreshAll && refreshAll();
     } catch (err) {
       console.error(err);
       toast({ title: 'Erro ao salvar publicação', description: err.message || String(err), variant: 'destructive' });
+    }
+  };
+
+  const startEditPub = (p) => {
+    setEditingPubId(p.id);
+    setPubEdit({
+      platform_id: p.platform_id || '',
+      link: p.link || '',
+      status: p.status || 'active',
+      spent: p.spent || '',
+      published_at: p.published_at ? p.published_at.slice(0,10) : '',
+      notes: p.notes || ''
+    });
+  };
+  const saveEditPub = async () => {
+    try {
+      const patch = {
+        platform_id: pubEdit.platform_id || null,
+        link: pubEdit.link || null,
+        status: pubEdit.status || 'active',
+        spent: pubEdit.spent !== '' ? parseFloat(pubEdit.spent) : null,
+        published_at: pubEdit.published_at ? new Date(pubEdit.published_at).toISOString() : null,
+        notes: pubEdit.notes || null
+      };
+      await updatePublication(editingPubId, patch);
+      toast({ title: 'Publicação atualizada' });
+      setEditingPubId(null);
+      await fetchAll(selectedCar.id);
+      refreshAll && refreshAll();
+    } catch (e) {
+      toast({ title: 'Erro ao atualizar', description: String(e), variant: 'destructive' });
     }
   };
 
@@ -234,7 +248,7 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
       setPublications(prev => prev.filter(p => p.id !== id));
       toast({ title: 'Publicação removida' });
       await fetchAll(selectedCar.id);
-      if (refreshAll) refreshAll();
+      refreshAll && refreshAll();
     } catch (err) {
       toast({ title: 'Erro ao remover publicação', description: err.message || String(err), variant: 'destructive' });
     }
@@ -248,19 +262,49 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
         car_id: selectedCar.id,
         category: expenseForm.category || 'Outros',
         amount: expenseForm.amount ? parseFloat(expenseForm.amount) : 0,
+        charged_amount: expenseForm.charged_amount ? parseFloat(expenseForm.charged_amount) : null,
         description: expenseForm.description || '',
         incurred_at: expenseForm.incurred_at || new Date().toISOString()
       };
       const { data } = await addExpense(payload);
       if (data) {
         setExpenses(prev => [data, ...prev]);
-        setExpenseForm({ category: '', amount: '', description: '', incurred_at: '' });
+        setExpenseForm({ category: '', amount: '', charged_amount: '', description: '', incurred_at: '' });
         toast({ title: 'Gasto registrado' });
       }
       await fetchAll(selectedCar.id);
-      if (refreshAll) refreshAll();
+      refreshAll && refreshAll();
     } catch (err) {
       toast({ title: 'Erro ao salvar gasto', description: err.message || String(err), variant: 'destructive' });
+    }
+  };
+
+  const startEditExp = (e) => {
+    setEditingExpId(e.id);
+    setExpEdit({
+      category: e.category || '',
+      amount: e.amount || '',
+      charged_amount: e.charged_amount || '',
+      description: e.description || '',
+      incurred_at: e.incurred_at ? e.incurred_at.slice(0,10) : ''
+    });
+  };
+  const saveEditExp = async () => {
+    try {
+      const patch = {
+        category: expEdit.category || 'Outros',
+        amount: expEdit.amount !== '' ? parseFloat(expEdit.amount) : 0,
+        charged_amount: expEdit.charged_amount !== '' ? parseFloat(expEdit.charged_amount) : null,
+        description: expEdit.description || null,
+        incurred_at: expEdit.incurred_at ? new Date(expEdit.incurred_at).toISOString() : null
+      };
+      await updateExpense(editingExpId, patch);
+      toast({ title: 'Gasto atualizado' });
+      setEditingExpId(null);
+      await fetchAll(selectedCar.id);
+      refreshAll && refreshAll();
+    } catch (e) {
+      toast({ title: 'Erro ao atualizar gasto', description: String(e), variant: 'destructive' });
     }
   };
 
@@ -270,7 +314,7 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
       setExpenses(prev => prev.filter(e => e.id !== id));
       toast({ title: 'Gasto removido' });
       await fetchAll(selectedCar.id);
-      if (refreshAll) refreshAll();
+      refreshAll && refreshAll();
     } catch (err) {
       toast({ title: 'Erro ao remover gasto', description: err.message || String(err), variant: 'destructive' });
     }
@@ -279,36 +323,33 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
   // FINANCEIRO
   const computeProfitForSelected = () => {
     if (!selectedCar) return 0;
-    const summary = summaryMap[selectedCar.id] || { adSpendTotal: 0, extraExpensesTotal: 0 };
+    const summary = summaryMap[selectedCar.id] || { adSpendTotal: 0, extraExpensesTotal: 0, extraGainsTotal: 0 };
     const comm = Number(financeForm.commission || selectedCar.commission || 0);
     const ad = Number(summary.adSpendTotal || 0);
     const extras = Number(summary.extraExpensesTotal || 0);
-    const profit = comm - (ad + extras);
+    const gains = Number(summary.extraGainsTotal || 0);
+    const profit = comm + gains - (ad + extras);
     return profit;
   };
 
   const saveFinance = async () => {
     if (!selectedCar) return;
     try {
-      const summary = summaryMap[selectedCar.id] || { adSpendTotal: 0, extraExpensesTotal: 0 };
+      const summary = summaryMap[selectedCar.id] || { adSpendTotal: 0, extraExpensesTotal: 0, extraGainsTotal: 0 };
       const fipe_value = financeForm.fipe_value !== '' ? parseFloat(financeForm.fipe_value) : null;
       const commission = financeForm.commission !== '' ? parseFloat(financeForm.commission) : 0;
       const return_to_seller = financeForm.return_to_seller !== '' ? parseFloat(financeForm.return_to_seller) : 0;
 
-      const adSpendTotal = Number(summary.adSpendTotal || 0);
-      const extraExpensesTotal = Number(summary.extraExpensesTotal || 0);
-      const profit = commission - (adSpendTotal + extraExpensesTotal);
+      const profit = commission + Number(summary.extraGainsTotal || 0) - ((summary.adSpendTotal || 0) + (summary.extraExpensesTotal || 0));
 
       const patch = { fipe_value, commission, return_to_seller, profit, profit_percent: null };
-      const { data, error } = await updateCar(selectedCar.id, patch);
+      const { error } = await updateCar(selectedCar.id, patch);
       if (error) throw error;
 
-      const updated = { ...(selectedCar || {}), ...patch };
-      setSelectedCar(updated);
-
+      setSelectedCar(prev => ({ ...(prev || {}), ...patch }));
       toast({ title: 'Financeiro atualizado com sucesso' });
       await fetchAll(selectedCar.id);
-      if (refreshAll) refreshAll();
+      refreshAll && refreshAll();
     } catch (err) {
       console.error('Erro ao salvar financeiro:', err);
       toast({ title: 'Erro ao salvar financeiro', description: err.message || String(err), variant: 'destructive' });
@@ -331,7 +372,7 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
     }
   };
 
-  const getSummary = (carId) => summaryMap[carId] || { adsCount: 0, adSpendTotal: 0, socialCount: 0, socialList: [], extraExpensesTotal: 0 };
+  const getSummary = (carId) => summaryMap[carId] || { adsCount: 0, adSpendTotal: 0, socialCount: 0, socialList: [], extraExpensesTotal: 0, extraGainsTotal: 0 };
 
   // filtros listagem
   const [searchTerm, setSearchTerm] = useState('');
@@ -340,69 +381,39 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
     const term = (searchTerm || '').trim().toLowerCase();
     return (cars || []).filter(c => {
       if (brandFilter && brandFilter !== 'ALL' && String((c.brand || '')).toLowerCase() !== String(brandFilter).toLowerCase()) return false;
-      if (!term) return true;
+      if (!term) return c.is_available !== false; // só estoque atual
       const brand = (c.brand || '').toLowerCase();
       const model = (c.model || '').toLowerCase();
-      return brand.includes(term) || model.includes(term) || `${brand} ${model}`.includes(term);
+      const plate = (c.plate || '').toLowerCase();
+      const combo = `${brand} ${model} ${plate}`;
+      return (c.is_available !== false) && (brand.includes(term) || model.includes(term) || plate.includes(term) || combo.includes(term));
     });
   }, [cars, searchTerm, brandFilter]);
 
-  // helpers de plataformas por tipo
+  // plataformas
   const pfById = {};
   (platforms || []).forEach(p => { pfById[String(p.id)] = p; });
   const marketplacePlatforms = (platforms || []).filter(p => p.platform_type === 'marketplace');
   const socialPlatforms = (platforms || []).filter(p => p.platform_type === 'social');
 
-  // contador de estoque atual (apenas disponíveis)
-  const activeCount = useMemo(() => (cars || []).filter(c => c.is_available !== false).length, [cars]);
-
-  // ações datas
-  const openStockDialog = (car) => {
-    setSelectedCar(car);
-    setStockForm({ stock_in_at: toInputDT(car.stock_in_at || car.created_at || new Date().toISOString()) });
-    setStockDialogOpen(true);
+  // helpers de datas estoque/entrega
+  const formatDateTime = (iso) => {
+    try { return new Date(iso).toLocaleString('pt-BR'); } catch { return '-'; }
   };
-  const saveStockInAt = async () => {
-    if (!selectedCar) return;
-    try {
-      const payload = { stock_in_at: fromInputDT(stockForm.stock_in_at) };
-      const { error } = await updateCar(selectedCar.id, payload);
-      if (error) throw error;
-      toast({ title: 'Data de entrada atualizada' });
-      setStockDialogOpen(false);
-      if (refreshAll) refreshAll();
-    } catch (e) {
-      toast({ title: 'Erro ao salvar data de entrada', description: String(e), variant: 'destructive' });
-    }
-  };
-
-  const openDeliverDialog = (car) => {
-    setSelectedCar(car);
-    setDeliverForm({ delivered_at: toInputDT(car.delivered_at || new Date().toISOString()) });
-    setDeliverDialogOpen(true);
-  };
-  const saveDeliveredAt = async () => {
-    if (!selectedCar) return;
-    try {
-      const delivered_at = fromInputDT(deliverForm.delivered_at);
-      const res = await markCarAsDelivered(selectedCar.id, delivered_at);
-      if (res?.error) throw res.error;
-      toast({ title: 'Entrega registrada' });
-      setDeliverDialogOpen(false);
-      if (refreshAll) refreshAll();
-    } catch (e) {
-      toast({ title: 'Erro ao registrar entrega', description: String(e), variant: 'destructive' });
-    }
+  const daysInStock = (car) => {
+    const base = car?.stock_entry_at ? new Date(car.stock_entry_at) : (car?.created_at ? new Date(car.created_at) : null);
+    if (!base) return '-';
+    const diff = (Date.now() - base.getTime()) / (1000 * 60 * 60 * 24);
+    return `${Math.max(0, Math.floor(diff))} dia(s) em estoque`;
   };
 
   // UI
   return (
     <div>
-      <h2 className="text-2xl font-semibold mb-1">Gestão de Veículos</h2>
-      <div className="text-sm text-gray-500 mb-4">Estoque Atual <span className="font-semibold text-gray-800">({activeCount})</span></div>
+      <h2 className="text-2xl font-semibold mb-4">Gestão de Veículos</h2>
 
       <div className="mb-4 flex flex-col md:flex-row gap-2 items-center">
-        <input placeholder="Pesquisar marca ou modelo..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full md:w-1/2 p-2 border rounded" />
+        <input placeholder="Pesquisar marca, modelo ou PLACA..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full md:w-1/2 p-2 border rounded" />
         <select value={brandFilter || 'ALL'} onChange={(e) => setBrandFilter(e.target.value === 'ALL' ? '' : e.target.value)} className="w-full md:w-1/4 p-2 border rounded">
           <option value="ALL">Todas as marcas</option>
           {Array.from(new Set((cars || []).map(c => (c.brand || '').trim()).filter(Boolean))).map(b => <option key={b} value={b}>{b}</option>)}
@@ -416,17 +427,26 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
         {Array.isArray(filteredCars) && filteredCars.map(car => {
           const summary = getSummary(car.id);
           const sold = !!car.is_sold || car.is_available === false;
-          const profit = Number(car.profit ?? ((car.commission ?? 0) - (summary.adSpendTotal + summary.extraExpensesTotal)));
-          const profitDisplay = Number.isFinite(profit) ? profit : null;
-
+          const profit = Number((car.commission ?? 0) + (summary.extraGainsTotal || 0) - ((summary.adSpendTotal || 0) + (summary.extraExpensesTotal || 0)));
           const fipe = Number(car.fipe_value || 0);
           const price = Number(car.price || 0);
           const diffPct = fipe > 0 ? ((price - fipe) / fipe) * 100 : null;
 
-          // datas / dias em estoque
-          const startISO = car.stock_in_at || car.created_at;
-          const endISO = sold ? (car.sold_at || null) : null;
-          const dias = diffDays(startISO, endISO);
+          // edição de "entrada" (stock_entry_at)
+          const [editingEntry, setEditingEntry] = useState(false);
+          const [entryDate, setEntryDate] = useState(car.stock_entry_at ? car.stock_entry_at.slice(0,16) : '');
+
+          const saveEntry = async () => {
+            try {
+              const iso = entryDate ? new Date(entryDate).toISOString() : new Date().toISOString();
+              await updateCar(car.id, { stock_entry_at: iso });
+              toast({ title: 'Data de entrada atualizada' });
+              setEditingEntry(false);
+              refreshAll && refreshAll();
+            } catch (e) {
+              toast({ title: 'Erro ao salvar entrada', description: String(e), variant: 'destructive' });
+            }
+          };
 
           return (
             <div key={car.id} className={`bg-white rounded-xl p-4 flex items-center justify-between shadow transition hover:shadow-lg ${sold ? 'opacity-80' : ''}`}>
@@ -436,7 +456,8 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
                   <div className="flex items-center gap-3 flex-wrap">
                     <div>
                       <div className="font-bold text-lg">{car.brand} {car.model} <span className="text-sm text-gray-500">({car.year})</span></div>
-                      <div className="text-sm text-gray-600">
+                      <div className="text-xs text-gray-600">{car.plate ? `Placa: ${car.plate}` : 'Placa: -'}</div>
+                      <div className="text-sm text-gray-600 mt-1">
                         Preço: <span className="font-semibold">{Money({ value: car.price })}</span>
                         {diffPct !== null && (
                           <span className={`ml-2 text-xs px-2 py-0.5 rounded-full ${diffPct >= 0 ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
@@ -448,30 +469,33 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
                     {sold && <span className="ml-2 text-sm bg-red-600 text-white px-2 py-0.5 rounded-full font-semibold">VENDIDO</span>}
                   </div>
 
+                  {/* Entrada / dias / entregue */}
                   <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-gray-600">
-                    <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-gray-100">
-                      <CalendarIcon className="h-3 w-3" />
-                      Entrada: <strong>{startISO ? new Date(startISO).toLocaleString('pt-BR') : '-'}</strong>
-                      <button onClick={() => openStockDialog(car)} className="ml-2 underline hover:opacity-80">editar</button>
-                    </div>
-                    <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-yellow-50 text-yellow-800">
-                      ⏱️ <strong>{dias ?? '-'}</strong> dia(s) em estoque{sold ? ' até a venda' : ''}
-                    </div>
-                    {car.delivered_at ? (
-                      <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-green-50 text-green-800">
-                        <PackageCheck className="h-3 w-3" />
-                        Entregue: <strong>{new Date(car.delivered_at).toLocaleString('pt-BR')}</strong>
-                        <button onClick={() => openDeliverDialog(car)} className="ml-2 underline hover:opacity-80">editar</button>
-                      </div>
+                    <span>Entrada: {formatDateTime(car.stock_entry_at || car.created_at)}</span>
+                    {!editingEntry ? (
+                      <button className="text-blue-600 underline" onClick={() => {
+                        const base = (car.stock_entry_at || car.created_at) ? new Date(car.stock_entry_at || car.created_at) : new Date();
+                        const local = new Date(base.getTime() - base.getTimezoneOffset()*60000).toISOString().slice(0,16);
+                        setEntryDate(local);
+                        setEditingEntry(true);
+                      }}>editar</button>
                     ) : (
-                      <button onClick={() => openDeliverDialog(car)} className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-green-600 text-white">
-                        <PackageCheck className="h-3 w-3" /> Marcar como Entregue
-                      </button>
+                      <span className="flex items-center gap-2">
+                        <input type="datetime-local" value={entryDate} onChange={(e)=>setEntryDate(e.target.value)} className="border rounded px-1 py-0.5"/>
+                        <Button size="xs" onClick={saveEntry}>Salvar</Button>
+                        <Button size="xs" variant="ghost" onClick={()=>setEditingEntry(false)}>Cancelar</Button>
+                      </span>
                     )}
+                    <span className="inline-flex items-center gap-1 bg-green-50 text-green-700 px-2 py-0.5 rounded-full">{daysInStock(car)}</span>
+
+                    <Button size="xs" className="bg-green-600 text-white hover:brightness-95" onClick={()=>{
+                      const nowLocal = new Date(Date.now() - new Date().getTimezoneOffset()*60000).toISOString().slice(0,16);
+                      setDeliverModal({ open: true, iso: nowLocal }); setSelectedCar(car);
+                    }}>Marcar como Entregue</Button>
+                    {car.delivered_at && <span className="text-gray-500">Entregue: {formatDateTime(car.delivered_at)}</span>}
                   </div>
 
                   <div className="mt-3 flex flex-wrap items-center gap-6 text-sm text-gray-600">
-                    {/* Anúncios (marketplaces) */}
                     <div className="flex items-center gap-2">
                       <Megaphone className="h-4 w-4 text-yellow-500" />
                       <div>
@@ -480,7 +504,6 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
                       </div>
                     </div>
 
-                    {/* Publicações (redes sociais) */}
                     <div className="flex items-center gap-2">
                       <div className="flex -space-x-1">
                         {summary.socialList.slice(0,3).map((nm, i) => (
@@ -495,25 +518,30 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
                       </div>
                     </div>
 
-                    {/* Gastos extras */}
                     <div className="flex items-center gap-2">
-                      <Wallet className="h-4 w-4 text-green-500" />
+                      <Wallet className="h-4 w-4 text-red-500" />
                       <div>
                         <div className="text-xs">Gastos extras</div>
                         <div className="font-medium">{Money({ value: summary.extraExpensesTotal })}</div>
                       </div>
                     </div>
 
-                    {/* Lucro estimado */}
+                    <div className="flex items-center gap-2">
+                      <Wallet className="h-4 w-4 text-green-600" />
+                      <div>
+                        <div className="text-xs">Ganhos extras</div>
+                        <div className="font-medium">{Money({ value: summary.extraGainsTotal })}</div>
+                      </div>
+                    </div>
+
                     <div className="flex items-center gap-2">
                       <DollarSign className="h-4 w-4 text-indigo-600" />
                       <div>
                         <div className="text-xs">Lucro estimado</div>
-                        <div className={`font-semibold ${profitDisplay >= 0 ? 'text-green-600' : 'text-red-600'}`}>{profitDisplay !== null ? Money({ value: profitDisplay }) : '-'}</div>
+                        <div className={`font-semibold ${(profit) >= 0 ? 'text-green-600' : 'text-red-600'}`}>{Money({ value: profit })}</div>
                       </div>
                     </div>
 
-                    {/* FIPE / Comissão / Devolver */}
                     <div>
                       <div className="text-xs">FIPE</div>
                       <div className="font-medium">{car.fipe_value ? Money({ value: car.fipe_value }) : '-'}</div>
@@ -542,10 +570,13 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
       </div>
 
       {/* MODAL PRINCIPAL */}
-      <Dialog open={open} onOpenChange={(o) => { if (!o) { setSelectedCar(null); } setOpen(o); }}>
+      <Dialog open={open} onOpenChange={(o) => { 
+        if (!o) { setSelectedCar(null); refreshAll && refreshAll(); }
+        setOpen(o); 
+      }}>
         <DialogContent className="max-w-4xl">
           <DialogHeader>
-            <DialogTitle>Gestão - {selectedCar ? `${selectedCar.brand} ${selectedCar.model}` : ''}</DialogTitle>
+            <DialogTitle>Gestão - {selectedCar ? `${selectedCar.brand} ${selectedCar.model} ${selectedCar.plate ? `(${selectedCar.plate})` : ''}` : ''}</DialogTitle>
             <DialogDescription>Publicações, gastos e financeiro por veículo</DialogDescription>
           </DialogHeader>
 
@@ -587,16 +618,43 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
                         })
                         .map(pub => {
                           const pf = pfById[String(pub.platform_id)];
+                          const isEditing = editingPubId === pub.id;
                           return (
-                            <div key={pub.id} className="bg-white p-3 border rounded flex items-center justify-between">
-                              <div>
-                                <div className="font-medium">{pf?.name || '(sem título)'}</div>
-                                <div className="text-xs text-gray-500">{pub.link ? <a className="text-blue-600" href={pub.link} target="_blank" rel="noreferrer">Ver anúncio</a> : 'Sem link'}</div>
-                                <div className="text-xs text-gray-500">{pub.status} • Gasto: {Money({ value: pub.spent })}</div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <button onClick={() => removePublication(pub.id)} className="text-red-600"><Trash2 /></button>
-                              </div>
+                            <div key={pub.id} className="bg-white p-3 border rounded">
+                              {!isEditing ? (
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <div className="font-medium">{pf?.name || '(sem título)'}</div>
+                                    <div className="text-xs text-gray-500">{pub.link ? <a className="text-blue-600" href={pub.link} target="_blank" rel="noreferrer">Ver anúncio</a> : 'Sem link'}</div>
+                                    <div className="text-xs text-gray-500">{pub.status} • Gasto: {Money({ value: pub.spent })}</div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <button onClick={() => startEditPub(pub)} className="text-gray-700"><Pencil /></button>
+                                    <button onClick={() => removePublication(pub.id)} className="text-red-600"><Trash2 /></button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
+                                  <select value={pubEdit.platform_id} onChange={(e)=>setPubEdit(v=>({...v, platform_id: e.target.value}))} className="p-2 border rounded md:col-span-2">
+                                    <option value="">Plataforma</option>
+                                    {marketplacePlatforms.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                  </select>
+                                  <input placeholder="Link" value={pubEdit.link} onChange={(e)=>setPubEdit(v=>({...v, link: e.target.value}))} className="p-2 border rounded md:col-span-2"/>
+                                  <select value={pubEdit.status} onChange={(e)=>setPubEdit(v=>({...v, status: e.target.value}))} className="p-2 border rounded">
+                                    <option value="active">Ativo</option>
+                                    <option value="paused">Pausado</option>
+                                    <option value="finished">Finalizado</option>
+                                    <option value="draft">Rascunho</option>
+                                  </select>
+                                  <input type="number" placeholder="Gasto" value={pubEdit.spent} onChange={(e)=>setPubEdit(v=>({...v, spent: e.target.value}))} className="p-2 border rounded"/>
+                                  <input type="date" value={pubEdit.published_at} onChange={(e)=>setPubEdit(v=>({...v, published_at: e.target.value}))} className="p-2 border rounded"/>
+                                  <input placeholder="Notas" value={pubEdit.notes} onChange={(e)=>setPubEdit(v=>({...v, notes: e.target.value}))} className="p-2 border rounded md:col-span-3"/>
+                                  <div className="flex gap-2 justify-end md:col-span-5">
+                                    <Button size="sm" onClick={saveEditPub}>Salvar</Button>
+                                    <Button size="sm" variant="ghost" onClick={()=>setEditingPubId(null)}>Cancelar</Button>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           );
                         })}
@@ -634,19 +692,42 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
                         })
                         .map(pub => {
                           const pf = pfById[String(pub.platform_id)];
+                          const isEditing = editingPubId === pub.id;
                           return (
-                            <div key={pub.id} className="bg-white p-3 border rounded flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <SocialIcon name={pf?.name} link={pub.link} />
-                                <div>
-                                  <div className="font-medium">{pf?.name || '(sem título)'}</div>
-                                  <div className="text-xs text-gray-500">{pub.link ? <a className="text-blue-600" href={pub.link} target="_blank" rel="noreferrer">Ver post</a> : 'Sem link'}</div>
-                                  <div className="text-xs text-gray-500">{pub.status}</div>
+                            <div key={pub.id} className="bg-white p-3 border rounded">
+                              {!isEditing ? (
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <SocialIcon name={pf?.name} link={pub.link} />
+                                    <div>
+                                      <div className="font-medium">{pf?.name || '(sem título)'}</div>
+                                      <div className="text-xs text-gray-500">{pub.link ? <a className="text-blue-600" href={pub.link} target="_blank" rel="noreferrer">Ver post</a> : 'Sem link'}</div>
+                                      <div className="text-xs text-gray-500">{pub.status}</div>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <button onClick={() => startEditPub(pub)} className="text-gray-700"><Pencil /></button>
+                                    <button onClick={() => removePublication(pub.id)} className="text-red-600"><Trash2 /></button>
+                                  </div>
                                 </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <button onClick={() => removePublication(pub.id)} className="text-red-600"><Trash2 /></button>
-                              </div>
+                              ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
+                                  <select value={pubEdit.platform_id} onChange={(e)=>setPubEdit(v=>({...v, platform_id: e.target.value}))} className="p-2 border rounded md:col-span-2">
+                                    <option value="">Plataforma</option>
+                                    {socialPlatforms.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                  </select>
+                                  <input placeholder="Link" value={pubEdit.link} onChange={(e)=>setPubEdit(v=>({...v, link: e.target.value}))} className="p-2 border rounded md:col-span-2"/>
+                                  <select value={pubEdit.status} onChange={(e)=>setPubEdit(v=>({...v, status: e.target.value}))} className="p-2 border rounded">
+                                    <option value="active">Publicado</option>
+                                    <option value="draft">Rascunho</option>
+                                  </select>
+                                  <input placeholder="Notas" value={pubEdit.notes} onChange={(e)=>setPubEdit(v=>({...v, notes: e.target.value}))} className="p-2 border rounded md:col-span-4"/>
+                                  <div className="flex gap-2 justify-end md:col-span-5">
+                                    <Button size="sm" onClick={saveEditPub}>Salvar</Button>
+                                    <Button size="sm" variant="ghost" onClick={()=>setEditingPubId(null)}>Cancelar</Button>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           );
                         })}
@@ -659,28 +740,50 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
             {tab === 'expenses' && (
               <div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                  <input placeholder="Categoria (ex: Lavagem)" value={expenseForm.category} onChange={(e) => setExpenseForm(f => ({ ...f, category: e.target.value }))} className="p-2 border rounded" />
-                  <input placeholder="Valor (R$)" type="number" value={expenseForm.amount} onChange={(e) => setExpenseForm(f => ({ ...f, amount: e.target.value }))} className="p-2 border rounded" />
+                  <input placeholder="Categoria (ex: Documentação)" value={expenseForm.category} onChange={(e) => setExpenseForm(f => ({ ...f, category: e.target.value }))} className="p-2 border rounded" />
+                  <input placeholder="Valor gasto (R$)" type="number" value={expenseForm.amount} onChange={(e) => setExpenseForm(f => ({ ...f, amount: e.target.value }))} className="p-2 border rounded" />
+                  <input placeholder="Valor cobrado (R$)" type="number" value={expenseForm.charged_amount} onChange={(e) => setExpenseForm(f => ({ ...f, charged_amount: e.target.value }))} className="p-2 border rounded" />
                   <input placeholder="Data" type="date" value={expenseForm.incurred_at ? expenseForm.incurred_at.slice(0,10) : ''} onChange={(e) => setExpenseForm(f => ({ ...f, incurred_at: e.target.value ? new Date(e.target.value).toISOString() : '' }))} className="p-2 border rounded" />
-                  <input placeholder="Descrição" value={expenseForm.description} onChange={(e) => setExpenseForm(f => ({ ...f, description: e.target.value }))} className="p-2 border rounded" />
+                  <input placeholder="Descrição" value={expenseForm.description} onChange={(e) => setExpenseForm(f => ({ ...f, description: e.target.value }))} className="p-2 border rounded md:col-span-2" />
                   <div className="col-span-full flex gap-2">
                     <Button onClick={submitExpense}>Registrar gasto</Button>
                   </div>
                 </div>
 
                 <div className="space-y-2 max-h-64 overflow-auto">
-                  {expenses.map(exp => (
-                    <div key={exp.id} className="bg-white p-3 border rounded flex items-center justify-between">
-                      <div>
-                        <div className="font-medium">{exp.category} — {Money({ value: exp.amount })}</div>
-                        <div className="text-xs text-gray-500">{exp.description}</div>
-                        <div className="text-xs text-gray-400">{exp.incurred_at ? new Date(exp.incurred_at).toLocaleDateString() : ''}</div>
+                  {expenses.map(exp => {
+                    const isEditing = editingExpId === exp.id;
+                    const diff = Number(exp.charged_amount || 0) - Number(exp.amount || 0);
+                    return (
+                      <div key={exp.id} className="bg-white p-3 border rounded">
+                        {!isEditing ? (
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="font-medium">{exp.category} — {Money({ value: exp.amount })}{typeof exp.charged_amount === 'number' ? ` • Cobrado: ${Money({ value: exp.charged_amount })}` : ''}</div>
+                              <div className="text-xs text-gray-500">{exp.description}</div>
+                              <div className="text-xs text-gray-400">{exp.incurred_at ? new Date(exp.incurred_at).toLocaleDateString() : ''} {diff>0 ? `• Ganho: ${Money({ value: diff })}` : ''}</div>
+                            </div>
+                            <div className="flex gap-2">
+                              <button onClick={() => startEditExp(exp)} className="text-gray-700"><Pencil /></button>
+                              <button onClick={() => removeExpense(exp.id)} className="text-red-600"><Trash2 /></button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 md:grid-cols-6 gap-2">
+                            <input placeholder="Categoria" value={expEdit.category} onChange={(e)=>setExpEdit(v=>({...v, category: e.target.value}))} className="p-2 border rounded"/>
+                            <input type="number" placeholder="Gasto" value={expEdit.amount} onChange={(e)=>setExpEdit(v=>({...v, amount: e.target.value}))} className="p-2 border rounded"/>
+                            <input type="number" placeholder="Cobrado" value={expEdit.charged_amount} onChange={(e)=>setExpEdit(v=>({...v, charged_amount: e.target.value}))} className="p-2 border rounded"/>
+                            <input type="date" value={expEdit.incurred_at} onChange={(e)=>setExpEdit(v=>({...v, incurred_at: e.target.value}))} className="p-2 border rounded"/>
+                            <input placeholder="Descrição" value={expEdit.description} onChange={(e)=>setExpEdit(v=>({...v, description: e.target.value}))} className="p-2 border rounded md:col-span-2"/>
+                            <div className="flex gap-2 justify-end md:col-span-6">
+                              <Button size="sm" onClick={saveEditExp}>Salvar</Button>
+                              <Button size="sm" variant="ghost" onClick={()=>setEditingExpId(null)}>Cancelar</Button>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      <div className="flex gap-2">
-                        <button onClick={() => removeExpense(exp.id)} className="text-red-600"><Trash2 /></button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -705,21 +808,6 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
                     <label className="text-sm text-gray-700">Devolver ao vendedor (R$)</label>
                     <input type="number" step="0.01" value={financeForm.return_to_seller ?? ''} onChange={(e) => setFinanceForm(f => ({ ...f, return_to_seller: e.target.value }))} className="w-full p-2 border rounded" />
                   </div>
-
-                  {/* Bloco de datas também disponível dentro do modal principal, se quiser ajustar por aqui */}
-                  <div className="col-span-full bg-gray-50 rounded p-3">
-                    <div className="text-sm font-medium text-gray-700 mb-2">Controle de Datas</div>
-                    <div className="flex flex-wrap gap-3 items-center">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-600">Entrada:</span>
-                        <button className="text-xs underline" onClick={() => openStockDialog(selectedCar)}>editar</button>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-600">Entrega:</span>
-                        <button className="text-xs underline" onClick={() => openDeliverDialog(selectedCar)}>{selectedCar?.delivered_at ? 'editar' : 'marcar'}</button>
-                      </div>
-                    </div>
-                  </div>
                 </div>
 
                 <div className="mb-4">
@@ -727,12 +815,13 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
                   <div className="mt-2 flex gap-4 flex-wrap">
                     <div className="text-sm">Gasto com anúncios: <strong>{Money({ value: (summaryMap[selectedCar.id] || {}).adSpendTotal || 0 })}</strong></div>
                     <div className="text-sm">Gastos extras: <strong>{Money({ value: (summaryMap[selectedCar.id] || {}).extraExpensesTotal || 0 })}</strong></div>
-                    <div className="text-sm">Lucro calculado: <strong className={` ${computeProfitForSelected() >= 0 ? 'text-green-600' : 'text-red-600'}`}>{Money({ value: computeProfitForSelected() })}</strong></div>
+                    <div className="text-sm">Ganhos extras: <strong>{Money({ value: (summaryMap[selectedCar.id] || {}).extraGainsTotal || 0 })}</strong></div>
+                    <div className="text-sm">Lucro calculado: <strong className={`${computeProfitForSelected() >= 0 ? 'text-green-600' : 'text-red-600'}`}>{Money({ value: computeProfitForSelected() })}</strong></div>
                   </div>
                 </div>
 
                 <div className="flex justify-end gap-2">
-                  <Button variant="ghost" onClick={() => { setOpen(false); setSelectedCar(null); }}>Cancelar</Button>
+                  <Button variant="ghost" onClick={() => { setOpen(false); setSelectedCar(null); refreshAll && refreshAll(); }}>Fechar</Button>
                   <Button onClick={saveFinance}>Salvar Financeiro</Button>
                 </div>
               </div>
@@ -740,46 +829,33 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
           </div>
 
           <div className="mt-6 flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => { setOpen(false); setSelectedCar(null); }}>Fechar</Button>
+            <Button variant="ghost" onClick={() => { setOpen(false); setSelectedCar(null); refreshAll && refreshAll(); }}>Fechar</Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* MODAL: Editar data de entrada */}
-      <Dialog open={stockDialogOpen} onOpenChange={setStockDialogOpen}>
-        <DialogContent className="max-w-md">
+      {/* MODAL ENTREGA */}
+      <Dialog open={deliverModal.open} onOpenChange={(o)=>setDeliverModal(s=>({...s, open:o}))}>
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle>Data de entrada no estoque</DialogTitle>
-            <DialogDescription>Defina a data e hora em que o veículo entrou no estoque.</DialogDescription>
+            <DialogTitle>Registrar entrega</DialogTitle>
+            <DialogDescription>Informe data e hora da entrega do veículo.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
-            <input type="datetime-local" className="w-full p-2 border rounded"
-              value={stockForm.stock_in_at}
-              onChange={(e) => setStockForm({ stock_in_at: e.target.value })}
-            />
+            <input type="datetime-local" value={deliverModal.iso} onChange={(e)=>setDeliverModal(s=>({...s, iso:e.target.value}))} className="border rounded px-2 py-2 w-full"/>
             <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setStockDialogOpen(false)}>Cancelar</Button>
-              <Button onClick={saveStockInAt}>Salvar</Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* MODAL: Marcar/Editar Entrega */}
-      <Dialog open={deliverDialogOpen} onOpenChange={setDeliverDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Entrega do veículo</DialogTitle>
-            <DialogDescription>Registre a data e hora da entrega ao cliente.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <input type="datetime-local" className="w-full p-2 border rounded"
-              value={deliverForm.delivered_at}
-              onChange={(e) => setDeliverForm({ delivered_at: e.target.value })}
-            />
-            <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setDeliverDialogOpen(false)}>Cancelar</Button>
-              <Button onClick={saveDeliveredAt}>Salvar</Button>
+              <Button variant="ghost" onClick={()=>setDeliverModal({open:false, iso:''})}>Cancelar</Button>
+              <Button onClick={async ()=>{
+                try{
+                  const iso = new Date(deliverModal.iso).toISOString();
+                  await markCarAsDelivered(selectedCar.id, iso);
+                  toast({ title: 'Entrega registrada' });
+                  setDeliverModal({open:false, iso:''});
+                  refreshAll && refreshAll();
+                }catch(e){
+                  toast({ title: 'Erro ao marcar entregue', description: String(e), variant:'destructive' });
+                }
+              }}>Salvar</Button>
             </div>
           </div>
         </DialogContent>

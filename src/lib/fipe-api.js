@@ -1,7 +1,6 @@
 // src/lib/fipe-api.js
-// Busca determinística por Marca + Modelo + (Versão) + Ano + Combustível.
-// Regra especial para Porsche: permite token de 1 letra "S" (ex.: "Macan S").
-// Sem fallback para outro ano/versão. Se não casar, retorna null.
+// Busca determinística por Marca + Modelo + (Versão) + Ano + Combustível,
+// com compat extra para "Flex" (Gasolina/Álcool/Etanol) e token "S" da Porsche.
 
 const BASE = 'https://parallelum.com.br/fipe/api/v1';
 
@@ -16,7 +15,6 @@ const normalize = (s = '') =>
 
 const STOP = new Set(['de','da','do','e','com','para','por','the','and']);
 
-// tokenizador com opção de manter tokens de 1 letra
 const tokenize = (s = '', { allowSingles = false } = {}) =>
   normalize(s)
     .split(' ')
@@ -66,7 +64,21 @@ const fuelTokenFor = (fuel) => {
   return n.split(' ')[0] || n;
 };
 
-// todos tokens requeridos precisam estar no nome FIPE
+// Combustível: trata "flex" como Gasolina/Álcool/Etanol também
+const matchFuel = (yearNameNorm, fuelTok) => {
+  if (!fuelTok) return true;
+  if (fuelTok === 'flex') {
+    if (yearNameNorm.includes('flex')) return true;
+    const hasGas = yearNameNorm.includes('gasolina');
+    const hasAlc = yearNameNorm.includes('alcool') || yearNameNorm.includes('etanol');
+    if (hasGas && hasAlc) return true;
+    // alguns retornam "bicombustivel"
+    if (yearNameNorm.includes('bi combustivel') || yearNameNorm.includes('bicombustivel')) return true;
+    return false;
+  }
+  return yearNameNorm.includes(fuelTok);
+};
+
 const containsAllTokens = (candidateName, requiredTokens, { allowSingles = false } = {}) => {
   const candTokens = new Set(tokenize(candidateName, { allowSingles }));
   return requiredTokens.every(t => candTokens.has(t));
@@ -87,6 +99,7 @@ export const getFipeValue = async ({
       return { value: null, raw: null, debug };
     }
 
+    // Entrada
     const inputBrand = String(brand || '');
     const inputModel = String(model || '');
     const inputVersion = String(version || '');
@@ -94,8 +107,7 @@ export const getFipeValue = async ({
     const fuelTok = fuelTokenFor(fuel);
 
     const brandNorm = normalize(inputBrand);
-    const allowSingleLetterTokens =
-      brandNorm === 'porsche'; // habilita aceitar "s" como token válido
+    const allowSingleLetterTokens = (brandNorm === 'porsche'); // aceita "S"
 
     debug.push(`Entrada: brand="${inputBrand}", model="${inputModel}", version="${inputVersion}", year=${yearStr}, fuel="${fuelTok}", type=${vehicleType}`);
 
@@ -129,32 +141,26 @@ export const getFipeValue = async ({
     const modelos = Array.isArray(modelsObj) ? modelsObj : (modelsObj.modelos || []);
     debug.push(`Modelos carregados: ${modelos.length}`);
 
-    // tokens obrigatórios = modelo + versão (se houver)
+    // tokens obrigatórios (modelo + versão se vier junto no mesmo campo também pega)
     const reqTokens = [
-      ...tokenize(inputModel, { allowSingles: allowSingleLetterTokens }),
+      ...tokenize(inputModel,   { allowSingles: allowSingleLetterTokens }),
       ...tokenize(inputVersion, { allowSingles: allowSingleLetterTokens })
     ];
-    // se versão vier vazia, usa só os do modelo (ok para "Macan S" porque manteremos o "s" quando Porsche)
-    if (reqTokens.length === 0) {
-      reqTokens.push(...tokenize(inputModel, { allowSingles: allowSingleLetterTokens }));
-    }
 
-    // filtro estrito: candidato precisa conter TODOS os tokens
+    // Filtro estrito por tokens
     let strict = modelos.filter(m =>
       containsAllTokens(m.nome || '', reqTokens, { allowSingles: allowSingleLetterTokens })
     );
 
-    // fallback leve: se vazio, exige ao menos conter o nome base do modelo e escolhe top 3 por similaridade
+    // Fallback rankeado por similaridade (pega top 6 mais parecidos)
     if (strict.length === 0) {
-      const nmModel = normalize(inputModel);
-      const candidates = modelos
-        .filter(m => normalize(m.nome || '').includes(nmModel))
-        .map(m => ({
-          m,
-          score: levRatio(normalize(m.nome || ''), normalize(`${inputModel} ${inputVersion}`.trim()))
-        }))
-        .sort((a,b) => b.score - a.score);
-      strict = candidates.slice(0, 3).map(c => c.m);
+      const needle = normalize(`${inputModel} ${inputVersion}`.trim());
+      const ranked = modelos
+        .map(m => ({ m, score: levRatio(normalize(m.nome || ''), needle) }))
+        .sort((a,b) => b.score - a.score)
+        .slice(0, 6)
+        .map(x => x.m);
+      strict = ranked;
     }
 
     if (strict.length === 0) {
@@ -164,7 +170,7 @@ export const getFipeValue = async ({
 
     debug.push(`Modelos pós-filtro: ${strict.map(s => s.nome).join(' | ')}`);
 
-    // 3) Dentro de cada modelo, exigir ANO + (COMBUSTÍVEL se informado)
+    // 3) Dentro de cada modelo, exigir ANO + COMBUSTÍVEL
     const pickByYearAndFuel = async (m) => {
       const mid = m.codigo;
       const yearsRes = await fetch(`${BASE}/${vehicleType}/marcas/${brandId}/modelos/${mid}/anos`);
@@ -174,11 +180,12 @@ export const getFipeValue = async ({
       const exact = years.find(y => {
         const n = normalize(y.nome || '');
         const hasYear = n.includes(yearStr);
-        const hasFuel = fuelTok ? n.includes(fuelTok) : true;
-        return hasYear && hasFuel;
+        const okFuel = matchFuel(n, fuelTok);
+        return hasYear && okFuel;
       });
       if (exact) return { yearMatch: exact, model: m };
 
+      // se não informou combustível, deixa cair num match apenas por ano
       if (!fuelTok) {
         const onlyYear = years.find(y => normalize(y.nome || '').includes(yearStr));
         if (onlyYear) return { yearMatch: onlyYear, model: m };
@@ -217,6 +224,6 @@ export const getFipeValue = async ({
   }
 };
 
-// compat
+// compat antigo
 export const fetchFipeForVehicle = getFipeValue;
 

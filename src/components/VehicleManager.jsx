@@ -3,13 +3,14 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
-import { Check, Trash2, Megaphone, Wallet, DollarSign, Instagram, Youtube, Globe, Music2 } from 'lucide-react';
+import { Check, Trash2, Megaphone, Wallet, DollarSign, Instagram, Youtube, Globe, Music2, Calendar as CalendarIcon, PackageCheck } from 'lucide-react';
 import {
   getPublicationsByCar, addPublication, deletePublication,
   getExpensesByCar, addExpense, deleteExpense,
   getPlatforms,
   getPublicationsForCars, getExpensesForCars,
-  updateCar
+  updateCar,
+  markCarAsDelivered
 } from '@/lib/car-api';
 import { supabase } from '@/lib/supabase';
 import { getFipeValue } from '@/lib/fipe-api';
@@ -29,6 +30,29 @@ const SocialIcon = ({ name = '', link = '' }) => {
   return <Globe className="h-4 w-4" />;
 };
 
+// helpers datas
+const toInputDT = (isoOrNull) => {
+  if (!isoOrNull) return '';
+  const d = new Date(isoOrNull);
+  const pad = (x) => String(x).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  const mm = pad(d.getMonth() + 1);
+  const dd = pad(d.getDate());
+  const hh = pad(d.getHours());
+  const mi = pad(d.getMinutes());
+  return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+};
+const fromInputDT = (value) => (value ? new Date(value).toISOString() : null);
+
+const diffDays = (startISO, endISO) => {
+  if (!startISO) return null;
+  const a = new Date(startISO).getTime();
+  const b = endISO ? new Date(endISO).getTime() : Date.now();
+  if (Number.isNaN(a) || Number.isNaN(b)) return null;
+  const ms = Math.max(0, b - a);
+  return Math.floor(ms / (1000 * 60 * 60 * 24));
+};
+
 const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled = () => {}, platforms: externalPlatforms = [] }) => {
   const [selectedCar, setSelectedCar] = useState(null);
   const [open, setOpen] = useState(false);
@@ -42,7 +66,12 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
   const [pubForm, setPubForm] = useState({ platform_id: '', link: '', spent: '', status: 'active', published_at: '', notes: '' });
   const [expenseForm, setExpenseForm] = useState({ category: '', amount: '', description: '', incurred_at: '' });
   const [financeForm, setFinanceForm] = useState({ fipe_value: '', commission: '', return_to_seller: '' });
-  const [newPlatformName, setNewPlatformName] = useState('');
+
+  // dialogs de datas
+  const [stockDialogOpen, setStockDialogOpen] = useState(false);
+  const [deliverDialogOpen, setDeliverDialogOpen] = useState(false);
+  const [stockForm, setStockForm] = useState({ stock_in_at: '' });
+  const [deliverForm, setDeliverForm] = useState({ delivered_at: '' });
 
   // carrega plataformas
   useEffect(() => {
@@ -57,7 +86,7 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
     })();
   }, [externalPlatforms]);
 
-  // agrupa resumos (separando marketplaces de redes sociais)
+  // agrupa resumos (marketplaces + redes)
   useEffect(() => {
     const carIds = (Array.isArray(cars) ? cars.map(c => c.id) : []).filter(Boolean);
     if (carIds.length === 0) { setSummaryMap({}); return; }
@@ -70,7 +99,6 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
           getExpensesForCars(carIds)
         ]);
 
-        // cria lookup de platform_id -> type/name
         const pfById = {};
         (platforms || []).forEach(p => { pfById[String(p.id)] = p; });
 
@@ -95,10 +123,9 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
             map[id].adsCount += 1;
             map[id].adSpendTotal += Number(p.spent || 0);
           } else {
-            // considera como social (ou legado sem platform_id, via link)
             map[id].socialCount += 1;
             const guessName = pf?.name || (p.link || '').split('/')[2] || 'rede';
-            map[id].socialSet.add(guessName.toLowerCase());
+            map[id].socialSet.add(String(guessName).toLowerCase());
           }
         });
 
@@ -108,7 +135,6 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
           map[id].extraExpensesTotal += Number(e.amount || 0);
         });
 
-        // serializa sets
         const finalMap = {};
         Object.keys(map).forEach(id => {
           finalMap[id] = {
@@ -168,7 +194,6 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
     setOpen(true);
     setTab('publications_market');
     fetchAll(car.id);
-    // PREENCHE FINANCEIRO AQUI (fix do seu print 1)
     setFinanceForm({
       fipe_value: car.fipe_value ?? '',
       commission: car.commission ?? '',
@@ -176,7 +201,7 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
     });
   };
 
-  // PUBLICAÇÕES - salvar
+  // PUBLICAÇÕES
   const submitPublication = async () => {
     if (!selectedCar) return;
     try {
@@ -328,10 +353,53 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
   const marketplacePlatforms = (platforms || []).filter(p => p.platform_type === 'marketplace');
   const socialPlatforms = (platforms || []).filter(p => p.platform_type === 'social');
 
+  // contador de estoque atual (apenas disponíveis)
+  const activeCount = useMemo(() => (cars || []).filter(c => c.is_available !== false).length, [cars]);
+
+  // ações datas
+  const openStockDialog = (car) => {
+    setSelectedCar(car);
+    setStockForm({ stock_in_at: toInputDT(car.stock_in_at || car.created_at || new Date().toISOString()) });
+    setStockDialogOpen(true);
+  };
+  const saveStockInAt = async () => {
+    if (!selectedCar) return;
+    try {
+      const payload = { stock_in_at: fromInputDT(stockForm.stock_in_at) };
+      const { error } = await updateCar(selectedCar.id, payload);
+      if (error) throw error;
+      toast({ title: 'Data de entrada atualizada' });
+      setStockDialogOpen(false);
+      if (refreshAll) refreshAll();
+    } catch (e) {
+      toast({ title: 'Erro ao salvar data de entrada', description: String(e), variant: 'destructive' });
+    }
+  };
+
+  const openDeliverDialog = (car) => {
+    setSelectedCar(car);
+    setDeliverForm({ delivered_at: toInputDT(car.delivered_at || new Date().toISOString()) });
+    setDeliverDialogOpen(true);
+  };
+  const saveDeliveredAt = async () => {
+    if (!selectedCar) return;
+    try {
+      const delivered_at = fromInputDT(deliverForm.delivered_at);
+      const res = await markCarAsDelivered(selectedCar.id, delivered_at);
+      if (res?.error) throw res.error;
+      toast({ title: 'Entrega registrada' });
+      setDeliverDialogOpen(false);
+      if (refreshAll) refreshAll();
+    } catch (e) {
+      toast({ title: 'Erro ao registrar entrega', description: String(e), variant: 'destructive' });
+    }
+  };
+
   // UI
   return (
     <div>
-      <h2 className="text-2xl font-semibold mb-4">Gestão de Veículos</h2>
+      <h2 className="text-2xl font-semibold mb-1">Gestão de Veículos</h2>
+      <div className="text-sm text-gray-500 mb-4">Estoque Atual <span className="font-semibold text-gray-800">({activeCount})</span></div>
 
       <div className="mb-4 flex flex-col md:flex-row gap-2 items-center">
         <input placeholder="Pesquisar marca ou modelo..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full md:w-1/2 p-2 border rounded" />
@@ -351,10 +419,14 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
           const profit = Number(car.profit ?? ((car.commission ?? 0) - (summary.adSpendTotal + summary.extraExpensesTotal)));
           const profitDisplay = Number.isFinite(profit) ? profit : null;
 
-          // diferença vs FIPE na linha do PREÇO (pedido 4)
           const fipe = Number(car.fipe_value || 0);
           const price = Number(car.price || 0);
           const diffPct = fipe > 0 ? ((price - fipe) / fipe) * 100 : null;
+
+          // datas / dias em estoque
+          const startISO = car.stock_in_at || car.created_at;
+          const endISO = sold ? (car.sold_at || null) : null;
+          const dias = diffDays(startISO, endISO);
 
           return (
             <div key={car.id} className={`bg-white rounded-xl p-4 flex items-center justify-between shadow transition hover:shadow-lg ${sold ? 'opacity-80' : ''}`}>
@@ -374,6 +446,28 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
                       </div>
                     </div>
                     {sold && <span className="ml-2 text-sm bg-red-600 text-white px-2 py-0.5 rounded-full font-semibold">VENDIDO</span>}
+                  </div>
+
+                  <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-gray-600">
+                    <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-gray-100">
+                      <CalendarIcon className="h-3 w-3" />
+                      Entrada: <strong>{startISO ? new Date(startISO).toLocaleString('pt-BR') : '-'}</strong>
+                      <button onClick={() => openStockDialog(car)} className="ml-2 underline hover:opacity-80">editar</button>
+                    </div>
+                    <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-yellow-50 text-yellow-800">
+                      ⏱️ <strong>{dias ?? '-'}</strong> dia(s) em estoque{sold ? ' até a venda' : ''}
+                    </div>
+                    {car.delivered_at ? (
+                      <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-green-50 text-green-800">
+                        <PackageCheck className="h-3 w-3" />
+                        Entregue: <strong>{new Date(car.delivered_at).toLocaleString('pt-BR')}</strong>
+                        <button onClick={() => openDeliverDialog(car)} className="ml-2 underline hover:opacity-80">editar</button>
+                      </div>
+                    ) : (
+                      <button onClick={() => openDeliverDialog(car)} className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-green-600 text-white">
+                        <PackageCheck className="h-3 w-3" /> Marcar como Entregue
+                      </button>
+                    )}
                   </div>
 
                   <div className="mt-3 flex flex-wrap items-center gap-6 text-sm text-gray-600">
@@ -419,7 +513,7 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
                       </div>
                     </div>
 
-                    {/* FIPE / Comissão / Devolver (valores salvos) */}
+                    {/* FIPE / Comissão / Devolver */}
                     <div>
                       <div className="text-xs">FIPE</div>
                       <div className="font-medium">{car.fipe_value ? Money({ value: car.fipe_value }) : '-'}</div>
@@ -447,6 +541,7 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
         })}
       </div>
 
+      {/* MODAL PRINCIPAL */}
       <Dialog open={open} onOpenChange={(o) => { if (!o) { setSelectedCar(null); } setOpen(o); }}>
         <DialogContent className="max-w-4xl">
           <DialogHeader>
@@ -610,6 +705,21 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
                     <label className="text-sm text-gray-700">Devolver ao vendedor (R$)</label>
                     <input type="number" step="0.01" value={financeForm.return_to_seller ?? ''} onChange={(e) => setFinanceForm(f => ({ ...f, return_to_seller: e.target.value }))} className="w-full p-2 border rounded" />
                   </div>
+
+                  {/* Bloco de datas também disponível dentro do modal principal, se quiser ajustar por aqui */}
+                  <div className="col-span-full bg-gray-50 rounded p-3">
+                    <div className="text-sm font-medium text-gray-700 mb-2">Controle de Datas</div>
+                    <div className="flex flex-wrap gap-3 items-center">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-600">Entrada:</span>
+                        <button className="text-xs underline" onClick={() => openStockDialog(selectedCar)}>editar</button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-600">Entrega:</span>
+                        <button className="text-xs underline" onClick={() => openDeliverDialog(selectedCar)}>{selectedCar?.delivered_at ? 'editar' : 'marcar'}</button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="mb-4">
@@ -631,6 +741,46 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
 
           <div className="mt-6 flex justify-end gap-2">
             <Button variant="ghost" onClick={() => { setOpen(false); setSelectedCar(null); }}>Fechar</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL: Editar data de entrada */}
+      <Dialog open={stockDialogOpen} onOpenChange={setStockDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Data de entrada no estoque</DialogTitle>
+            <DialogDescription>Defina a data e hora em que o veículo entrou no estoque.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <input type="datetime-local" className="w-full p-2 border rounded"
+              value={stockForm.stock_in_at}
+              onChange={(e) => setStockForm({ stock_in_at: e.target.value })}
+            />
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setStockDialogOpen(false)}>Cancelar</Button>
+              <Button onClick={saveStockInAt}>Salvar</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL: Marcar/Editar Entrega */}
+      <Dialog open={deliverDialogOpen} onOpenChange={setDeliverDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Entrega do veículo</DialogTitle>
+            <DialogDescription>Registre a data e hora da entrega ao cliente.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <input type="datetime-local" className="w-full p-2 border rounded"
+              value={deliverForm.delivered_at}
+              onChange={(e) => setDeliverForm({ delivered_at: e.target.value })}
+            />
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setDeliverDialogOpen(false)}>Cancelar</Button>
+              <Button onClick={saveDeliveredAt}>Salvar</Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

@@ -346,6 +346,31 @@ export const getSales = async (filters = {}) => {
 
 /*
   -----------------------------
+  ENTREGA (cars.delivered_at)
+  -----------------------------
+*/
+
+export const markCarAsDelivered = async (car_id, delivered_at) => {
+  try {
+    const { data, error } = await supabase
+      .from('cars')
+      .update({ delivered_at })
+      .eq('id', car_id)
+      .select()
+      .single();
+    if (error) {
+      console.error('Erro ao marcar entrega:', error);
+      return { error };
+    }
+    return { data };
+  } catch (err) {
+    console.error('Erro em markCarAsDelivered:', err);
+    return { error: err };
+  }
+};
+
+/*
+  -----------------------------
   FUNÇÕES: PUBLICAÇÕES (vehicle_publications)
   -----------------------------
 */
@@ -520,7 +545,7 @@ export const getLatestChecklistTemplate = async () => {
   }
 };
 
-// ---- LEGADO: compat para não quebrar builds antigos (Checklist desativado) ----
+// ---- LEGADO: compat (Checklist desativado) ----
 export const addChecklistItem = async (..._args) => {
   console.warn('[LEGADO] addChecklistItem chamado — checklist foi desativado. Ignorando.');
   return { data: null, error: null };

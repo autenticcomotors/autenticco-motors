@@ -12,44 +12,30 @@ import {
   updateCar
 } from '@/lib/car-api';
 import { supabase } from '@/lib/supabase';
-import { getFipeValue } from '@/lib/fipe-api';
 
 const Money = ({ value }) => {
   const v = Number(value || 0);
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 };
 
-const pctDiff = (price, fipe) => {
-  const p = Number(price), f = Number(fipe);
-  if (!Number.isFinite(p) || !Number.isFinite(f) || f === 0) return null;
-  return ((p - f) / f) * 100;
-};
-
-const diffBadgeClass = (diff) => {
-  if (diff === null) return 'bg-gray-100 text-gray-600';
-  if (diff > 5) return 'bg-orange-100 text-orange-700';
-  if (diff < -5) return 'bg-green-100 text-green-700';
-  return 'bg-gray-100 text-gray-700';
-};
-
 const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled = () => {}, platforms: externalPlatforms = [] }) => {
   const [selectedCar, setSelectedCar] = useState(null);
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState('publications_market'); // Checklist removido
+  const [tab, setTab] = useState('publications_market'); // publications_market | publications_social | expenses | finance
   const [platforms, setPlatforms] = useState(externalPlatforms || []);
 
   const [publications, setPublications] = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [summaryMap, setSummaryMap] = useState({});
 
-  // Removido "budget" do formulário de anúncios
-  const [pubForm, setPubForm] = useState({ platform_id: '', platform_type: '', link: '', spent: '', status: 'draft', published_at: '' });
+  // formulário de publicações (sem orçamento)
+  const [pubForm, setPubForm] = useState({ platform_id: '', platform_type: '', link: '', spent: '', status: 'draft', published_at: '', notes: '' });
   const [expenseForm, setExpenseForm] = useState({ category: '', amount: '', description: '', incurred_at: '' });
   const [financeForm, setFinanceForm] = useState({ fipe_value: '', commission: '', return_to_seller: '' });
+  const [newPlatformName, setNewPlatformName] = useState('');
 
   const [searchTerm, setSearchTerm] = useState('');
   const [brandFilter, setBrandFilter] = useState('');
-  const [fipeLoading, setFipeLoading] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -69,6 +55,7 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
       setSummaryMap({});
       return;
     }
+
     let mounted = true;
     (async () => {
       try {
@@ -76,24 +63,29 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
           getPublicationsForCars(carIds),
           getExpensesForCars(carIds)
         ]);
+
         const map = {};
         carIds.forEach(id => { map[id] = { pubCount: 0, adSpendTotal: 0, extraExpensesTotal: 0 }; });
+
         (pubs || []).forEach(p => {
           const id = p.car_id;
           if (!map[id]) map[id] = { pubCount: 0, adSpendTotal: 0, extraExpensesTotal: 0 };
           map[id].pubCount += 1;
           map[id].adSpendTotal += Number(p.spent || 0);
         });
+
         (exps || []).forEach(e => {
           const id = e.car_id;
           if (!map[id]) map[id] = { pubCount: 0, adSpendTotal: 0, extraExpensesTotal: 0 };
           map[id].extraExpensesTotal += Number(e.amount || 0);
         });
+
         if (mounted) setSummaryMap(map);
       } catch (err) {
         console.error('Erro ao agregar resumos:', err);
       }
     })();
+
     return () => { mounted = false; };
   }, [cars]);
 
@@ -101,7 +93,7 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
     if (openCar && openCar.id) {
       setSelectedCar(openCar);
       setOpen(true);
-      setTab('publications_market'); // não cair mais no checklist
+      setTab('publications_market');
       fetchAll(openCar.id);
       setFinanceForm({
         fipe_value: openCar.fipe_value ?? '',
@@ -123,7 +115,8 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
       setExpenses(ex || []);
     } catch (err) {
       console.error('Erro fetchAll:', err);
-      setPublications([]); setExpenses([]);
+      setPublications([]);
+      setExpenses([]);
     }
   };
 
@@ -135,24 +128,25 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
       const payload = {
         car_id: selectedCar.id,
         platform_id: pubForm.platform_id || null,
-        platform_name: platform ? platform.name : pubForm.platform_name || null,
-        platform_type: platform ? platform.platform_type : pubForm.platform_type || null,
-        link: pubForm.link,
-        status: pubForm.status,
+        platform_name: platform ? platform.name : null,
+        platform_type: platform ? platform.platform_type : (pubForm.platform_type || null),
+        link: pubForm.link || null,
+        status: pubForm.status || 'draft',
         spent: pubForm.spent ? parseFloat(pubForm.spent) : null,
         published_at: pubForm.published_at || null,
-        notes: ''
+        notes: pubForm.notes || null
       };
-      const { data } = await addPublication(payload);
+      const { data, error } = await addPublication(payload);
+      if (error) throw error;
       if (data) {
         setPublications(prev => [data, ...prev]);
-        setPubForm({ platform_id: '', platform_type: '', link: '', spent: '', status: 'draft', published_at: '' });
+        setPubForm({ platform_id: '', platform_type: '', link: '', spent: '', status: 'draft', published_at: '', notes: '' });
         toast({ title: 'Publicação adicionada' });
       }
       await fetchAll(selectedCar.id);
       if (refreshAll) refreshAll();
     } catch (err) {
-      console.error(err);
+      console.error('Erro ao adicionar publicação:', err);
       toast({ title: 'Erro ao salvar publicação', description: err.message || String(err), variant: 'destructive' });
     }
   };
@@ -169,7 +163,7 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
     }
   };
 
-  // GASTOS
+  // EXPENSES
   const submitExpense = async () => {
     if (!selectedCar) return;
     try {
@@ -189,49 +183,53 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
       await fetchAll(selectedCar.id);
       if (refreshAll) refreshAll();
     } catch (err) {
+      console.error('Erro ao salvar gasto:', err);
       toast({ title: 'Erro ao salvar gasto', description: err.message || String(err), variant: 'destructive' });
     }
   };
 
-  const removeExpense = async (id) => {
-    try {
-      await deleteExpense(id);
-      setExpenses(prev => prev.filter(e => e.id !== id));
-      toast({ title: 'Gasto removido' });
-      await fetchAll(selectedCar.id);
-      if (refreshAll) refreshAll();
-    } catch (err) {
-      toast({ title: 'Erro ao remover gasto', description: err.message || String(err), variant: 'destructive' });
-    }
-  };
-
+  // FINANCE
   const computeProfitForSelected = () => {
     if (!selectedCar) return 0;
     const summary = summaryMap[selectedCar.id] || { adSpendTotal: 0, extraExpensesTotal: 0 };
     const comm = Number(financeForm.commission || selectedCar.commission || 0);
     const ad = Number(summary.adSpendTotal || 0);
     const extras = Number(summary.extraExpensesTotal || 0);
-    return comm - (ad + extras);
+    const profit = comm - (ad + extras);
+    return profit;
   };
 
   const saveFinance = async () => {
     if (!selectedCar) return;
     try {
       const summary = summaryMap[selectedCar.id] || { adSpendTotal: 0, extraExpensesTotal: 0 };
+      const fipe_value = financeForm.fipe_value ? parseFloat(financeForm.fipe_value) : null;
+      const commission = financeForm.commission ? parseFloat(financeForm.commission) : 0;
+      const return_to_seller = financeForm.return_to_seller ? parseFloat(financeForm.return_to_seller) : 0;
+
+      const adSpendTotal = Number(summary.adSpendTotal || 0);
+      const extraExpensesTotal = Number(summary.extraExpensesTotal || 0);
+
+      const profit = commission - (adSpendTotal + extraExpensesTotal);
       const patch = {
-        fipe_value: financeForm.fipe_value ? parseFloat(financeForm.fipe_value) : null,
-        commission: financeForm.commission ? parseFloat(financeForm.commission) : 0,
-        return_to_seller: financeForm.return_to_seller ? parseFloat(financeForm.return_to_seller) : 0,
-        profit: (financeForm.commission ? parseFloat(financeForm.commission) : 0) - (Number(summary.adSpendTotal || 0) + Number(summary.extraExpensesTotal || 0)),
+        fipe_value,
+        commission,
+        return_to_seller,
+        profit,
         profit_percent: null
       };
+
       const { data, error } = await updateCar(selectedCar.id, patch);
       if (error) throw error;
-      setSelectedCar({ ...(selectedCar || {}), ...patch });
+
+      const updated = { ...(selectedCar || {}), ...patch };
+      setSelectedCar(updated);
+
       toast({ title: 'Financeiro atualizado com sucesso' });
       await fetchAll(selectedCar.id);
       if (refreshAll) refreshAll();
     } catch (err) {
+      console.error('Erro ao salvar financeiro:', err);
       toast({ title: 'Erro ao salvar financeiro', description: err.message || String(err), variant: 'destructive' });
     }
   };
@@ -274,8 +272,6 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
           const profit = Number(car.profit ?? ((car.commission ?? 0) - (summary.adSpendTotal + summary.extraExpensesTotal)));
           const profitDisplay = Number.isFinite(profit) ? profit : null;
 
-          const diff = pctDiff(car.price, car.fipe_value);
-
           return (
             <div key={car.id} className={`bg-white rounded-xl p-4 flex items-center justify-between shadow transition hover:shadow-lg ${sold ? 'opacity-80' : ''}`}>
               <div className="flex items-start gap-4">
@@ -284,15 +280,7 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
                   <div className="flex items-center gap-3">
                     <div>
                       <div className="font-bold text-lg">{car.brand} {car.model} <span className="text-sm text-gray-500">({car.year})</span></div>
-                      <div className="text-sm text-gray-600">
-                        Preço:{' '}
-                        <span className="font-semibold">{Money({ value: car.price })}</span>
-                        {car.fipe_value && Number.isFinite(Number(car.price)) && (
-                          <span className={`ml-2 text-xs px-2 py-0.5 rounded-full ${diffBadgeClass(diff)}`}>
-                            {diff !== null ? `${diff.toFixed(1)}% vs FIPE` : ''}
-                          </span>
-                        )}
-                      </div>
+                      <div className="text-sm text-gray-600">Preço: <span className="font-semibold">{Money({ value: car.price })}</span></div>
                     </div>
                     {sold && <span className="ml-2 text-sm bg-red-600 text-white px-2 py-0.5 rounded-full font-semibold">VENDIDO</span>}
                   </div>
@@ -342,23 +330,7 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
 
               <div className="flex flex-col items-end gap-2">
                 <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setSelectedCar(car);
-                      setOpen(true);
-                      setTab('publications_market'); // abre direto em anúncios
-                      fetchAll(car.id);
-                      setFinanceForm({
-                        fipe_value: car.fipe_value ?? '',
-                        commission: car.commission ?? '',
-                        return_to_seller: car.return_to_seller ?? ''
-                      });
-                    }}
-                  >
-                    Gerenciar
-                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => { setSelectedCar(car); setOpen(true); setTab('publications_market'); fetchAll(car.id); }}>Gerenciar</Button>
                 </div>
                 <div className="text-xs text-gray-500">Última atualização: {car.updated_at ? new Date(car.updated_at).toLocaleDateString() : '-'}</div>
               </div>
@@ -376,7 +348,6 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
 
           <div className="mt-4">
             <div className="flex gap-2 mb-4">
-              {/* Checklist REMOVIDO */}
               <button onClick={() => setTab('publications_market')} className={`px-3 py-1 rounded ${tab === 'publications_market' ? 'bg-yellow-400 text-black' : 'bg-gray-100'}`}>Anúncios (Marketplaces)</button>
               <button onClick={() => setTab('publications_social')} className={`px-3 py-1 rounded ${tab === 'publications_social' ? 'bg-yellow-400 text-black' : 'bg-gray-100'}`}>Redes Sociais</button>
               <button onClick={() => setTab('expenses')} className={`px-3 py-1 rounded ${tab === 'expenses' ? 'bg-yellow-400 text-black' : 'bg-gray-100'}`}>Gastos</button>
@@ -391,9 +362,8 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
                       <option value="">Plataforma (Marketplaces)</option>
                       {marketplacePlatforms.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                     </select>
-                    {/* Orçamento removido — fica só o Gasto */}
                     <input placeholder="Gasto (R$)" type="number" value={pubForm.spent} onChange={(e) => setPubForm(f => ({ ...f, spent: e.target.value }))} className="w-full p-2 border rounded" />
-                    <input placeholder="Link" value={pubForm.link} onChange={(e) => setPubForm(f => ({ ...f, link: e.target.value }))} className="w-full p-2 border rounded" />
+                    <input placeholder="Link do anúncio" value={pubForm.link} onChange={(e) => setPubForm(f => ({ ...f, link: e.target.value }))} className="w-full p-2 border rounded" />
                     <div className="flex gap-2 items-center">
                       <select value={pubForm.status} onChange={(e) => setPubForm(f => ({ ...f, status: e.target.value }))} className="p-2 border rounded">
                         <option value="draft">Rascunho</option>
@@ -407,29 +377,30 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
 
                   <div>
                     <div className="flex gap-2 mb-3">
-                      <input placeholder="Nova plataforma" value={''} onChange={() => {}} className="hidden" />
-                      {/* criação rápida de plataforma */}
-                      <input placeholder="Nova plataforma" onChange={(e) => (e)} className="hidden" />
-                      <div className="flex gap-2">
-                        <input placeholder="Nova plataforma" className="w-full p-2 border rounded" value={''} onChange={() => {}} style={{ display: 'none' }} />
-                      </div>
+                      <input placeholder="Nova plataforma" value={newPlatformName} onChange={(e) => setNewPlatformName(e.target.value)} className="w-full p-2 border rounded" />
+                      <Button size="sm" onClick={async () => {
+                        const created = await addPlatform(newPlatformName.trim());
+                        if (created) {
+                          setPlatforms(prev => [...prev, created]);
+                          setNewPlatformName('');
+                          toast({ title: 'Plataforma criada' });
+                        }
+                      }}>Criar</Button>
                     </div>
 
                     <div className="space-y-2 max-h-64 overflow-auto">
-                      {publications
-                        .filter(p => (p.platform_type === 'marketplace' || (p.platform_id && marketplacePlatforms.find(mp => String(mp.id) === String(p.platform_id)))))
-                        .map(pub => (
-                          <div key={pub.id} className="bg-white p-3 border rounded flex items-center justify-between">
-                            <div>
-                              <div className="font-medium">{pub.platform_name || '(sem título)'}</div>
-                              <div className="text-xs text-gray-500">{pub.link ? <a className="text-blue-600" href={pub.link} target="_blank" rel="noreferrer">Ver anúncio</a> : 'Sem link'}</div>
-                              <div className="text-xs text-gray-500">{pub.status} • {pub.published_at ? new Date(pub.published_at).toLocaleDateString() : ''} • Gasto: {Money({ value: pub.spent })}</div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <button onClick={() => removePublication(pub.id)} className="text-red-600"><Trash2 /></button>
-                            </div>
+                      {publications.filter(p => (p.platform_type === 'marketplace' || (p.platform_id && marketplacePlatforms.find(mp => String(mp.id) === String(p.platform_id))))).map(pub => (
+                        <div key={pub.id} className="bg-white p-3 border rounded flex items-center justify-between">
+                          <div>
+                            <div className="font-medium">{pub.platform_name || '(sem título)'}</div>
+                            <div className="text-xs text-gray-500">{pub.link ? <a className="text-blue-600" href={pub.link} target="_blank" rel="noreferrer">Ver anúncio</a> : 'Sem link'}</div>
+                            <div className="text-xs text-gray-500">{pub.status || '—'} • {pub.published_at ? new Date(pub.published_at).toLocaleDateString() : ''} • Gasto: {Money({ value: pub.spent })}</div>
                           </div>
-                        ))}
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => removePublication(pub.id)} className="text-red-600"><Trash2 /></button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>
@@ -445,7 +416,7 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
                       {socialPlatforms.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                     </select>
                     <input placeholder="Link (post / reel / video)" value={pubForm.link} onChange={(e) => setPubForm(f => ({ ...f, link: e.target.value }))} className="w-full p-2 border rounded" />
-                    <input placeholder="Observações" value={pubForm.notes || ''} onChange={(e) => setPubForm(f => ({ ...f, notes: e.target.value }))} className="w-full p-2 border rounded" />
+                    <input placeholder="Observações" value={pubForm.notes} onChange={(e) => setPubForm(f => ({ ...f, notes: e.target.value }))} className="w-full p-2 border rounded" />
                     <div className="flex gap-2 items-center">
                       <select value={pubForm.status} onChange={(e) => setPubForm(f => ({ ...f, status: e.target.value }))} className="p-2 border rounded">
                         <option value="draft">Rascunho</option>
@@ -457,20 +428,18 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
 
                   <div>
                     <div className="space-y-2 max-h-64 overflow-auto">
-                      {publications
-                        .filter(p => (p.platform_type === 'social' || (p.link && (p.link.includes('instagram') || p.link.includes('youtube') || p.link.includes('tiktok')))))
-                        .map(pub => (
-                          <div key={pub.id} className="bg-white p-3 border rounded flex items-center justify-between">
-                            <div>
-                              <div className="font-medium">{pub.platform_name || '(sem título)'}</div>
-                              <div className="text-xs text-gray-500">{pub.link ? <a className="text-blue-600" href={pub.link} target="_blank" rel="noreferrer">Ver post</a> : 'Sem link'}</div>
-                              <div className="text-xs text-gray-500">{pub.status} • {pub.published_at ? new Date(pub.published_at).toLocaleDateString() : ''}</div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <button onClick={() => removePublication(pub.id)} className="text-red-600"><Trash2 /></button>
-                            </div>
+                      {publications.filter(p => (p.platform_type === 'social' || (p.link && (p.link.includes('instagram') || p.link.includes('youtube') || p.link.includes('tiktok'))))).map(pub => (
+                        <div key={pub.id} className="bg-white p-3 border rounded flex items-center justify-between">
+                          <div>
+                            <div className="font-medium">{pub.platform_name || '(sem título)'}</div>
+                            <div className="text-xs text-gray-500">{pub.link ? <a className="text-blue-600" href={pub.link} target="_blank" rel="noreferrer">Ver post</a> : 'Sem link'}</div>
+                            <div className="text-xs text-gray-500">{pub.status || '—'} • {pub.published_at ? new Date(pub.published_at).toLocaleDateString() : ''}</div>
                           </div>
-                        ))}
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => removePublication(pub.id)} className="text-red-600"><Trash2 /></button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>
@@ -498,7 +467,16 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
                         <div className="text-xs text-gray-400">{exp.incurred_at ? new Date(exp.incurred_at).toLocaleDateString() : ''}</div>
                       </div>
                       <div className="flex gap-2">
-                        <button onClick={() => removeExpense(exp.id)} className="text-red-600"><Trash2 /></button>
+                        <button onClick={() => removePublication(exp.id)} className="text-red-600 hidden" />
+                        <button onClick={() => {
+                          // simples exclusão:
+                          deleteExpense(exp.id).then(() => {
+                            setExpenses(prev => prev.filter(e => e.id !== exp.id));
+                            toast({ title: 'Gasto removido' });
+                          }).catch(err => {
+                            toast({ title: 'Erro ao remover gasto', description: String(err), variant: 'destructive' });
+                          });
+                        }} className="text-red-600"><Trash2 /></button>
                       </div>
                     </div>
                   ))}
@@ -511,53 +489,7 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                   <div>
                     <label className="text-sm text-gray-700">Valor FIPE</label>
-                    <div className="flex gap-2">
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={financeForm.fipe_value ?? ''}
-                        onChange={(e) => setFinanceForm(f => ({ ...f, fipe_value: e.target.value }))}
-                        className="w-full p-2 border rounded"
-                      />
-                      <Button
-                        variant="outline"
-                        onClick={async () => {
-                          if (!selectedCar) return;
-                          try {
-                            setFipeLoading(true);
-                            const { value } = await getFipeValue({
-                              brand: selectedCar.brand,
-                              model: selectedCar.model, // ex.: "Macan S" (vamos aceitar o "S")
-                              version: selectedCar.version || selectedCar.version_name || selectedCar.trim || '',
-                              year: selectedCar.year,
-                              fuel: selectedCar.fuel || selectedCar.fuel_type || selectedCar.combustivel || '',
-                              vehicleType: 'carros'
-                            });
-                            if (!value) {
-                              toast({ title: 'FIPE não encontrada', description: 'Confira Marca, Modelo, Ano e Combustível.', variant: 'destructive' });
-                              return;
-                            }
-                            setFinanceForm(f => ({ ...f, fipe_value: String(value) }));
-                            toast({ title: 'FIPE atualizada', description: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value) });
-                          } catch (err) {
-                            toast({ title: 'Erro ao consultar FIPE', description: String(err), variant: 'destructive' });
-                          } finally {
-                            setFipeLoading(false);
-                          }
-                        }}
-                        disabled={fipeLoading}
-                      >
-                        {fipeLoading ? 'Buscando…' : 'Buscar na FIPE'}
-                      </Button>
-                    </div>
-                    {Number.isFinite(Number(selectedCar?.price)) && Number.isFinite(Number(financeForm?.fipe_value)) && (
-                      <div className="mt-2 text-sm">
-                        Diferença vs. preço:{' '}
-                        <span className={`px-2 py-0.5 rounded-full ${diffBadgeClass(pctDiff(selectedCar.price, financeForm.fipe_value))}`}>
-                          {pctDiff(selectedCar.price, financeForm.fipe_value)?.toFixed(1)}%
-                        </span>
-                      </div>
-                    )}
+                    <input type="number" step="0.01" value={financeForm.fipe_value ?? ''} onChange={(e) => setFinanceForm(f => ({ ...f, fipe_value: e.target.value }))} className="w-full p-2 border rounded" />
                   </div>
 
                   <div>
@@ -576,7 +508,7 @@ const VehicleManager = ({ cars = [], refreshAll, openCar = null, onOpenHandled =
                   <div className="mt-2 flex gap-4 flex-wrap">
                     <div className="text-sm">Gasto com anúncios: <strong>{Money({ value: (summaryMap[selectedCar.id] || {}).adSpendTotal || 0 })}</strong></div>
                     <div className="text-sm">Gastos extras: <strong>{Money({ value: (summaryMap[selectedCar.id] || {}).extraExpensesTotal || 0 })}</strong></div>
-                    <div className="text-sm">Lucro calculado: <strong className={`${computeProfitForSelected() >= 0 ? 'text-green-600' : 'text-red-600'}`}>{Money({ value: computeProfitForSelected() })}</strong></div>
+                    <div className="text-sm">Lucro calculado: <strong className={` ${computeProfitForSelected() >= 0 ? 'text-green-600' : 'text-red-600'}`}>{Money({ value: computeProfitForSelected() })}</strong></div>
                   </div>
                 </div>
 

@@ -361,9 +361,22 @@ export const getPublicationsByCar = async (carId) => {
 };
 
 export const addPublication = async (pub) => {
+  // pub esperado: { car_id, platform_id?, platform_name?, platform_type?, link?, status?, spent?, published_at?, notes? }
+  const payload = {
+    car_id: pub.car_id,
+    platform_id: pub.platform_id ?? null,
+    platform_name: pub.platform_name ?? null,
+    platform_type: pub.platform_type ?? null,
+    link: pub.link ?? null,
+    status: pub.status ?? 'draft',
+    spent: pub.spent ?? null,
+    published_at: pub.published_at ?? null,
+    notes: pub.notes ?? null
+  };
+
   const { data, error } = await supabase
     .from('vehicle_publications')
-    .insert([pub])
+    .insert([payload])
     .select()
     .single();
   if (error) console.error('Erro ao adicionar publicação:', error);
@@ -438,53 +451,7 @@ export const deleteExpense = async (id) => {
 
 /*
   -----------------------------
-  FUNÇÕES: CHECKLIST (vehicle_checklists)
-  -----------------------------
-*/
-
-export const getChecklistByCar = async (carId) => {
-  const { data, error } = await supabase
-    .from('vehicle_checklists')
-    .select('*')
-    .eq('car_id', carId)
-    .order('created_at', { ascending: true });
-  if (error) console.error('Erro ao buscar checklist:', error);
-  return data || [];
-};
-
-export const updateChecklistItem = async (id, patch) => {
-  const { data, error } = await supabase
-    .from('vehicle_checklists')
-    .update(patch)
-    .eq('id', id)
-    .select()
-    .single();
-  if (error) console.error('Erro ao atualizar checklist:', error);
-  return { data, error };
-};
-
-export const addChecklistItem = async (item) => {
-  const { data, error } = await supabase
-    .from('vehicle_checklists')
-    .insert([item])
-    .select()
-    .single();
-  if (error) console.error('Erro ao adicionar item de checklist:', error);
-  return { data, error };
-};
-
-export const deleteChecklistItem = async (id) => {
-  const { data, error } = await supabase
-    .from('vehicle_checklists')
-    .delete()
-    .eq('id', id);
-  if (error) console.error('Erro ao deletar item checklist:', error);
-  return { data, error };
-};
-
-/*
-  -----------------------------
-  FUNÇÕES UTILITÁRIAS: BUSCAS EM BULK (para resumo na listagem)
+  FUNÇÕES UTILITÁRIAS: BUSCAS EM BULK
   -----------------------------
 */
 
@@ -510,7 +477,7 @@ export const getExpensesForCars = async (carIds = []) => {
 
 /*
   -----------------------------
-  FUNÇÕES: CHECKLIST TEMPLATES (global templates)
+  FUNÇÕES: CHECKLIST TEMPLATES (LEGADO – não usados)
   -----------------------------
 */
 

@@ -476,10 +476,42 @@ const AdminDashboard = () => {
                           </p>
                           <p className="text-xs text-gray-600 mt-1">Placa: <span className="font-medium">{car.plate || '-'}</span></p>
                           {car.is_available === false && (
-                            <p className="text-sm text-red-600 mt-1">
-                              Vendido em {car.sold_at ? new Date(car.sold_at).toLocaleDateString('pt-BR') : '-'} - {car.sale_price ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(car.sale_price) : '-'}
-                            </p>
-                          )}
+  <p className="text-sm text-red-600 mt-1">
+    {(() => {
+      const raw = car.sold_at;
+      if (!raw) {
+        return 'Vendido -';
+      }
+
+      // ex: "2025-10-25T00:00:00+00:00" ou "2025-10-25 00:00:00+00"
+      const clean = String(raw).replace('T', ' ').trim();
+      const y = clean.slice(0, 4);
+      const m = clean.slice(5, 7);
+      const d = clean.slice(8, 10);
+
+      if (!y || !m || !d) {
+        // fallback: mostra cru
+        return `Vendido em ${raw} - ${
+          car.sale_price
+            ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+                car.sale_price
+              )
+            : '-'
+        }`;
+      }
+
+      const dataBR = `${d}/${m}/${y}`;
+      const preco = car.sale_price
+        ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+            car.sale_price
+          )
+        : '-';
+
+      return `Vendido em ${dataBR} - ${preco}`;
+    })()}
+  </p>
+)}
+
                         </div>
                       </div>
 

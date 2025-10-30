@@ -374,7 +374,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
   const modalWidth = 280;
 
   // posição na tela (sem somar scroll)
-  let top = rect.top + 6; // só pra não colar
+  let top = rect.top + 2; // só pra não colar
   let left = rect.left;
 
   // se não couber à direita, joga mais pra esquerda
@@ -416,7 +416,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
   const viewportWidth = window.innerWidth;
   const modalWidth = 280;
 
-  let top = rect.top + 6; // encostado no botão
+  let top = rect.top + 2; // encostado no botão
   let left = rect.left;
 
   if (left + modalWidth + 8 > viewportWidth) {

@@ -339,6 +339,14 @@ const AdminDashboard = () => {
     });
   }, [cars, carSearch, brandFilter]);
 
+	  // contagens para o cabeçalho de veículos
+  const inStockCount = (cars || []).filter(
+    (c) => c.is_sold !== true && c.is_available !== false
+  ).length;
+
+  const soldCount = (cars || []).filter((c) => c.is_sold === true).length;
+
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex justify-center items-center">
@@ -448,15 +456,11 @@ const AdminDashboard = () => {
   <div>
     <h2 className="text-2xl font-semibold flex items-center">
       <Car className="mr-3 text-yellow-500" />
-      Estoque Atual (
-      { (cars || []).filter((c) => c.is_sold !== true && c.is_available !== false).length }
-      )
+      Estoque Atual ({inStockCount})
     </h2>
     <p className="text-sm text-gray-500 mt-1">
       Veículos vendidos:{' '}
-      <span className="font-semibold text-red-500">
-        { (cars || []).filter((c) => c.is_sold === true).length }
-      </span>
+      <span className="font-semibold text-red-500">{soldCount}</span>
     </p>
   </div>
 
@@ -470,6 +474,7 @@ const AdminDashboard = () => {
     </CSVLink>
   </Button>
 </div>
+
 
 
                 {/* CONTROLES DE FILTRO — inclui PLACA */}

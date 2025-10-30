@@ -444,11 +444,37 @@ const AdminDashboard = () => {
                 </form>
               </div>
 
-              <div className="mb-8">
-                <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-2xl font-semibold flex items-center"><Car className="mr-3 text-yellow-500" /> Estoque Atual ({cars.length})</h2>
-                  <Button variant="outline" size="sm" asChild><CSVLink data={cars} filename={"estoque-autenticco.csv"} className="flex items-center"><Download className="mr-2 h-4 w-4" /> Exportar para CSV</CSVLink></Button>
-                </div>
+             <div className="flex justify-between items-center mb-6">
+  <div>
+    <h2 className="text-2xl font-semibold flex items-center">
+      <Car className="mr-3 text-yellow-500" />
+      Estoque Atual (
+      {
+        (cars || []).filter(
+          (c) => c.is_sold !== true && c.is_available !== false
+        ).length
+      }
+      )
+    </h2>
+    <p className="text-sm text-gray-500 mt-1">
+      Veículos vendidos:{' '}
+      <span className="font-semibold text-red-500">
+        {(cars || []).filter((c) => c.is_sold === true).length}
+      </span>
+    </p>
+  </div>
+
+  <Button variant="outline" size="sm" asChild>
+    <CSVLink
+      data={cars}
+      filename={"estoque-autenticco.csv"}
+      className="flex items-center"
+    >
+      <Download className="mr-2 h-4 w-4" /> Exportar para CSV
+    </CSVLink>
+  </Button>
+</div>
+
 
                 {/* CONTROLES DE FILTRO — inclui PLACA */}
                 <div className="flex flex-col md:flex-row gap-3 items-center mb-4">

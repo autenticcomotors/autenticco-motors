@@ -14,6 +14,7 @@ import {
   getPublicationsForCars,
   getExpensesForCars,
   updateCar,
+  // ⚠️ NÃO importar getFipeForCar porque não existe no seu car-api atual
 } from '@/lib/car-api';
 import { X, Megaphone, Wallet, DollarSign, PenSquare } from 'lucide-react';
 
@@ -32,8 +33,9 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [brandFilter, setBrandFilter] = useState('');
-  const [sortBy, setSortBy] = useState('default'); // novo
+  const [sortBy, setSortBy] = useState('default');
 
+  // forms
   const [pubForm, setPubForm] = useState({
     platform_id: '',
     link: '',
@@ -57,17 +59,13 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     return_to_seller: '',
   });
 
-  // mini-modal entrada
+  // mini-modais (mas agora por item)
   const [entryMiniOpenFor, setEntryMiniOpenFor] = useState(null);
   const [entryDate, setEntryDate] = useState('');
   const [entryTime, setEntryTime] = useState('');
-  const [entryPos, setEntryPos] = useState({ top: 0, left: 0 });
-
-  // mini-modal entrega
   const [deliverMiniOpenFor, setDeliverMiniOpenFor] = useState(null);
   const [deliverDate, setDeliverDate] = useState('');
   const [deliverTime, setDeliverTime] = useState('');
-  const [deliverPos, setDeliverPos] = useState({ top: 0, left: 0 });
 
   const isoFromDateTime = (dateStr, timeStr) => {
     if (!dateStr) return null;
@@ -89,7 +87,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     window.dispatchEvent(new Event('autenticco:cars-updated'));
   };
 
-  // plataformas
+  // carregar plataformas
   useEffect(() => {
     (async () => {
       try {
@@ -102,7 +100,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     })();
   }, []);
 
-  // montar mapa de resumo (anúncios / redes / gastos) de todos os carros
+  // montar mapa de resumo
   useEffect(() => {
     const ids = (cars || []).map((c) => c.id).filter(Boolean);
     if (!ids.length) {
@@ -113,7 +111,11 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     let mounted = true;
     (async () => {
       try {
-        const [pubs, exps] = await Promise.all([getPublicationsForCars(ids), getExpensesForCars(ids)]);
+        const [pubs, exps] = await Promise.all([
+          getPublicationsForCars(ids),
+          getExpensesForCars(ids),
+        ]);
+
         const byId = {};
         ids.forEach((id) => {
           byId[id] = {
@@ -130,6 +132,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
           pfById[String(p.id)] = p;
         });
 
+        // publicações
         (pubs || []).forEach((p) => {
           const carId = p.car_id;
           if (!byId[carId]) return;
@@ -143,13 +146,15 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
           }
         });
 
+        // gastos
         (exps || []).forEach((e) => {
           const carId = e.car_id;
           if (!byId[carId]) return;
           const amount = Number(e.amount || 0);
-          const charged = e.charged_value === null || e.charged_value === undefined
-            ? 0
-            : Number(e.charged_value || 0);
+          const charged =
+            e.charged_value === null || e.charged_value === undefined
+              ? 0
+              : Number(e.charged_value || 0);
           byId[carId].extraExpensesTotal += amount;
           if (charged > 0) {
             byId[carId].extraChargedTotal += charged;
@@ -167,6 +172,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     };
   }, [cars, platforms]);
 
+  // abrir modal de gestão
   const openManageModal = async (car) => {
     setSelectedCar(car);
     setActiveTab('marketplaces');
@@ -191,7 +197,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     }
   };
 
-  // salvar anúncio / publicação
+  // salvar anúncio
   const handleSavePublication = async () => {
     if (!selectedCar) return;
     try {
@@ -268,7 +274,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
         car_id: selectedCar.id,
         category: expenseForm.category || 'Outros',
         amount: expenseForm.amount ? Number(expenseForm.amount) : 0,
-        // 👇 AQUI o seu Postgres reclamou — então vamos mandar 0 sempre que vier vazio
+        // AQUI era o erro 23502: vamos mandar 0 se vier vazio
         charged_value:
           expenseForm.charged_value !== '' && expenseForm.charged_value !== null
             ? Number(expenseForm.charged_value)
@@ -377,48 +383,21 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     }
   };
 
-  // buscar fipe dentro do modal
+  // botão Buscar FIPE (sem quebrar o build)
   const handleFetchFipe = async () => {
-    if (!selectedCar) return;
-    try {
-      // se o seu car-api usa outro nome, troca aqui
-      const fipe = await getFipeForCar(selectedCar);
-      if (!fipe) {
-        toast({ title: 'Não encontrei FIPE para esse veículo' });
-        return;
-      }
-      setFinanceForm((prev) => ({ ...prev, fipe_value: fipe }));
-      toast({ title: 'FIPE carregada' });
-    } catch (err) {
-      console.error(err);
-      toast({
-        title: 'Erro ao buscar FIPE',
-        description: err.message || String(err),
-        variant: 'destructive',
-      });
-    }
+    toast({
+      title: 'Falta implementar no car-api',
+      description: 'Crie em src/lib/car-api.js uma função getFipeForCar() e depois eu plugo aqui.',
+    });
   };
 
-  // abrir mini-modal de entrada (com posição)
-  const openEntryMini = (car, e) => {
+  // abrir mini-modal de ENTRADA dentro do próprio card
+  const openEntryMini = (car) => {
     const d = car.entry_at ? new Date(car.entry_at) : new Date();
     setEntryDate(d.toISOString().slice(0, 10));
     setEntryTime(d.toTimeString().slice(0, 5));
-
-    const rect = e.currentTarget.getBoundingClientRect();
-    const viewportWidth = window.innerWidth;
-    const modalWidth = 280;
-
-    // posição relativa ao container (vai funcionar pq o wrapper tá relative)
-    let top = rect.top + window.scrollY + 4;
-    let left = rect.left + window.scrollX;
-
-    if (left + modalWidth + 8 > viewportWidth + window.scrollX) {
-      left = viewportWidth + window.scrollX - modalWidth - 8;
-    }
-
-    setEntryPos({ top, left });
     setEntryMiniOpenFor(car.id);
+    setDeliverMiniOpenFor(null);
   };
 
   const handleSaveEntry = async () => {
@@ -439,25 +418,13 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     }
   };
 
-  // abrir mini-modal de entrega (com posição)
-  const openDeliverMini = (car, e) => {
+  // abrir mini-modal de ENTREGA dentro do próprio card
+  const openDeliverMini = (car) => {
     const d = new Date();
     setDeliverDate(d.toISOString().slice(0, 10));
     setDeliverTime(d.toTimeString().slice(0, 5));
-
-    const rect = e.currentTarget.getBoundingClientRect();
-    const viewportWidth = window.innerWidth;
-    const modalWidth = 280;
-
-    let top = rect.top + window.scrollY + 4;
-    let left = rect.left + window.scrollX;
-
-    if (left + modalWidth + 8 > viewportWidth + window.scrollX) {
-      left = viewportWidth + window.scrollX - modalWidth - 8;
-    }
-
-    setDeliverPos({ top, left });
     setDeliverMiniOpenFor(car.id);
+    setEntryMiniOpenFor(null);
   };
 
   const handleSaveDeliver = async () => {
@@ -504,13 +471,12 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
       );
     });
 
-    // aplicar ordenação
+    // ordenação
     if (sortBy === 'days') {
       list = [...list].sort((a, b) => {
         const da = a.entry_at ? new Date(a.entry_at).getTime() : Date.now();
         const db = b.entry_at ? new Date(b.entry_at).getTime() : Date.now();
-        // mais dias em estoque = mais antigo = menor timestamp
-        return da - db;
+        return da - db; // mais antigo primeiro
       });
     } else if (sortBy === 'profit') {
       list = [...list].sort((a, b) => {
@@ -544,15 +510,15 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
   const socialPlatforms = (platforms || []).filter((p) => p.platform_type === 'social');
 
   return (
-    // ***** IMPORTANTE: relative aqui pra dar contexto pros modais *****
     <div className="space-y-4 relative">
+      {/* filtros topo */}
       <div className="flex flex-col md:flex-row gap-3 items-center">
         <input
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          placeholder="Pesquisar marca, modelo ou PLACA..."
-          className="flex-1 border rounded-lg px-4 py-2 bg-white/70"
-        />
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Pesquisar marca, modelo ou PLACA..."
+            className="flex-1 border rounded-lg px-4 py-2 bg-white/70"
+          />
         <select
           value={brandFilter || 'ALL'}
           onChange={(e) => setBrandFilter(e.target.value === 'ALL' ? '' : e.target.value)}
@@ -566,7 +532,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
           ))}
         </select>
 
-        {/* novo: ordenar */}
         <select
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value)}
@@ -590,6 +555,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
         </button>
       </div>
 
+      {/* LISTA */}
       <div className="space-y-3">
         {filteredCars.map((car) => {
           const summary = summaryMap[car.id] || {
@@ -614,8 +580,9 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
           return (
             <div
               key={car.id}
-              className="bg-white rounded-2xl shadow border flex flex-col md:flex-row justify-between gap-4 p-4"
+              className="bg-white rounded-2xl shadow border flex flex-col md:flex-row justify-between gap-4 p-4 relative"
             >
+              {/* bloco esquerdo */}
               <div className="flex gap-4 items-start">
                 <img
                   src={
@@ -631,12 +598,17 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                       {car.brand} {car.model} ({car.year || '-'})
                     </h3>
                   </div>
-                  <p className="text-sm text-gray-600 flex gap-2 items-center">
+                  <p className="text-sm text-gray-600 flex gap-2 items-center flex-wrap">
                     Preço:{' '}
                     <span className="font-semibold">{moneyBR(car.price)}</span>
                     {car.fipe_value ? (
                       <span className="text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded">
                         FIPE: {moneyBR(car.fipe_value)} ({fipeDiff}%)
+                      </span>
+                    ) : null}
+                    {car.return_to_seller ? (
+                      <span className="text-xs text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
+                        Devolver ao cliente: {moneyBR(car.return_to_seller)}
                       </span>
                     ) : null}
                   </p>
@@ -649,7 +621,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                       Entrada: {car.entry_at ? new Date(car.entry_at).toLocaleString('pt-BR') : '-'}
                     </span>
                     <button
-                      onClick={(e) => openEntryMini(car, e)}
+                      onClick={() => openEntryMini(car)}
                       className="text-xs text-blue-600 hover:underline flex items-center gap-1"
                     >
                       <PenSquare className="w-3 h-3" /> editar
@@ -658,7 +630,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                       {diffInDays(car.entry_at)}
                     </span>
                     <button
-                      onClick={(e) => openDeliverMini(car, e)}
+                      onClick={() => openDeliverMini(car)}
                       className="text-xs text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded flex items-center gap-1"
                     >
                       Marcar como Entregue
@@ -667,6 +639,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                 </div>
               </div>
 
+              {/* bloco direito */}
               <div className="flex flex-wrap gap-4 md:items-center">
                 <div className="text-xs">
                   <p className="flex items-center gap-1">
@@ -708,6 +681,60 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                   </Button>
                 </div>
               </div>
+
+              {/* mini-modal ENTRADA - agora colado no card */}
+              {entryMiniOpenFor === car.id && (
+                <div className="absolute top-10 left-10 md:left-40 z-[999] bg-white rounded-xl shadow-lg p-4 w-[280px] space-y-3 border border-gray-200">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-sm font-semibold">Data de entrada</h3>
+                    <button onClick={() => setEntryMiniOpenFor(null)}>
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <input
+                    type="date"
+                    value={entryDate}
+                    onChange={(e) => setEntryDate(e.target.value)}
+                    className="w-full border rounded px-2 py-1"
+                  />
+                  <input
+                    type="time"
+                    value={entryTime}
+                    onChange={(e) => setEntryTime(e.target.value)}
+                    className="w-full border rounded px-2 py-1"
+                  />
+                  <Button onClick={handleSaveEntry} className="w-full bg-yellow-400 text-black">
+                    Salvar
+                  </Button>
+                </div>
+              )}
+
+              {/* mini-modal ENTREGA - colado no card */}
+              {deliverMiniOpenFor === car.id && (
+                <div className="absolute top-10 left-10 md:left-40 z-[999] bg-white rounded-xl shadow-lg p-4 w-[280px] space-y-3 border border-gray-200">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-sm font-semibold">Registrar entrega</h3>
+                    <button onClick={() => setDeliverMiniOpenFor(null)}>
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <input
+                    type="date"
+                    value={deliverDate}
+                    onChange={(e) => setDeliverDate(e.target.value)}
+                    className="w-full border rounded px-2 py-1"
+                  />
+                  <input
+                    type="time"
+                    value={deliverTime}
+                    onChange={(e) => setDeliverTime(e.target.value)}
+                    className="w-full border rounded px-2 py-1"
+                  />
+                  <Button onClick={handleSaveDeliver} className="w-full bg-yellow-400 text-black">
+                    Salvar
+                  </Button>
+                </div>
+              )}
             </div>
           );
         })}
@@ -766,7 +793,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
             </button>
           </div>
 
-          {/* ANÚNCIOS */}
+          {/* MARKETPLACES */}
           {activeTab === 'marketplaces' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-3">
@@ -1014,72 +1041,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
           )}
         </DialogContent>
       </Dialog>
-
-      {/* mini-modal entrada (posicionado) */}
-      {entryMiniOpenFor && (
-        <div
-          className="fixed z-[9999] bg-white rounded-xl shadow-lg p-4 w-[280px] space-y-3 border border-gray-200"
-          style={{
-            top: `${entryPos.top}px`,
-            left: `${entryPos.left}px`,
-          }}
-        >
-          <div className="flex justify-between items-center">
-            <h3 className="text-sm font-semibold">Data de entrada</h3>
-            <button onClick={() => setEntryMiniOpenFor(null)}>
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          <input
-            type="date"
-            value={entryDate}
-            onChange={(e) => setEntryDate(e.target.value)}
-            className="w-full border rounded px-2 py-1"
-          />
-          <input
-            type="time"
-            value={entryTime}
-            onChange={(e) => setEntryTime(e.target.value)}
-            className="w-full border rounded px-2 py-1"
-          />
-          <Button onClick={handleSaveEntry} className="w-full bg-yellow-400 text-black">
-            Salvar
-          </Button>
-        </div>
-      )}
-
-      {/* mini-modal entrega (posicionado) */}
-      {deliverMiniOpenFor && (
-        <div
-          className="fixed z-[9999] bg-white rounded-xl shadow-lg p-4 w-[280px] space-y-3 border border-gray-200"
-          style={{
-            top: `${deliverPos.top}px`,
-            left: `${deliverPos.left}px`,
-          }}
-        >
-          <div className="flex justify-between items-center">
-            <h3 className="text-sm font-semibold">Registrar entrega</h3>
-            <button onClick={() => setDeliverMiniOpenFor(null)}>
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          <input
-            type="date"
-            value={deliverDate}
-            onChange={(e) => setDeliverDate(e.target.value)}
-            className="w-full border rounded px-2 py-1"
-          />
-          <input
-            type="time"
-            value={deliverTime}
-            onChange={(e) => setDeliverTime(e.target.value)}
-            className="w-full border rounded px-2 py-1"
-          />
-          <Button onClick={handleSaveDeliver} className="w-full bg-yellow-400 text-black">
-            Salvar
-          </Button>
-        </div>
-      )}
     </div>
   );
 };

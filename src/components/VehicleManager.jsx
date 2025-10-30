@@ -365,23 +365,30 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
 
   // abrir mini-modal de entrada (com posição)
   const openEntryMini = (car, e) => {
-    const d = car.entry_at ? new Date(car.entry_at) : new Date();
-    setEntryDate(d.toISOString().slice(0, 10));
-    setEntryTime(d.toTimeString().slice(0, 5));
+  const d = car.entry_at ? new Date(car.entry_at) : new Date();
+  setEntryDate(d.toISOString().slice(0, 10));
+  setEntryTime(d.toTimeString().slice(0, 5));
 
-    // posição do botão
-    const rect = e.currentTarget.getBoundingClientRect();
-    const viewportWidth = window.innerWidth;
-    const modalWidth = 280;
-    let left = rect.left;
-    if (left + modalWidth + 12 > viewportWidth) {
-      left = viewportWidth - modalWidth - 12;
-    }
-    const top = rect.top + window.scrollY + 30;
+  const rect = e.currentTarget.getBoundingClientRect();
+  const viewportWidth = window.innerWidth;
+  const modalWidth = 280;
 
-    setEntryPos({ top, left });
-    setEntryMiniOpenFor(car.id);
-  };
+  // posição base: logo ABAIXO e quase colado
+  let top = rect.top + window.scrollY; // ponto do botão na página
+  let left = rect.left;
+
+  // se não couber à direita, puxa pra esquerda
+  if (left + modalWidth + 8 > viewportWidth) {
+    left = viewportWidth - modalWidth - 8;
+  }
+
+  // dar só 6px pra não colar demais
+  top = top + 6;
+
+  setEntryPos({ top, left });
+  setEntryMiniOpenFor(car.id);
+};
+
 
   const handleSaveEntry = async () => {
     if (!entryMiniOpenFor) return;
@@ -403,22 +410,27 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
 
   // abrir mini-modal de entrega (com posição)
   const openDeliverMini = (car, e) => {
-    const d = new Date();
-    setDeliverDate(d.toISOString().slice(0, 10));
-    setDeliverTime(d.toTimeString().slice(0, 5));
+  const d = new Date();
+  setDeliverDate(d.toISOString().slice(0, 10));
+  setDeliverTime(d.toTimeString().slice(0, 5));
 
-    const rect = e.currentTarget.getBoundingClientRect();
-    const viewportWidth = window.innerWidth;
-    const modalWidth = 280;
-    let left = rect.left;
-    if (left + modalWidth + 12 > viewportWidth) {
-      left = viewportWidth - modalWidth - 12;
-    }
-    const top = rect.top + window.scrollY + 30;
+  const rect = e.currentTarget.getBoundingClientRect();
+  const viewportWidth = window.innerWidth;
+  const modalWidth = 280;
 
-    setDeliverPos({ top, left });
-    setDeliverMiniOpenFor(car.id);
-  };
+  let top = rect.top + window.scrollY;
+  let left = rect.left;
+
+  if (left + modalWidth + 8 > viewportWidth) {
+    left = viewportWidth - modalWidth - 8;
+  }
+
+  top = top + 6;
+
+  setDeliverPos({ top, left });
+  setDeliverMiniOpenFor(car.id);
+};
+
 
   const handleSaveDeliver = async () => {
     if (!deliverMiniOpenFor) return;

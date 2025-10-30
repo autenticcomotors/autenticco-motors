@@ -1,5 +1,6 @@
 // src/lib/car-api.js
 import { supabase } from './supabase';
+import { getFipeValue } from './fipe-api'; // ✅ novo import
 
 /*
   -----------------------------
@@ -538,5 +539,47 @@ export const getLatestChecklistTemplate = async () => {
 export const addChecklistItem = async (..._args) => {
   console.warn('[LEGADO] addChecklistItem chamado — checklist foi desativado. Ignorando.');
   return { data: null, error: null };
+};
+
+/*
+  -----------------------------
+  FIPE – wrapper para o VehicleManager
+  -----------------------------
+*/
+export const getFipeForCar = async (car) => {
+  if (!car) return null;
+
+  // tentar pegar dos campos que você usa no projeto
+  const brand = car.brand || car.marca || '';
+  const model = car.model || car.modelo || '';
+  const year = car.year || car.ano || '';
+  const fuel = car.fuel || car.combustivel || '';
+  const version = car.version || car.versao || '';
+
+  // chama o resolver inteligente da FIPE
+  const { value, debug } = await getFipeValue({
+    brand,
+    model,
+    year,
+    fuel,
+    version,
+    vehicleType: 'carros',
+  });
+
+  if (!value) {
+    console.warn('FIPE não encontrada para:', { brand, model, year, fuel, version, debug });
+    return null;
+  }
+
+  // já salva no carro pra ficar persistido no admin
+  if (car.id) {
+    try {
+      await updateCar(car.id, { fipe_value: value });
+    } catch (err) {
+      console.warn('FIPE encontrada mas não consegui salvar no carro:', err);
+    }
+  }
+
+  return value;
 };
 

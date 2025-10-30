@@ -89,19 +89,36 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     return iso;
   };
 
-  // diferença em dias:
-  // - se tiver sold_at → conta da entry_at até sold_at
-  // - se não tiver sold_at → conta até agora
-  const diffInDays = (car) => {
-    if (!car) return '-';
-    const startIso = car.entry_at || car.entered_at;
-    if (!startIso) return '-';
-    const start = new Date(startIso);
-    const end = car.sold_at ? new Date(car.sold_at) : new Date();
-    const ms = end.getTime() - start.getTime();
-    const days = Math.floor(ms / (1000 * 60 * 60 * 24));
-    return `${days} dia(s) em estoque`;
-  };
+  // diferença em dias (ignorando fuso):
+// - se tiver sold_at → conta da entry_at até o dia da venda (inclusivo no sentido "até esse dia")
+// - se não tiver sold_at → conta até hoje
+const diffInDays = (car) => {
+  if (!car) return '-';
+
+  const startIso = car.entry_at || car.entered_at;
+  if (!startIso) return '-';
+
+  // pega só a parte da data
+  const startStr = String(startIso).slice(0, 10); // "2025-06-25"
+  const startDate = new Date(`${startStr}T00:00:00`);
+
+  // se vendido, usa o dia da venda; senão, hoje
+  let endDate;
+  if (car.sold_at) {
+    const soldStr = String(car.sold_at).slice(0, 10); // "2025-10-25"
+    endDate = new Date(`${soldStr}T00:00:00`);
+  } else {
+    const today = new Date();
+    const todayStr = today.toISOString().slice(0, 10);
+    endDate = new Date(`${todayStr}T00:00:00`);
+  }
+
+  const ms = endDate.getTime() - startDate.getTime();
+  const days = Math.floor(ms / (1000 * 60 * 60 * 24));
+
+  return `${days} dia(s) em estoque`;
+};
+
 
   const dispatchGlobalUpdate = async () => {
     await refreshAll();

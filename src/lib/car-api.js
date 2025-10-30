@@ -7,24 +7,23 @@ import { supabase } from './supabase';
   -----------------------------
 */
 
-export const getCars = async () => {
-  const { data, error } = await supabase
+/**
+ * Busca carros.
+ * Por padrão mantém o comportamento antigo: traz TUDO (inclusive vendidos).
+ * Se quiser só estoque atual, chame: getCars({ includeSold: false })
+ */
+export const getCars = async ({ includeSold = true } = {}) => {
+  let query = supabase
     .from('cars')
     .select('*')
     .order('created_at', { ascending: false });
-  if (error) console.error('Erro ao buscar carros:', error);
-  return data || [];
-};
 
-// NOVA: mesma coisa que getCars, mas só carros não vendidos
-// usa isso na tela "Estoque Atual" para o número bater com o que está disponível
-export const getAvailableCars = async () => {
-  const { data, error } = await supabase
-    .from('cars')
-    .select('*')
-    .eq('is_sold', false)
-    .order('created_at', { ascending: false });
-  if (error) console.error('Erro ao buscar carros disponíveis:', error);
+  if (!includeSold) {
+    query = query.eq('is_sold', false);
+  }
+
+  const { data, error } = await query;
+  if (error) console.error('Erro ao buscar carros:', error);
   return data || [];
 };
 
@@ -95,7 +94,7 @@ export const deleteCar = async (id) => {
 
 // marcar/editar data de entrada
 export const setCarEnteredAt = async (id, enteredAtISO) => {
-  return updateCar(id, { entered_at: enteredAtISO });
+  return updateCar(id, { entry_at: enteredAtISO });
 };
 
 // marcar como entregue (somente registra data/hora de entrega)
@@ -234,6 +233,7 @@ export const markCarAsSold = async ({ car_id, platform_id = null, sale_price = n
       car_id,
       platform_id,
       sale_price,
+      // IMPORTANTE: salvar a data que o usuário escolheu
       sale_date: sale_date || new Date().toISOString(),
       notes
     };
@@ -249,6 +249,7 @@ export const markCarAsSold = async ({ car_id, platform_id = null, sale_price = n
       return { error: saleError };
     }
 
+    // espelha no cars
     const { data: updatedCar, error: carUpdateError } = await supabase
       .from('cars')
       .update({
@@ -387,7 +388,6 @@ export const getPublicationsByCar = async (carId) => {
 };
 
 export const addPublication = async (pub) => {
-  // pub esperado: { car_id, platform_id?, platform_name?, platform_type?, link?, status?, spent?, published_at?, notes? }
   const payload = {
     car_id: pub.car_id,
     platform_id: pub.platform_id ?? null,
@@ -503,7 +503,33 @@ export const getExpensesForCars = async (carIds = []) => {
 
 /*
   -----------------------------
-  FUNÇÕES: CHECKLIST TEMPLATES (LEGADO – não usados)
+  FUNÇÕES: FIPE (wrapper do fipe-api)
+  -----------------------------
+*/
+
+import { getFipeValue } from './fipe-api';
+
+/**
+ * Compat solicitado pelo VehicleManager:
+ * getFipeForCar(car)
+ */
+export const getFipeForCar = async (car) => {
+  if (!car) return null;
+  const { brand, model, year, fuel, version, body_type } = car;
+  const res = await getFipeValue({
+    brand,
+    model,
+    year,
+    fuel,
+    version: version || body_type || '',
+    vehicleType: 'carros'
+  });
+  return res?.value ?? null;
+};
+
+/*
+  -----------------------------
+  FUNÇÕES: CHECKLIST TEMPLATES (LEGADO)
   -----------------------------
 */
 
@@ -546,26 +572,9 @@ export const getLatestChecklistTemplate = async () => {
   }
 };
 
-// ---- LEGADO: compat para não quebrar builds antigos (Checklist desativado) ----
+// ---- LEGADO: compat ----
 export const addChecklistItem = async (..._args) => {
   console.warn('[LEGADO] addChecklistItem chamado — checklist foi desativado. Ignorando.');
   return { data: null, error: null };
-};
-
-// 👇 ADICIONEI ISSO: wrapper pra FIPE, usando seu fipe-api.js
-import { getFipeValue } from './fipe-api';
-
-// recebe um objeto de carro igual vem do banco
-export const getFipeForCar = async (car = {}) => {
-  const { brand, model, year, fuel, version, body_type } = car || {};
-  const { value } = await getFipeValue({
-    brand,
-    model,
-    year,
-    fuel,
-    version,
-    vehicleType: 'carros'
-  });
-  return value;
 };
 

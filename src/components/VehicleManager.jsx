@@ -14,8 +14,6 @@ import {
   getPublicationsForCars,
   getExpensesForCars,
   updateCar,
-  // se no seu car-api o nome for outro (ex: fetchFipePrice), só troca aqui
-  getFipeForCar,
 } from '@/lib/car-api';
 import { X, Megaphone, Wallet, DollarSign, PenSquare } from 'lucide-react';
 

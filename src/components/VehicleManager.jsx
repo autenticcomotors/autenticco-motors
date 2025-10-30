@@ -704,10 +704,23 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                       </button>
                     )}
                     {isSold && (
-                      <span className="text-xs text-red-600">
-                        Vendido em: {fmtDateTimeBR(car.sold_at)} —{' '}
-                        {car.sale_price ? moneyBR(car.sale_price) : ''}
-                      </span>
+                      <p className="text-xs text-red-600">
+    {(() => {
+      const iso = car.sold_at;
+      if (!iso) return 'Vendido';
+      try {
+        // força fuso do Brasil
+        const dt = new Date(iso).toLocaleString('pt-BR', {
+          timeZone: 'America/Sao_Paulo',
+        });
+        // dt vem tipo "25/10/2025 00:00:00"
+        const [data] = dt.split(' ');
+        return `Vendido em ${data} — ${car.sale_price ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(car.sale_price) : ''}`;
+      } catch (e) {
+        return `Vendido em ${iso}`;
+      }
+    })()}
+  </p>
                     )}
                   </div>
                 </div>

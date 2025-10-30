@@ -449,17 +449,13 @@ const AdminDashboard = () => {
     <h2 className="text-2xl font-semibold flex items-center">
       <Car className="mr-3 text-yellow-500" />
       Estoque Atual (
-      {
-        (cars || []).filter(
-          (c) => c.is_sold !== true && c.is_available !== false
-        ).length
-      }
+      { (cars || []).filter((c) => c.is_sold !== true && c.is_available !== false).length }
       )
     </h2>
     <p className="text-sm text-gray-500 mt-1">
       Veículos vendidos:{' '}
       <span className="font-semibold text-red-500">
-        {(cars || []).filter((c) => c.is_sold === true).length}
+        { (cars || []).filter((c) => c.is_sold === true).length }
       </span>
     </p>
   </div>

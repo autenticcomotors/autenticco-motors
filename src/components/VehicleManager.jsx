@@ -15,30 +15,24 @@ import {
   getExpensesForCars,
   updateCar,
 } from '@/lib/car-api';
-import { Calendar, X, Check, Clock, DollarSign, Megaphone, Wallet, PenSquare } from 'lucide-react';
+import { X, Megaphone, Wallet, DollarSign, PenSquare } from 'lucide-react';
 
 const moneyBR = (n) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(n || 0));
 
 const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
-  // modal principal
   const [open, setOpen] = useState(false);
   const [selectedCar, setSelectedCar] = useState(null);
   const [activeTab, setActiveTab] = useState('marketplaces');
 
-  // dados auxiliares
   const [platforms, setPlatforms] = useState([]);
   const [publications, setPublications] = useState([]);
   const [expenses, setExpenses] = useState([]);
-
-  // mapa de resumos pra listar na GESTÃO
   const [summaryMap, setSummaryMap] = useState({});
 
-  // filtros da lista
   const [searchTerm, setSearchTerm] = useState('');
   const [brandFilter, setBrandFilter] = useState('');
 
-  // forms
   const [pubForm, setPubForm] = useState({
     platform_id: '',
     link: '',
@@ -62,19 +56,18 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     return_to_seller: '',
   });
 
-  // mini-modal data de entrada
+  // mini-modal entrada
   const [entryMiniOpenFor, setEntryMiniOpenFor] = useState(null);
   const [entryDate, setEntryDate] = useState('');
   const [entryTime, setEntryTime] = useState('');
+  const [entryPos, setEntryPos] = useState({ top: 0, left: 0 });
 
-  // mini-modal data de entrega
+  // mini-modal entrega
   const [deliverMiniOpenFor, setDeliverMiniOpenFor] = useState(null);
   const [deliverDate, setDeliverDate] = useState('');
   const [deliverTime, setDeliverTime] = useState('');
+  const [deliverPos, setDeliverPos] = useState({ top: 0, left: 0 });
 
-  // -------------------------------------------------
-  // helpers
-  // -------------------------------------------------
   const isoFromDateTime = (dateStr, timeStr) => {
     if (!dateStr) return null;
     const t = timeStr || '00:00';
@@ -91,30 +84,22 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
   };
 
   const dispatchGlobalUpdate = async () => {
-    // chama o pai
     await refreshAll();
-    // dispara evento pra outras telas ouvirem
     window.dispatchEvent(new Event('autenticco:cars-updated'));
   };
 
-  // -------------------------------------------------
-  // carregar plataformas
-  // -------------------------------------------------
   useEffect(() => {
     (async () => {
       try {
         const p = await getPlatforms();
         setPlatforms(p || []);
       } catch (err) {
-        console.error('Erro ao carregar plataformas', err);
+        console.error('Erro plataformas', err);
         setPlatforms([]);
       }
     })();
   }, []);
 
-  // -------------------------------------------------
-  // montar resumo geral (anúncios, publicações, gastos e ganhos)
-  // -------------------------------------------------
   useEffect(() => {
     const ids = (cars || []).map((c) => c.id).filter(Boolean);
     if (!ids.length) {
@@ -127,7 +112,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
       try {
         const [pubs, exps] = await Promise.all([getPublicationsForCars(ids), getExpensesForCars(ids)]);
         const byId = {};
-        // estrutura base
         ids.forEach((id) => {
           byId[id] = {
             adCount: 0,
@@ -138,13 +122,11 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
           };
         });
 
-        // plataformas indexadas
         const pfById = {};
         (platforms || []).forEach((p) => {
           pfById[String(p.id)] = p;
         });
 
-        // publicações
         (pubs || []).forEach((p) => {
           const carId = p.car_id;
           if (!byId[carId]) return;
@@ -154,12 +136,10 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
             byId[carId].adCount += 1;
             byId[carId].adSpendTotal += Number(p.spent || 0);
           } else {
-            // redes sociais
             byId[carId].socialCount += 1;
           }
         });
 
-        // gastos
         (exps || []).forEach((e) => {
           const carId = e.car_id;
           if (!byId[carId]) return;
@@ -173,7 +153,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
 
         if (mounted) setSummaryMap(byId);
       } catch (err) {
-        console.error('Erro ao montar resumo', err);
+        console.error('Erro resumo', err);
       }
     })();
 
@@ -182,15 +162,11 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     };
   }, [cars, platforms]);
 
-  // -------------------------------------------------
-  // abrir modal de um carro
-  // -------------------------------------------------
   const openManageModal = async (car) => {
     setSelectedCar(car);
     setActiveTab('marketplaces');
     setOpen(true);
 
-    // carregar registros específicos
     try {
       const [pubs, exps] = await Promise.all([
         getPublicationsByCar(car.id),
@@ -198,23 +174,18 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
       ]);
       setPublications(pubs || []);
       setExpenses(exps || []);
-
-      // carregar financeiro do carro
       setFinanceForm({
         fipe_value: car.fipe_value ?? '',
         commission: car.commission ?? '',
         return_to_seller: car.return_to_seller ?? '',
       });
     } catch (err) {
-      console.error('Erro ao abrir modal de gestão', err);
+      console.error('Erro abrir modal', err);
       setPublications([]);
       setExpenses([]);
     }
   };
 
-  // -------------------------------------------------
-  // salvar publicação / anúncio
-  // -------------------------------------------------
   const handleSavePublication = async () => {
     if (!selectedCar) return;
     try {
@@ -230,7 +201,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
       await addPublication(payload);
       toast({ title: 'Registro salvo' });
 
-      // recarrega dentro do modal
       const [pubs, exps] = await Promise.all([
         getPublicationsByCar(selectedCar.id),
         getExpensesByCar(selectedCar.id),
@@ -238,7 +208,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
       setPublications(pubs || []);
       setExpenses(exps || []);
 
-      // limpa form
       setPubForm({
         platform_id: '',
         link: '',
@@ -248,7 +217,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
         notes: '',
       });
 
-      // atualiza página principal
       await dispatchGlobalUpdate();
     } catch (err) {
       console.error(err);
@@ -285,9 +253,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     }
   };
 
-  // -------------------------------------------------
-  // salvar gasto/ganho
-  // -------------------------------------------------
   const handleSaveExpense = async () => {
     if (!selectedCar) return;
     try {
@@ -356,9 +321,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     }
   };
 
-  // -------------------------------------------------
-  // salvar financeiro (FIPE, comissão, devolver)
-  // -------------------------------------------------
   const handleSaveFinance = async () => {
     if (!selectedCar) return;
     try {
@@ -375,7 +337,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
       const return_to_seller =
         financeForm.return_to_seller !== '' ? Number(financeForm.return_to_seller) : 0;
 
-      // lucro estimado = comissão + soma VALOR COBRADO - gastos extras - anúncios
       const estimated_profit =
         commission +
         Number(summary.extraChargedTotal || 0) -
@@ -402,13 +363,23 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     }
   };
 
-  // -------------------------------------------------
-  // abrir mini modal de entrada
-  // -------------------------------------------------
-  const openEntryMini = (car) => {
+  // abrir mini-modal de entrada (com posição)
+  const openEntryMini = (car, e) => {
     const d = car.entry_at ? new Date(car.entry_at) : new Date();
     setEntryDate(d.toISOString().slice(0, 10));
     setEntryTime(d.toTimeString().slice(0, 5));
+
+    // posição do botão
+    const rect = e.currentTarget.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const modalWidth = 280;
+    let left = rect.left;
+    if (left + modalWidth + 12 > viewportWidth) {
+      left = viewportWidth - modalWidth - 12;
+    }
+    const top = rect.top + window.scrollY + 30;
+
+    setEntryPos({ top, left });
     setEntryMiniOpenFor(car.id);
   };
 
@@ -430,13 +401,22 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     }
   };
 
-  // -------------------------------------------------
-  // abrir mini modal de entrega
-  // -------------------------------------------------
-  const openDeliverMini = (car) => {
+  // abrir mini-modal de entrega (com posição)
+  const openDeliverMini = (car, e) => {
     const d = new Date();
     setDeliverDate(d.toISOString().slice(0, 10));
     setDeliverTime(d.toTimeString().slice(0, 5));
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const modalWidth = 280;
+    let left = rect.left;
+    if (left + modalWidth + 12 > viewportWidth) {
+      left = viewportWidth - modalWidth - 12;
+    }
+    const top = rect.top + window.scrollY + 30;
+
+    setDeliverPos({ top, left });
     setDeliverMiniOpenFor(car.id);
   };
 
@@ -458,9 +438,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     }
   };
 
-  // -------------------------------------------------
-  // lista de carros filtrada
-  // -------------------------------------------------
   const brandOptions = useMemo(() => {
     const setB = new Set();
     (cars || []).forEach((c) => {
@@ -486,16 +463,11 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     });
   }, [cars, searchTerm, brandFilter]);
 
-  // plataformas separadas
   const marketplacePlatforms = (platforms || []).filter((p) => p.platform_type === 'marketplace');
   const socialPlatforms = (platforms || []).filter((p) => p.platform_type === 'social');
 
-  // -------------------------------------------------
-  // render
-  // -------------------------------------------------
   return (
     <div className="space-y-4">
-      {/* filtros */}
       <div className="flex flex-col md:flex-row gap-3 items-center">
         <input
           value={searchTerm}
@@ -526,7 +498,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
         </button>
       </div>
 
-      {/* cards */}
       <div className="space-y-3">
         {filteredCars.map((car) => {
           const summary = summaryMap[car.id] || {
@@ -536,8 +507,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
             extraExpensesTotal: 0,
             extraChargedTotal: 0,
           };
-
-          // lucro estimado na lista
           const commission = Number(car.commission || 0);
           const lucroLista =
             commission +
@@ -552,12 +521,12 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
             >
               <div className="flex gap-4 items-start">
                 <img
-                    src={
-                      car.main_photo_url ||
-                      'https://placehold.co/120x80/e2e8f0/475569?text=SEM+FOTO'
-                    }
-                    alt={car.model}
-                    className="w-28 h-20 object-cover rounded-lg bg-gray-200"
+                  src={
+                    car.main_photo_url ||
+                    'https://placehold.co/120x80/e2e8f0/475569?text=SEM+FOTO'
+                  }
+                  alt={car.model}
+                  className="w-28 h-20 object-cover rounded-lg bg-gray-200"
                 />
                 <div>
                   <div className="flex items-center gap-2">
@@ -566,7 +535,12 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                     </h3>
                     {car.fipe_value ? (
                       <span className="text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded">
-                        vs FIPE: {((Number(car.price || 0) / Number(car.fipe_value)) * 100 - 100).toFixed(1)}%
+                        vs FIPE:{' '}
+                        {(
+                          (Number(car.price || 0) / Number(car.fipe_value)) * 100 -
+                          100
+                        ).toFixed(1)}
+                        %
                       </span>
                     ) : null}
                   </div>
@@ -582,7 +556,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                       Entrada: {car.entry_at ? new Date(car.entry_at).toLocaleString('pt-BR') : '-'}
                     </span>
                     <button
-                      onClick={() => openEntryMini(car)}
+                      onClick={(e) => openEntryMini(car, e)}
                       className="text-xs text-blue-600 hover:underline flex items-center gap-1"
                     >
                       <PenSquare className="w-3 h-3" /> editar
@@ -591,7 +565,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                       {diffInDays(car.entry_at)}
                     </span>
                     <button
-                      onClick={() => openDeliverMini(car)}
+                      onClick={(e) => openDeliverMini(car, e)}
                       className="text-xs text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded flex items-center gap-1"
                     >
                       Marcar como Entregue
@@ -600,7 +574,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                 </div>
               </div>
 
-              {/* infos financeiras */}
               <div className="flex flex-wrap gap-4 md:items-center">
                 <div className="text-xs">
                   <p className="flex items-center gap-1">
@@ -612,10 +585,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                   </p>
                 </div>
                 <div className="text-xs">
-                  <p className="flex items-center gap-1">
-                    {/* tiramos ícones das redes aqui, como pediu */}
-                    Publicações
-                  </p>
+                  <p className="flex items-center gap-1">Publicações</p>
                   <p className="text-sm">{summary.socialCount}</p>
                 </div>
                 <div className="text-xs">
@@ -640,11 +610,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                   <p className="text-sm text-green-700">{moneyBR(lucroLista)}</p>
                 </div>
                 <div>
-                  <Button
-                    variant="outline"
-                    onClick={() => openManageModal(car)}
-                    className="text-sm"
-                  >
+                  <Button variant="outline" onClick={() => openManageModal(car)} className="text-sm">
                     Gerenciar
                   </Button>
                 </div>
@@ -654,13 +620,11 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
         })}
       </div>
 
-      {/* modal principal */}
       <Dialog
         open={open}
         onOpenChange={async (isOpen) => {
           setOpen(isOpen);
           if (!isOpen) {
-            // ao fechar modal recarrega
             await dispatchGlobalUpdate();
           }
         }}
@@ -668,7 +632,8 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
         <DialogContent className="max-w-5xl bg-white text-gray-900">
           <DialogHeader>
             <DialogTitle>
-              Gestão - {selectedCar ? `${selectedCar.brand} ${selectedCar.model} ${selectedCar.year || ''}` : ''}
+              Gestão -{' '}
+              {selectedCar ? `${selectedCar.brand} ${selectedCar.model} ${selectedCar.year || ''}` : ''}
             </DialogTitle>
           </DialogHeader>
 
@@ -707,10 +672,8 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
             </button>
           </div>
 
-          {/* conteúdo das abas */}
           {activeTab === 'marketplaces' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* form */}
               <div className="space-y-3">
                 <select
                   value={pubForm.platform_id}
@@ -742,7 +705,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                 </Button>
               </div>
 
-              {/* lista */}
               <div className="border rounded-lg p-2 max-h-64 overflow-y-auto">
                 {(publications || [])
                   .filter((p) => {
@@ -774,7 +736,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
 
           {activeTab === 'social' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* form */}
               <div className="space-y-3">
                 <select
                   value={pubForm.platform_id}
@@ -799,7 +760,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                 </Button>
               </div>
 
-              {/* lista */}
               <div className="border rounded-lg p-2 max-h-64 overflow-y-auto">
                 {(publications || [])
                   .filter((p) => {
@@ -829,7 +789,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
 
           {activeTab === 'expenses' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* form de gasto */}
               <div className="space-y-3">
                 <input
                   value={expenseForm.category}
@@ -868,7 +827,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                 </Button>
               </div>
 
-              {/* lista */}
               <div className="border rounded-lg p-2 max-h-64 overflow-y-auto">
                 {expenses.map((e) => (
                   <div
@@ -933,61 +891,69 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
         </DialogContent>
       </Dialog>
 
-      {/* mini-modal data de entrada */}
+      {/* mini-modal entrada (posicionado) */}
       {entryMiniOpenFor && (
-        <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/30">
-          <div className="bg-white rounded-xl shadow-lg p-4 w-[280px] space-y-3">
-            <div className="flex justify-between items-center">
-              <h3 className="text-sm font-semibold">Data de entrada</h3>
-              <button onClick={() => setEntryMiniOpenFor(null)}>
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <input
-              type="date"
-              value={entryDate}
-              onChange={(e) => setEntryDate(e.target.value)}
-              className="w-full border rounded px-2 py-1"
-            />
-            <input
-              type="time"
-              value={entryTime}
-              onChange={(e) => setEntryTime(e.target.value)}
-              className="w-full border rounded px-2 py-1"
-            />
-            <Button onClick={handleSaveEntry} className="w-full bg-yellow-400 text-black">
-              Salvar
-            </Button>
+        <div
+          className="fixed z-[9999] bg-white rounded-xl shadow-lg p-4 w-[280px] space-y-3 border border-gray-200"
+          style={{
+            top: `${entryPos.top}px`,
+            left: `${entryPos.left}px`,
+          }}
+        >
+          <div className="flex justify-between items-center">
+            <h3 className="text-sm font-semibold">Data de entrada</h3>
+            <button onClick={() => setEntryMiniOpenFor(null)}>
+              <X className="w-4 h-4" />
+            </button>
           </div>
+          <input
+            type="date"
+            value={entryDate}
+            onChange={(e) => setEntryDate(e.target.value)}
+            className="w-full border rounded px-2 py-1"
+          />
+          <input
+            type="time"
+            value={entryTime}
+            onChange={(e) => setEntryTime(e.target.value)}
+            className="w-full border rounded px-2 py-1"
+          />
+          <Button onClick={handleSaveEntry} className="w-full bg-yellow-400 text-black">
+            Salvar
+          </Button>
         </div>
       )}
 
-      {/* mini-modal data de entrega */}
+      {/* mini-modal entrega (posicionado) */}
       {deliverMiniOpenFor && (
-        <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/30">
-          <div className="bg-white rounded-xl shadow-lg p-4 w-[280px] space-y-3">
-            <div className="flex justify-between items-center">
-              <h3 className="text-sm font-semibold">Registrar entrega</h3>
-              <button onClick={() => setDeliverMiniOpenFor(null)}>
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <input
-              type="date"
-              value={deliverDate}
-              onChange={(e) => setDeliverDate(e.target.value)}
-              className="w-full border rounded px-2 py-1"
-            />
-            <input
-              type="time"
-              value={deliverTime}
-              onChange={(e) => setDeliverTime(e.target.value)}
-              className="w-full border rounded px-2 py-1"
-            />
-            <Button onClick={handleSaveDeliver} className="w-full bg-yellow-400 text-black">
-              Salvar
-            </Button>
+        <div
+          className="fixed z-[9999] bg-white rounded-xl shadow-lg p-4 w-[280px] space-y-3 border border-gray-200"
+          style={{
+            top: `${deliverPos.top}px`,
+            left: `${deliverPos.left}px`,
+          }}
+        >
+          <div className="flex justify-between items-center">
+            <h3 className="text-sm font-semibold">Registrar entrega</h3>
+            <button onClick={() => setDeliverMiniOpenFor(null)}>
+              <X className="w-4 h-4" />
+            </button>
           </div>
+          <input
+            type="date"
+            value={deliverDate}
+            onChange={(e) => setDeliverDate(e.target.value)}
+            className="w-full border rounded px-2 py-1"
+          />
+          <input
+            type="time"
+            value={deliverTime}
+            onChange={(e) => setDeliverTime(e.target.value)}
+            className="w-full border rounded px-2 py-1"
+          />
+          <Button onClick={handleSaveDeliver} className="w-full bg-yellow-400 text-black">
+            Salvar
+          </Button>
         </div>
       )}
     </div>

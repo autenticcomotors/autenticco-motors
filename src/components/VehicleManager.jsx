@@ -14,6 +14,8 @@ import {
   getPublicationsForCars,
   getExpensesForCars,
   updateCar,
+  // se no seu car-api o nome for outro (ex: fetchFipePrice), só troca aqui
+  getFipeForCar,
 } from '@/lib/car-api';
 import { X, Megaphone, Wallet, DollarSign, PenSquare } from 'lucide-react';
 
@@ -32,6 +34,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [brandFilter, setBrandFilter] = useState('');
+  const [sortBy, setSortBy] = useState('default'); // novo
 
   const [pubForm, setPubForm] = useState({
     platform_id: '',
@@ -88,6 +91,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     window.dispatchEvent(new Event('autenticco:cars-updated'));
   };
 
+  // plataformas
   useEffect(() => {
     (async () => {
       try {
@@ -100,6 +104,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     })();
   }, []);
 
+  // montar mapa de resumo (anúncios / redes / gastos) de todos os carros
   useEffect(() => {
     const ids = (cars || []).map((c) => c.id).filter(Boolean);
     if (!ids.length) {
@@ -144,7 +149,9 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
           const carId = e.car_id;
           if (!byId[carId]) return;
           const amount = Number(e.amount || 0);
-          const charged = Number(e.charged_value || 0);
+          const charged = e.charged_value === null || e.charged_value === undefined
+            ? 0
+            : Number(e.charged_value || 0);
           byId[carId].extraExpensesTotal += amount;
           if (charged > 0) {
             byId[carId].extraChargedTotal += charged;
@@ -186,6 +193,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     }
   };
 
+  // salvar anúncio / publicação
   const handleSavePublication = async () => {
     if (!selectedCar) return;
     try {
@@ -228,6 +236,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     }
   };
 
+  // excluir anúncio
   const handleDeletePublication = async (id) => {
     try {
       await deletePublication(id);
@@ -253,6 +262,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     }
   };
 
+  // salvar gasto/ganho
   const handleSaveExpense = async () => {
     if (!selectedCar) return;
     try {
@@ -260,7 +270,11 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
         car_id: selectedCar.id,
         category: expenseForm.category || 'Outros',
         amount: expenseForm.amount ? Number(expenseForm.amount) : 0,
-        charged_value: expenseForm.charged_value ? Number(expenseForm.charged_value) : null,
+        // 👇 AQUI o seu Postgres reclamou — então vamos mandar 0 sempre que vier vazio
+        charged_value:
+          expenseForm.charged_value !== '' && expenseForm.charged_value !== null
+            ? Number(expenseForm.charged_value)
+            : 0,
         incurred_at: expenseForm.incurred_at
           ? new Date(expenseForm.incurred_at).toISOString()
           : new Date().toISOString(),
@@ -296,6 +310,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     }
   };
 
+  // excluir gasto
   const handleDeleteExpense = async (id) => {
     try {
       await deleteExpense(id);
@@ -321,6 +336,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     }
   };
 
+  // salvar financeiro
   const handleSaveFinance = async () => {
     if (!selectedCar) return;
     try {
@@ -363,30 +379,49 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     }
   };
 
+  // buscar fipe dentro do modal
+  const handleFetchFipe = async () => {
+    if (!selectedCar) return;
+    try {
+      // se o seu car-api usa outro nome, troca aqui
+      const fipe = await getFipeForCar(selectedCar);
+      if (!fipe) {
+        toast({ title: 'Não encontrei FIPE para esse veículo' });
+        return;
+      }
+      setFinanceForm((prev) => ({ ...prev, fipe_value: fipe }));
+      toast({ title: 'FIPE carregada' });
+    } catch (err) {
+      console.error(err);
+      toast({
+        title: 'Erro ao buscar FIPE',
+        description: err.message || String(err),
+        variant: 'destructive',
+      });
+    }
+  };
+
   // abrir mini-modal de entrada (com posição)
   const openEntryMini = (car, e) => {
-  const d = car.entry_at ? new Date(car.entry_at) : new Date();
-  setEntryDate(d.toISOString().slice(0, 10));
-  setEntryTime(d.toTimeString().slice(0, 5));
+    const d = car.entry_at ? new Date(car.entry_at) : new Date();
+    setEntryDate(d.toISOString().slice(0, 10));
+    setEntryTime(d.toTimeString().slice(0, 5));
 
-  const rect = e.currentTarget.getBoundingClientRect();
-  const viewportWidth = window.innerWidth;
-  const modalWidth = 280;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const modalWidth = 280;
 
-  // posição na tela (sem somar scroll)
-  let top = rect.top + 2; // só pra não colar
-  let left = rect.left;
+    // posição relativa ao container (vai funcionar pq o wrapper tá relative)
+    let top = rect.top + window.scrollY + 4;
+    let left = rect.left + window.scrollX;
 
-  // se não couber à direita, joga mais pra esquerda
-  if (left + modalWidth + 8 > viewportWidth) {
-    left = viewportWidth - modalWidth - 8;
-  }
+    if (left + modalWidth + 8 > viewportWidth + window.scrollX) {
+      left = viewportWidth + window.scrollX - modalWidth - 8;
+    }
 
-  setEntryPos({ top, left });
-  setEntryMiniOpenFor(car.id);
-};
-
-
+    setEntryPos({ top, left });
+    setEntryMiniOpenFor(car.id);
+  };
 
   const handleSaveEntry = async () => {
     if (!entryMiniOpenFor) return;
@@ -408,26 +443,24 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
 
   // abrir mini-modal de entrega (com posição)
   const openDeliverMini = (car, e) => {
-  const d = new Date();
-  setDeliverDate(d.toISOString().slice(0, 10));
-  setDeliverTime(d.toTimeString().slice(0, 5));
+    const d = new Date();
+    setDeliverDate(d.toISOString().slice(0, 10));
+    setDeliverTime(d.toTimeString().slice(0, 5));
 
-  const rect = e.currentTarget.getBoundingClientRect();
-  const viewportWidth = window.innerWidth;
-  const modalWidth = 280;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const modalWidth = 280;
 
-  let top = rect.top + 2; // encostado no botão
-  let left = rect.left;
+    let top = rect.top + window.scrollY + 4;
+    let left = rect.left + window.scrollX;
 
-  if (left + modalWidth + 8 > viewportWidth) {
-    left = viewportWidth - modalWidth - 8;
-  }
+    if (left + modalWidth + 8 > viewportWidth + window.scrollX) {
+      left = viewportWidth + window.scrollX - modalWidth - 8;
+    }
 
-  setDeliverPos({ top, left });
-  setDeliverMiniOpenFor(car.id);
-};
-
-
+    setDeliverPos({ top, left });
+    setDeliverMiniOpenFor(car.id);
+  };
 
   const handleSaveDeliver = async () => {
     if (!deliverMiniOpenFor) return;
@@ -447,6 +480,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     }
   };
 
+  // marcas
   const brandOptions = useMemo(() => {
     const setB = new Set();
     (cars || []).forEach((c) => {
@@ -455,9 +489,10 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     return Array.from(setB).sort((a, b) => a.localeCompare(b, 'pt-BR'));
   }, [cars]);
 
+  // filtro + ordenação
   const filteredCars = useMemo(() => {
     const term = (searchTerm || '').trim().toLowerCase();
-    return (cars || []).filter((c) => {
+    let list = (cars || []).filter((c) => {
       if (brandFilter && brandFilter !== 'ALL' && c.brand !== brandFilter) return false;
       if (!term) return true;
       const brand = (c.brand || '').toLowerCase();
@@ -470,13 +505,49 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
         `${brand} ${model} ${plate}`.includes(term)
       );
     });
-  }, [cars, searchTerm, brandFilter]);
+
+    // aplicar ordenação
+    if (sortBy === 'days') {
+      list = [...list].sort((a, b) => {
+        const da = a.entry_at ? new Date(a.entry_at).getTime() : Date.now();
+        const db = b.entry_at ? new Date(b.entry_at).getTime() : Date.now();
+        // mais dias em estoque = mais antigo = menor timestamp
+        return da - db;
+      });
+    } else if (sortBy === 'profit') {
+      list = [...list].sort((a, b) => {
+        const sa = summaryMap[a.id] || {};
+        const sb = summaryMap[b.id] || {};
+        const la =
+          Number(a.commission || 0) +
+          Number(sa.extraChargedTotal || 0) -
+          Number(sa.extraExpensesTotal || 0) -
+          Number(sa.adSpendTotal || 0);
+        const lb =
+          Number(b.commission || 0) +
+          Number(sb.extraChargedTotal || 0) -
+          Number(sb.extraExpensesTotal || 0) -
+          Number(sb.adSpendTotal || 0);
+        return lb - la;
+      });
+    } else if (sortBy === 'name') {
+      list = [...list].sort((a, b) =>
+        `${a.brand || ''} ${a.model || ''}`.localeCompare(
+          `${b.brand || ''} ${b.model || ''}`,
+          'pt-BR'
+        )
+      );
+    }
+
+    return list;
+  }, [cars, searchTerm, brandFilter, sortBy, summaryMap]);
 
   const marketplacePlatforms = (platforms || []).filter((p) => p.platform_type === 'marketplace');
   const socialPlatforms = (platforms || []).filter((p) => p.platform_type === 'social');
 
   return (
-    <div className="space-y-4">
+    // ***** IMPORTANTE: relative aqui pra dar contexto pros modais *****
+    <div className="space-y-4 relative">
       <div className="flex flex-col md:flex-row gap-3 items-center">
         <input
           value={searchTerm}
@@ -496,10 +567,24 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
             </option>
           ))}
         </select>
+
+        {/* novo: ordenar */}
+        <select
+          value={sortBy}
+          onChange={(e) => setSortBy(e.target.value)}
+          className="w-full md:w-56 border rounded-lg px-3 py-2 bg-white/70"
+        >
+          <option value="default">Ordenar: padrão</option>
+          <option value="days">Ordenar por dias em estoque</option>
+          <option value="profit">Ordenar por lucro estimado</option>
+          <option value="name">Ordenar por nome (A-Z)</option>
+        </select>
+
         <button
           onClick={() => {
             setSearchTerm('');
             setBrandFilter('');
+            setSortBy('default');
           }}
           className="text-sm text-gray-600 hover:text-gray-800"
         >
@@ -523,6 +608,11 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
             Number(summary.extraExpensesTotal || 0) -
             Number(summary.adSpendTotal || 0);
 
+          const fipeDiff =
+            car.fipe_value && car.price
+              ? (((Number(car.price) / Number(car.fipe_value)) * 100) - 100).toFixed(1)
+              : null;
+
           return (
             <div
               key={car.id}
@@ -542,19 +632,15 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                     <h3 className="text-lg font-bold">
                       {car.brand} {car.model} ({car.year || '-'})
                     </h3>
+                  </div>
+                  <p className="text-sm text-gray-600 flex gap-2 items-center">
+                    Preço:{' '}
+                    <span className="font-semibold">{moneyBR(car.price)}</span>
                     {car.fipe_value ? (
                       <span className="text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded">
-                        vs FIPE:{' '}
-                        {(
-                          (Number(car.price || 0) / Number(car.fipe_value)) * 100 -
-                          100
-                        ).toFixed(1)}
-                        %
+                        FIPE: {moneyBR(car.fipe_value)} ({fipeDiff}%)
                       </span>
                     ) : null}
-                  </div>
-                  <p className="text-sm text-gray-600">
-                    Preço: <span className="font-semibold">{moneyBR(car.price)}</span>
                   </p>
                   <p className="text-sm text-gray-600">
                     Placa: <span className="font-semibold">{car.plate || '-'}</span>
@@ -629,6 +715,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
         })}
       </div>
 
+      {/* MODAL PRINCIPAL */}
       <Dialog
         open={open}
         onOpenChange={async (isOpen) => {
@@ -681,6 +768,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
             </button>
           </div>
 
+          {/* ANÚNCIOS */}
           {activeTab === 'marketplaces' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-3">
@@ -743,6 +831,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
             </div>
           )}
 
+          {/* REDES SOCIAIS */}
           {activeTab === 'social' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-3">
@@ -796,6 +885,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
             </div>
           )}
 
+          {/* GASTOS */}
           {activeTab === 'expenses' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-3">
@@ -858,16 +948,30 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
             </div>
           )}
 
+          {/* FINANCEIRO */}
           {activeTab === 'finance' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-3">
-                <input
-                  value={financeForm.fipe_value}
-                  onChange={(e) => setFinanceForm((p) => ({ ...p, fipe_value: e.target.value }))}
-                  placeholder="Valor FIPE"
-                  type="number"
-                  className="w-full border rounded px-2 py-2"
-                />
+                <div className="flex gap-2 items-center">
+                  <input
+                    value={financeForm.fipe_value}
+                    onChange={(e) => setFinanceForm((p) => ({ ...p, fipe_value: e.target.value }))}
+                    placeholder="Valor FIPE"
+                    type="number"
+                    className="w-full border rounded px-2 py-2"
+                  />
+                  <Button
+                    type="button"
+                    onClick={handleFetchFipe}
+                    className="bg-gray-100 text-gray-900 border border-gray-200"
+                  >
+                    Buscar FIPE
+                  </Button>
+                </div>
+                <p className="text-xs text-gray-500">
+                  FIPE: valor de referência do modelo. Pode ser diferente do valor real negociado.
+                </p>
+
                 <input
                   value={financeForm.commission}
                   onChange={(e) => setFinanceForm((p) => ({ ...p, commission: e.target.value }))}
@@ -875,6 +979,10 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                   type="number"
                   className="w-full border rounded px-2 py-2"
                 />
+                <p className="text-xs text-gray-500">
+                  Comissão: quanto a AutenTicco recebe pela operação (fixo ou % convertido).
+                </p>
+
                 <input
                   value={financeForm.return_to_seller}
                   onChange={(e) =>
@@ -884,15 +992,24 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                   type="number"
                   className="w-full border rounded px-2 py-2"
                 />
+                <p className="text-xs text-gray-500">
+                  Devolver: valor que volta pro dono do carro após a venda.
+                </p>
+
                 <Button onClick={handleSaveFinance} className="bg-yellow-400 text-black w-full">
                   Salvar financeiro
                 </Button>
               </div>
               <div className="bg-gray-50 rounded-lg p-4 text-sm">
-                <p className="font-semibold mb-2">Observação</p>
-                <p>
-                  Lucro estimado = Comissão + (soma de todos os <b>valores cobrados</b>) – Gastos
-                  extras – Anúncios.
+                <p className="font-semibold mb-2">Como calculamos o lucro estimado:</p>
+                <ul className="list-disc list-inside space-y-1 text-gray-600">
+                  <li>Lucro = Comissão</li>
+                  <li>+ todos os valores cobrados (gastos repassados)</li>
+                  <li>– todos os gastos extras</li>
+                  <li>– todos os anúncios (marketplaces)</li>
+                </ul>
+                <p className="mt-2 text-xs text-gray-400">
+                  Esse valor aparece na listagem principal de gestão.
                 </p>
               </div>
             </div>
@@ -903,11 +1020,11 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
       {/* mini-modal entrada (posicionado) */}
       {entryMiniOpenFor && (
         <div
-          className="absolute z-[9999] bg-white rounded-xl shadow-lg p-4 w-[280px] space-y-3 border border-gray-200"
-    style={{
-      top: `${entryPos.top}px`,
-      left: `${entryPos.left}px`,
-    }}
+          className="fixed z-[9999] bg-white rounded-xl shadow-lg p-4 w-[280px] space-y-3 border border-gray-200"
+          style={{
+            top: `${entryPos.top}px`,
+            left: `${entryPos.left}px`,
+          }}
         >
           <div className="flex justify-between items-center">
             <h3 className="text-sm font-semibold">Data de entrada</h3>
@@ -936,11 +1053,11 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
       {/* mini-modal entrega (posicionado) */}
       {deliverMiniOpenFor && (
         <div
-          className="absolute z-[9999] bg-white rounded-xl shadow-lg p-4 w-[280px] space-y-3 border border-gray-200"
-    style={{
-      top: `${deliverPos.top}px`,
-      left: `${deliverPos.left}px`,
-    }}
+          className="fixed z-[9999] bg-white rounded-xl shadow-lg p-4 w-[280px] space-y-3 border border-gray-200"
+          style={{
+            top: `${deliverPos.top}px`,
+            left: `${deliverPos.left}px`,
+          }}
         >
           <div className="flex justify-between items-center">
             <h3 className="text-sm font-semibold">Registrar entrega</h3>

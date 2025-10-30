@@ -1,6 +1,5 @@
 // src/lib/car-api.js
 import { supabase } from './supabase';
-import { getFipeValue } from './fipe-api'; // ✅ novo import
 
 /*
   -----------------------------
@@ -14,6 +13,18 @@ export const getCars = async () => {
     .select('*')
     .order('created_at', { ascending: false });
   if (error) console.error('Erro ao buscar carros:', error);
+  return data || [];
+};
+
+// NOVA: mesma coisa que getCars, mas só carros não vendidos
+// usa isso na tela "Estoque Atual" para o número bater com o que está disponível
+export const getAvailableCars = async () => {
+  const { data, error } = await supabase
+    .from('cars')
+    .select('*')
+    .eq('is_sold', false)
+    .order('created_at', { ascending: false });
+  if (error) console.error('Erro ao buscar carros disponíveis:', error);
   return data || [];
 };
 
@@ -541,45 +552,20 @@ export const addChecklistItem = async (..._args) => {
   return { data: null, error: null };
 };
 
-/*
-  -----------------------------
-  FIPE – wrapper para o VehicleManager
-  -----------------------------
-*/
-export const getFipeForCar = async (car) => {
-  if (!car) return null;
+// 👇 ADICIONEI ISSO: wrapper pra FIPE, usando seu fipe-api.js
+import { getFipeValue } from './fipe-api';
 
-  // tentar pegar dos campos que você usa no projeto
-  const brand = car.brand || car.marca || '';
-  const model = car.model || car.modelo || '';
-  const year = car.year || car.ano || '';
-  const fuel = car.fuel || car.combustivel || '';
-  const version = car.version || car.versao || '';
-
-  // chama o resolver inteligente da FIPE
-  const { value, debug } = await getFipeValue({
+// recebe um objeto de carro igual vem do banco
+export const getFipeForCar = async (car = {}) => {
+  const { brand, model, year, fuel, version, body_type } = car || {};
+  const { value } = await getFipeValue({
     brand,
     model,
     year,
     fuel,
     version,
-    vehicleType: 'carros',
+    vehicleType: 'carros'
   });
-
-  if (!value) {
-    console.warn('FIPE não encontrada para:', { brand, model, year, fuel, version, debug });
-    return null;
-  }
-
-  // já salva no carro pra ficar persistido no admin
-  if (car.id) {
-    try {
-      await updateCar(car.id, { fipe_value: value });
-    } catch (err) {
-      console.warn('FIPE encontrada mas não consegui salvar no carro:', err);
-    }
-  }
-
   return value;
 };
 

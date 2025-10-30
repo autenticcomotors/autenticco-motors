@@ -14,12 +14,24 @@ import {
   getPublicationsForCars,
   getExpensesForCars,
   updateCar,
-  getFipeForCar, // ✅ AGORA IMPORTA DAQUI
+  getFipeForCar,
 } from '@/lib/car-api';
 import { X, Megaphone, Wallet, DollarSign, PenSquare } from 'lucide-react';
 
+// dinheiro BR
 const moneyBR = (n) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(n || 0));
+
+// data BR fixa SP
+const formatDateTimeBR = (iso) => {
+  if (!iso) return '-';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+  } catch {
+    return iso;
+  }
+};
 
 const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
   const [open, setOpen] = useState(false);
@@ -73,14 +85,19 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
   const isoFromDateTime = (dateStr, timeStr) => {
     if (!dateStr) return null;
     const t = timeStr || '00:00';
-    return new Date(`${dateStr}T${t}:00`).toISOString();
+    // sempre grava em ISO normal
+    return new Date(`${dateStr}T${t}:00-03:00`).toISOString();
   };
 
-  const diffInDays = (startIso) => {
+  // dias em estoque: se tiver sold_at ou delivered_at, congela naquele dia
+  const diffInDays = (car) => {
+    const startIso = car.entry_at || car.entered_at;
     if (!startIso) return '-';
     const start = new Date(startIso);
-    const now = new Date();
-    const ms = now.getTime() - start.getTime();
+    // usa sold_at se existir, senão delivered_at, senão agora
+    const endIso = car.sold_at || car.delivered_at || new Date().toISOString();
+    const end = new Date(endIso);
+    const ms = end.getTime() - start.getTime();
     const days = Math.floor(ms / (1000 * 60 * 60 * 24));
     return `${days} dia(s) em estoque`;
   };
@@ -90,7 +107,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     window.dispatchEvent(new Event('autenticco:cars-updated'));
   };
 
-  // plataformas
+  // carrega plataformas
   useEffect(() => {
     (async () => {
       try {
@@ -103,7 +120,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     })();
   }, []);
 
-  // montar mapa de resumo (anúncios / redes / gastos) de todos os carros
+  // monta mapa de resumo
   useEffect(() => {
     const ids = (cars || []).map((c) => c.id).filter(Boolean);
     if (!ids.length) {
@@ -114,7 +131,10 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     let mounted = true;
     (async () => {
       try {
-        const [pubs, exps] = await Promise.all([getPublicationsForCars(ids), getExpensesForCars(ids)]);
+        const [pubs, exps] = await Promise.all([
+          getPublicationsForCars(ids),
+          getExpensesForCars(ids),
+        ]);
         const byId = {};
         ids.forEach((id) => {
           byId[id] = {
@@ -270,12 +290,13 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
         car_id: selectedCar.id,
         category: expenseForm.category || 'Outros',
         amount: expenseForm.amount ? Number(expenseForm.amount) : 0,
+        // supabase não aceita null nesse campo aí no seu schema
         charged_value:
           expenseForm.charged_value !== '' && expenseForm.charged_value !== null
             ? Number(expenseForm.charged_value)
             : 0,
         incurred_at: expenseForm.incurred_at
-          ? new Date(expenseForm.incurred_at).toISOString()
+          ? new Date(`${expenseForm.incurred_at}T00:00:00-03:00`).toISOString()
           : new Date().toISOString(),
         description: expenseForm.description || '',
       };
@@ -378,21 +399,17 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     }
   };
 
-  // ✅ buscar fipe dentro do modal (agora usando o car-api de verdade)
+  // buscar FIPE
   const handleFetchFipe = async () => {
     if (!selectedCar) return;
     try {
       const fipe = await getFipeForCar(selectedCar);
       if (!fipe) {
-        toast({
-          title: 'Não encontrei FIPE para esse veículo',
-          description: 'Tente ajustar marca/modelo/ano/combustível no cadastro do carro.',
-        });
+        toast({ title: 'Não encontrei FIPE para esse veículo' });
         return;
       }
       setFinanceForm((prev) => ({ ...prev, fipe_value: fipe }));
-      toast({ title: 'FIPE carregada e salva no carro' });
-      await dispatchGlobalUpdate();
+      toast({ title: 'FIPE carregada' });
     } catch (err) {
       console.error(err);
       toast({
@@ -403,7 +420,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     }
   };
 
-  // abrir mini-modal de entrada (com posição)
+  // abrir mini-modal de entrada
   const openEntryMini = (car, e) => {
     const d = car.entry_at ? new Date(car.entry_at) : new Date();
     setEntryDate(d.toISOString().slice(0, 10));
@@ -442,7 +459,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     }
   };
 
-  // abrir mini-modal de entrega (com posição)
+  // abrir mini-modal de entrega
   const openDeliverMini = (car, e) => {
     const d = new Date();
     setDeliverDate(d.toISOString().slice(0, 10));
@@ -507,6 +524,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
       );
     });
 
+    // ordenação
     if (sortBy === 'days') {
       list = [...list].sort((a, b) => {
         const da = a.entry_at ? new Date(a.entry_at).getTime() : Date.now();
@@ -565,7 +583,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
             </option>
           ))}
         </select>
-
         <select
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value)}
@@ -576,7 +593,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
           <option value="profit">Ordenar por lucro estimado</option>
           <option value="name">Ordenar por nome (A-Z)</option>
         </select>
-
         <button
           onClick={() => {
             setSearchTerm('');
@@ -610,10 +626,14 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
               ? ((Number(car.price) / Number(car.fipe_value)) * 100 - 100).toFixed(1)
               : null;
 
+          const isSold = !!car.is_sold;
+
           return (
             <div
               key={car.id}
-              className="bg-white rounded-2xl shadow border flex flex-col md:flex-row justify-between gap-4 p-4"
+              className={`bg-white rounded-2xl shadow border flex flex-col md:flex-row justify-between gap-4 p-4 ${
+                isSold ? 'opacity-90' : ''
+              }`}
             >
               <div className="flex gap-4 items-start">
                 <img
@@ -622,15 +642,22 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                     'https://placehold.co/120x80/e2e8f0/475569?text=SEM+FOTO'
                   }
                   alt={car.model}
-                  className="w-28 h-20 object-cover rounded-lg bg-gray-200"
+                  className={`w-28 h-20 object-cover rounded-lg bg-gray-200 ${
+                    isSold ? 'grayscale' : ''
+                  }`}
                 />
                 <div>
                   <div className="flex items-center gap-2">
                     <h3 className="text-lg font-bold">
                       {car.brand} {car.model} ({car.year || '-'})
                     </h3>
+                    {isSold ? (
+                      <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded">
+                        VENDIDO
+                      </span>
+                    ) : null}
                   </div>
-                  <p className="text-sm text-gray-600 flex gap-2 items-center">
+                  <p className="text-sm text-gray-600 flex gap-2 items-center flex-wrap">
                     Preço:{' '}
                     <span className="font-semibold">{moneyBR(car.price)}</span>
                     {car.fipe_value ? (
@@ -638,35 +665,55 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                         FIPE: {moneyBR(car.fipe_value)} ({fipeDiff}%)
                       </span>
                     ) : null}
+                    {/* mostrar devolver */}
+                    {car.return_to_seller ? (
+                      <span className="text-xs text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
+                        Devolver: {moneyBR(car.return_to_seller)}
+                      </span>
+                    ) : null}
                   </p>
                   <p className="text-sm text-gray-600">
                     Placa: <span className="font-semibold">{car.plate || '-'}</span>
                   </p>
-                  {car.return_to_seller ? (
-                    <p className="text-xs text-gray-500 mt-1">
-                      Devolver ao dono: <b>{moneyBR(car.return_to_seller)}</b>
-                    </p>
-                  ) : null}
 
                   <div className="flex flex-wrap gap-2 mt-2 items-center">
                     <span className="text-xs text-gray-500">
-                      Entrada: {car.entry_at ? new Date(car.entry_at).toLocaleString('pt-BR') : '-'}
+                      Entrada:{' '}
+                      {car.entry_at
+                        ? formatDateTimeBR(car.entry_at)
+                        : car.entered_at
+                        ? formatDateTimeBR(car.entered_at)
+                        : '-'}
                     </span>
-                    <button
-                      onClick={(e) => openEntryMini(car, e)}
-                      className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                    {!isSold && (
+                      <button
+                        onClick={(e) => openEntryMini(car, e)}
+                        className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                      >
+                        <PenSquare className="w-3 h-3" /> editar
+                      </button>
+                    )}
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded ${
+                        isSold ? 'bg-slate-100 text-slate-600' : 'bg-green-50 text-green-700'
+                      }`}
                     >
-                      <PenSquare className="w-3 h-3" /> editar
-                    </button>
-                    <span className="text-xs text-green-700 bg-green-50 px-2 py-0.5 rounded">
-                      {diffInDays(car.entry_at)}
+                      {diffInDays(car)}
                     </span>
-                    <button
-                      onClick={(e) => openDeliverMini(car, e)}
-                      className="text-xs text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded flex items-center gap-1"
-                    >
-                      Marcar como Entregue
-                    </button>
+                    {!isSold && (
+                      <button
+                        onClick={(e) => openDeliverMini(car, e)}
+                        className="text-xs text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded flex items-center gap-1"
+                      >
+                        Marcar como Entregue
+                      </button>
+                    )}
+                    {isSold && (
+                      <span className="text-xs text-red-600">
+                        Vendido em: {formatDateTimeBR(car.sold_at)}
+                        {car.sale_price ? ` — ${moneyBR(car.sale_price)}` : ''}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -707,7 +754,11 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                   <p className="text-sm text-green-700">{moneyBR(lucroLista)}</p>
                 </div>
                 <div>
-                  <Button variant="outline" onClick={() => openManageModal(car)} className="text-sm">
+                  <Button
+                    variant="outline"
+                    onClick={() => openManageModal(car)}
+                    className="text-sm"
+                  >
                     Gerenciar
                   </Button>
                 </div>
@@ -731,7 +782,9 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
           <DialogHeader>
             <DialogTitle>
               Gestão -{' '}
-              {selectedCar ? `${selectedCar.brand} ${selectedCar.model} ${selectedCar.year || ''}` : ''}
+              {selectedCar
+                ? `${selectedCar.brand} ${selectedCar.model} ${selectedCar.year || ''}`
+                : ''}
             </DialogTitle>
           </DialogHeader>
 
@@ -1019,7 +1072,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
         </DialogContent>
       </Dialog>
 
-      {/* mini-modal entrada */}
+      {/* mini-modal entrada (posicionado) */}
       {entryMiniOpenFor && (
         <div
           className="fixed z-[9999] bg-white rounded-xl shadow-lg p-4 w-[280px] space-y-3 border border-gray-200"
@@ -1052,7 +1105,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
         </div>
       )}
 
-      {/* mini-modal entrega */}
+      {/* mini-modal entrega (posicionado) */}
       {deliverMiniOpenFor && (
         <div
           className="fixed z-[9999] bg-white rounded-xl shadow-lg p-4 w-[280px] space-y-3 border border-gray-200"

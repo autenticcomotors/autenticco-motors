@@ -903,11 +903,11 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
       {/* mini-modal entrada (posicionado) */}
       {entryMiniOpenFor && (
         <div
-          className="fixed z-[9999] bg-white rounded-xl shadow-lg p-4 w-[280px] space-y-3 border border-gray-200"
-          style={{
-            top: `${entryPos.top}px`,
-            left: `${entryPos.left}px`,
-          }}
+          className="absolute z-[9999] bg-white rounded-xl shadow-lg p-4 w-[280px] space-y-3 border border-gray-200"
+    style={{
+      top: `${entryPos.top}px`,
+      left: `${entryPos.left}px`,
+    }}
         >
           <div className="flex justify-between items-center">
             <h3 className="text-sm font-semibold">Data de entrada</h3>
@@ -936,11 +936,11 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
       {/* mini-modal entrega (posicionado) */}
       {deliverMiniOpenFor && (
         <div
-          className="fixed z-[9999] bg-white rounded-xl shadow-lg p-4 w-[280px] space-y-3 border border-gray-200"
-          style={{
-            top: `${deliverPos.top}px`,
-            left: `${deliverPos.left}px`,
-          }}
+          className="absolute z-[9999] bg-white rounded-xl shadow-lg p-4 w-[280px] space-y-3 border border-gray-200"
+    style={{
+      top: `${deliverPos.top}px`,
+      left: `${deliverPos.left}px`,
+    }}
         >
           <div className="flex justify-between items-center">
             <h3 className="text-sm font-semibold">Registrar entrega</h3>

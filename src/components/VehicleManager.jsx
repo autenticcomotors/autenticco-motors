@@ -704,24 +704,42 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                       </button>
                     )}
                     {isSold && (
-                      <p className="text-xs text-red-600">
+  <p className="text-xs text-red-600">
     {(() => {
-      const iso = car.sold_at;
-      if (!iso) return 'Vendido';
-      try {
-        // força fuso do Brasil
-        const dt = new Date(iso).toLocaleString('pt-BR', {
-          timeZone: 'America/Sao_Paulo',
-        });
-        // dt vem tipo "25/10/2025 00:00:00"
-        const [data] = dt.split(' ');
-        return `Vendido em ${data} — ${car.sale_price ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(car.sale_price) : ''}`;
-      } catch (e) {
-        return `Vendido em ${iso}`;
+      const raw = car.sold_at;
+      if (!raw) return 'Vendido';
+
+      // raw pode vir: "2025-10-25 00:00:00+00" ou "2025-10-25T00:00:00+00:00"
+      const clean = String(raw).replace('T', ' ').trim();
+
+      // pega só a parte da data (primeiros 10 chars = YYYY-MM-DD)
+      const y = clean.slice(0, 4);
+      const m = clean.slice(5, 7);
+      const d = clean.slice(8, 10);
+
+      // se por algum motivo não vier assim, mostra cru
+      if (!y || !m || !d) {
+        return `Vendido em ${raw} — ${
+          car.sale_price
+            ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+                car.sale_price
+              )
+            : ''
+        }`;
       }
+
+      const dataBR = `${d}/${m}/${y}`;
+      const preco = car.sale_price
+        ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+            car.sale_price
+          )
+        : '';
+
+      return `Vendido em ${dataBR}${preco ? ` — ${preco}` : ''}`;
     })()}
   </p>
-                    )}
+)}
+
                   </div>
                 </div>
               </div>

@@ -1,18 +1,13 @@
 // src/components/VehicleManager.jsx
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
 import {
-  Check,
   Trash2,
   Megaphone,
   Wallet,
-  DollarSign,
-  Instagram,
-  Youtube,
-  Globe,
-  Music2
+  DollarSign
 } from 'lucide-react';
 import {
   getPublicationsByCar,
@@ -34,16 +29,10 @@ const Money = ({ value }) => {
 };
 
 const fmtDateTime = (iso) => (iso ? new Date(iso).toLocaleString() : '-');
-const toIso = (v) => (v ? new Date(v).toISOString() : null);
-
-// mapeia social icon
-const SocialIcon = ({ name = '', link = '' }) => {
-  const n = String(name || '').toLowerCase();
-  const l = String(link || '').toLowerCase();
-  if (n.includes('insta') || l.includes('instagram')) return <Instagram className="h-4 w-4 text-pink-600" />;
-  if (n.includes('you') || l.includes('youtube')) return <Youtube className="h-4 w-4 text-red-600" />;
-  if (n.includes('tiktok') || l.includes('tiktok')) return <Music2 className="h-4 w-4" />;
-  return <Globe className="h-4 w-4" />;
+const isoFromDateTime = (dateStr, timeStr) => {
+  if (!dateStr) return null;
+  const full = timeStr ? `${dateStr}T${timeStr}` : `${dateStr}T00:00`;
+  return new Date(full).toISOString();
 };
 
 const VehicleManager = ({
@@ -55,7 +44,7 @@ const VehicleManager = ({
 }) => {
   const [selectedCar, setSelectedCar] = useState(null);
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState('publications_market'); // publications_market | publications_social | expenses | finance
+  const [tab, setTab] = useState('publications_market');
   const [platforms, setPlatforms] = useState(externalPlatforms || []);
 
   const [publications, setPublications] = useState([]);
@@ -84,16 +73,23 @@ const VehicleManager = ({
     return_to_seller: ''
   });
 
-  // edição de data de entrada
-  const [editingEntryFor, setEditingEntryFor] = useState(null);
-  const [entryAtInput, setEntryAtInput] = useState('');
+  // POPUP: editar entrada
+  const [entryPickerFor, setEntryPickerFor] = useState(null); // car.id
+  const [entryDate, setEntryDate] = useState('');
+  const [entryTime, setEntryTime] = useState('');
+  const entryBtnRef = useRef(null);
+
+  // POPUP: entrega
+  const [deliverPickerFor, setDeliverPickerFor] = useState(null);
+  const [deliverDate, setDeliverDate] = useState('');
+  const [deliverTime, setDeliverTime] = useState('');
+  const deliverBtnRef = useRef(null);
 
   // carrega plataformas
   useEffect(() => {
     (async () => {
       try {
-        const p =
-          externalPlatforms && externalPlatforms.length ? externalPlatforms : await getPlatforms();
+        const p = externalPlatforms && externalPlatforms.length ? externalPlatforms : await getPlatforms();
         setPlatforms(p || []);
       } catch (err) {
         console.error('Erro carregar platforms:', err);
@@ -102,7 +98,7 @@ const VehicleManager = ({
     })();
   }, [externalPlatforms]);
 
-  // agrupa resumos (separando marketplaces de redes sociais + gastos + ganhos)
+  // agrupa resumos
   useEffect(() => {
     const carIds = (Array.isArray(cars) ? cars.map((c) => c.id) : []).filter(Boolean);
     if (carIds.length === 0) {
@@ -129,41 +125,32 @@ const VehicleManager = ({
             adCount: 0,
             adSpendTotal: 0,
             socialCount: 0,
-            socialList: [],
             extraExpensesTotal: 0,
             extraChargedTotal: 0
           };
         });
 
-        // PUBLICAÇÕES
+        // publicações
         (pubs || []).forEach((p) => {
           const id = p.car_id;
           if (!map[id]) return;
           const pf = pfById[String(p.platform_id)] || null;
           const ptype = pf?.platform_type || null;
 
-          // marketplace = anúncio
           if (ptype === 'marketplace') {
             map[id].adCount += 1;
             map[id].adSpendTotal += Number(p.spent || 0);
           } else {
-            // social
             map[id].socialCount += 1;
-            const guessName = pf?.name || (p.link || '').split('/')[2] || 'rede';
-            if (!map[id].socialList.includes(guessName.toLowerCase())) {
-              map[id].socialList.push(guessName.toLowerCase());
-            }
           }
         });
 
-        // GASTOS / GANHOS
+        // gastos/ganhos
         (exps || []).forEach((e) => {
           const id = e.car_id;
           if (!map[id]) return;
-
           const amount = Number(e.amount || 0);
           const charged = Number(e.charged_value || 0);
-
           map[id].extraExpensesTotal += amount;
           if (charged > 0) {
             map[id].extraChargedTotal += charged;
@@ -181,7 +168,7 @@ const VehicleManager = ({
     };
   }, [cars, platforms]);
 
-  // abertura via "abrir carro" externo
+  // abertura externa
   useEffect(() => {
     if (openCar && openCar.id) {
       setSelectedCar(openCar);
@@ -197,7 +184,7 @@ const VehicleManager = ({
     }
   }, [openCar]); // eslint-disable-line
 
-  // fetch dos dados de um carro
+  // fetch de 1 carro
   const fetchAll = async (carId) => {
     if (!carId) return;
     try {
@@ -211,7 +198,7 @@ const VehicleManager = ({
     }
   };
 
-  // abrir modal pelo botão da lista
+  // open modal from list
   const handleOpenFromList = (car) => {
     setSelectedCar(car);
     setOpen(true);
@@ -224,7 +211,7 @@ const VehicleManager = ({
     });
   };
 
-  // PUBLICAÇÕES - salvar
+  // save publication
   const submitPublication = async () => {
     if (!selectedCar) return;
     try {
@@ -267,9 +254,7 @@ const VehicleManager = ({
       await deletePublication(id);
       setPublications((prev) => prev.filter((p) => p.id !== id));
       toast({ title: 'Registro removido' });
-      if (selectedCar) {
-        await fetchAll(selectedCar.id);
-      }
+      if (selectedCar) await fetchAll(selectedCar.id);
       if (refreshAll) refreshAll();
     } catch (err) {
       toast({
@@ -280,7 +265,7 @@ const VehicleManager = ({
     }
   };
 
-  // GASTOS / GANHOS
+  // save expense
   const submitExpense = async () => {
     if (!selectedCar) return;
     try {
@@ -288,9 +273,7 @@ const VehicleManager = ({
         car_id: selectedCar.id,
         category: expenseForm.category || 'Outros',
         amount: expenseForm.amount ? parseFloat(expenseForm.amount) : 0,
-        charged_value: expenseForm.charged_value
-          ? parseFloat(expenseForm.charged_value)
-          : null,
+        charged_value: expenseForm.charged_value ? parseFloat(expenseForm.charged_value) : null,
         incurred_at: expenseForm.incurred_at
           ? new Date(expenseForm.incurred_at).toISOString()
           : new Date().toISOString(),
@@ -336,13 +319,12 @@ const VehicleManager = ({
     }
   };
 
-  // FINANCEIRO
+  // helpers
   const getSummary = (carId) =>
     summaryMap[carId] || {
       adCount: 0,
       adSpendTotal: 0,
       socialCount: 0,
-      socialList: [],
       extraExpensesTotal: 0,
       extraChargedTotal: 0
     };
@@ -356,9 +338,7 @@ const VehicleManager = ({
     const totalCharged = Number(summary.extraChargedTotal || 0);
     const totalExpenses = Number(summary.extraExpensesTotal || 0);
     const adSpend = Number(summary.adSpendTotal || 0);
-
-    const profit = commission + totalCharged - totalExpenses - adSpend;
-    return profit;
+    return commission + totalCharged - totalExpenses - adSpend;
   };
 
   const saveFinance = async () => {
@@ -370,9 +350,7 @@ const VehicleManager = ({
       const commission =
         financeForm.commission !== '' ? parseFloat(financeForm.commission) : 0;
       const return_to_seller =
-        financeForm.return_to_seller !== ''
-          ? parseFloat(financeForm.return_to_seller)
-          : 0;
+        financeForm.return_to_seller !== '' ? parseFloat(financeForm.return_to_seller) : 0;
 
       const adSpendTotal = Number(summary.adSpendTotal || 0);
       const extraExpensesTotal = Number(summary.extraExpensesTotal || 0);
@@ -380,11 +358,10 @@ const VehicleManager = ({
       const profit = commission + extraChargedTotal - (adSpendTotal + extraExpensesTotal);
 
       const patch = { fipe_value, commission, return_to_seller, profit, profit_percent: null };
-      const { data, error } = await updateCar(selectedCar.id, patch);
+      const { error } = await updateCar(selectedCar.id, patch);
       if (error) throw error;
 
-      const updated = { ...(selectedCar || {}), ...patch };
-      setSelectedCar(updated);
+      setSelectedCar((prev) => ({ ...(prev || {}), ...patch }));
 
       toast({ title: 'Financeiro atualizado com sucesso' });
       await fetchAll(selectedCar.id);
@@ -408,10 +385,10 @@ const VehicleManager = ({
         setFinanceForm((f) => ({ ...f, fipe_value: res.value }));
         toast({
           title: 'FIPE atualizada',
-          description: `Valor: ${new Intl.NumberFormat('pt-BR', {
+          description: new Intl.NumberFormat('pt-BR', {
             style: 'currency',
             currency: 'BRL'
-          }).format(res.value)}`
+          }).format(res.value)
         });
       } else {
         toast({
@@ -454,7 +431,7 @@ const VehicleManager = ({
     });
   }, [cars, searchTerm, brandFilter]);
 
-  // helpers de plataformas por tipo
+  // helpers de plataformas
   const pfById = {};
   (platforms || []).forEach((p) => {
     pfById[String(p.id)] = p;
@@ -462,20 +439,24 @@ const VehicleManager = ({
   const marketplacePlatforms = (platforms || []).filter((p) => p.platform_type === 'marketplace');
   const socialPlatforms = (platforms || []).filter((p) => p.platform_type === 'social');
 
-  const openEditEntryAt = (car) => {
-    setEditingEntryFor(car.id);
+  // abrir popover entrada
+  const openEntryPopover = (car, btnRef) => {
     const iso = car.entry_at || car.created_at || null;
-    const val = iso ? new Date(iso).toISOString().slice(0, 16) : '';
-    setEntryAtInput(val);
+    const d = iso ? new Date(iso) : new Date();
+    const dateStr = d.toISOString().slice(0, 10);
+    const timeStr = d.toTimeString().slice(0, 5);
+    setEntryPickerFor(car.id);
+    setEntryDate(dateStr);
+    setEntryTime(timeStr);
   };
 
   const saveEntryAt = async () => {
-    if (!editingEntryFor) return;
+    if (!entryPickerFor) return;
     try {
-      await updateCar(editingEntryFor, { entry_at: toIso(entryAtInput) });
+      const iso = isoFromDateTime(entryDate, entryTime);
+      await updateCar(entryPickerFor, { entry_at: iso });
       toast({ title: 'Data de entrada atualizada' });
-      setEditingEntryFor(null);
-      setEntryAtInput('');
+      setEntryPickerFor(null);
       if (refreshAll) refreshAll();
     } catch (e) {
       toast({
@@ -486,9 +467,36 @@ const VehicleManager = ({
     }
   };
 
+  // abrir popover entrega
+  const openDeliverPopover = (car) => {
+    const d = new Date();
+    const dateStr = d.toISOString().slice(0, 10);
+    const timeStr = d.toTimeString().slice(0, 5);
+    setDeliverPickerFor(car.id);
+    setDeliverDate(dateStr);
+    setDeliverTime(timeStr);
+  };
+
+  const saveDeliveredAt = async () => {
+    if (!deliverPickerFor) return;
+    try {
+      const iso = isoFromDateTime(deliverDate, deliverTime);
+      await updateCar(deliverPickerFor, { delivered_at: iso });
+      toast({ title: 'Entrega registrada' });
+      setDeliverPickerFor(null);
+      if (refreshAll) refreshAll();
+    } catch (e) {
+      toast({
+        title: 'Erro ao registrar entrega',
+        description: String(e),
+        variant: 'destructive'
+      });
+    }
+  };
+
   // UI
   return (
-    <div>
+    <div className="relative">
       <h2 className="text-2xl font-semibold mb-4">Gestão de Veículos</h2>
 
       <div className="mb-4 flex flex-col md:flex-row gap-2 items-center">
@@ -542,7 +550,6 @@ const VehicleManager = ({
             const price = Number(car.price || 0);
             const diffPct = fipe > 0 ? ((price - fipe) / fipe) * 100 : null;
 
-            // dias em estoque
             const baseDate = new Date(car.entry_at || car.created_at || Date.now());
             const daysInStock = Math.max(
               0,
@@ -552,7 +559,7 @@ const VehicleManager = ({
             return (
               <div
                 key={car.id}
-                className={`bg-white rounded-xl p-4 flex items-center justify-between shadow transition hover:shadow-lg ${
+                className={`relative bg-white rounded-xl p-4 flex items-center justify-between shadow transition hover:shadow-lg ${
                   sold ? 'opacity-80' : ''
                 }`}
               >
@@ -603,7 +610,6 @@ const VehicleManager = ({
                       )}
                     </div>
 
-                    {/* infos operacionais */}
                     <div className="mt-2 text-xs text-gray-600 flex flex-wrap items-center gap-2">
                       <span>
                         Entrada:{' '}
@@ -612,8 +618,9 @@ const VehicleManager = ({
                         </span>
                       </span>
                       <button
+                        ref={entryBtnRef}
                         className="text-blue-600 underline"
-                        onClick={() => openEditEntryAt(car)}
+                        onClick={() => openEntryPopover(car, entryBtnRef)}
                       >
                         editar
                       </button>
@@ -621,36 +628,16 @@ const VehicleManager = ({
                         {daysInStock} dia(s) em estoque
                       </span>
                       <Button
+                        ref={deliverBtnRef}
                         size="xs"
                         className="bg-emerald-600 hover:bg-emerald-700"
-                        onClick={() => {
-                          const when = window.prompt(
-                            'Data/hora da entrega (YYYY-MM-DD HH:mm):',
-                            ''
-                          );
-                          if (!when) return;
-                          const iso = toIso(when.replace(' ', 'T'));
-                          updateCar(car.id, { delivered_at: iso })
-                            .then(() => {
-                              toast({ title: 'Entrega registrada' });
-                              if (refreshAll) refreshAll();
-                            })
-                            .catch((err) => {
-                              toast({
-                                title: 'Erro ao registrar entrega',
-                                description: String(err),
-                                variant: 'destructive'
-                              });
-                            });
-                        }}
+                        onClick={() => openDeliverPopover(car)}
                       >
                         Marcar como Entregue
                       </Button>
                     </div>
 
-                    {/* métricas */}
                     <div className="mt-3 flex flex-wrap items-center gap-6 text-sm text-gray-600">
-                      {/* Anúncios (marketplaces) */}
                       <div className="flex items-center gap-2">
                         <Megaphone className="h-4 w-4 text-yellow-500" />
                         <div>
@@ -661,22 +648,13 @@ const VehicleManager = ({
                         </div>
                       </div>
 
-                      {/* Publicações (redes sociais) */}
                       <div className="flex items-center gap-2">
-                        <div className="flex -space-x-1">
-                          {summary.socialList.slice(0, 3).map((nm, i) => (
-                            <div key={`${nm}-${i}`} className="inline-flex items-center">
-                              <SocialIcon name={nm} />
-                            </div>
-                          ))}
-                        </div>
                         <div>
                           <div className="text-xs">Publicações</div>
                           <div className="font-medium">{summary.socialCount}</div>
                         </div>
                       </div>
 
-                      {/* Gastos extras */}
                       <div className="flex items-center gap-2">
                         <Wallet className="h-4 w-4 text-green-500" />
                         <div>
@@ -687,7 +665,6 @@ const VehicleManager = ({
                         </div>
                       </div>
 
-                      {/* Ganhos extras */}
                       <div className="flex items-center gap-2">
                         <DollarSign className="h-4 w-4 text-purple-600" />
                         <div>
@@ -698,7 +675,6 @@ const VehicleManager = ({
                         </div>
                       </div>
 
-                      {/* Lucro estimado */}
                       <div className="flex items-center gap-2">
                         <DollarSign className="h-4 w-4 text-indigo-600" />
                         <div>
@@ -713,7 +689,6 @@ const VehicleManager = ({
                         </div>
                       </div>
 
-                      {/* FIPE / Comissão / Devolver */}
                       <div>
                         <div className="text-xs">FIPE</div>
                         <div className="font-medium">
@@ -747,43 +722,73 @@ const VehicleManager = ({
                     {car.updated_at ? new Date(car.updated_at).toLocaleDateString() : '-'}
                   </div>
                 </div>
+
+                {/* mini popover entrada */}
+                {entryPickerFor === car.id && (
+                  <div className="absolute z-50 bg-white border rounded-lg shadow-lg p-3 top-14 left-40 w-64">
+                    <div className="text-sm font-semibold mb-2">Editar data de entrada</div>
+                    <div className="flex gap-2 mb-2">
+                      <input
+                        type="date"
+                        value={entryDate}
+                        onChange={(e) => setEntryDate(e.target.value)}
+                        className="w-1/2 border rounded px-1 py-1 text-sm"
+                      />
+                      <input
+                        type="time"
+                        value={entryTime}
+                        onChange={(e) => setEntryTime(e.target.value)}
+                        className="w-1/2 border rounded px-1 py-1 text-sm"
+                      />
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <Button variant="ghost" size="sm" onClick={() => setEntryPickerFor(null)}>
+                        Cancelar
+                      </Button>
+                      <Button size="sm" onClick={saveEntryAt}>
+                        Salvar
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* mini popover entrega */}
+                {deliverPickerFor === car.id && (
+                  <div className="absolute z-50 bg-white border rounded-lg shadow-lg p-3 top-14 left-64 w-64">
+                    <div className="text-sm font-semibold mb-2">Data e hora de entrega</div>
+                    <div className="flex gap-2 mb-2">
+                      <input
+                        type="date"
+                        value={deliverDate}
+                        onChange={(e) => setDeliverDate(e.target.value)}
+                        className="w-1/2 border rounded px-1 py-1 text-sm"
+                      />
+                      <input
+                        type="time"
+                        value={deliverTime}
+                        onChange={(e) => setDeliverTime(e.target.value)}
+                        className="w-1/2 border rounded px-1 py-1 text-sm"
+                      />
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <Button variant="ghost" size="sm" onClick={() => setDeliverPickerFor(null)}>
+                        Cancelar
+                      </Button>
+                      <Button size="sm" onClick={saveDeliveredAt}>
+                        Salvar
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
       </div>
 
-      {/* mini modal de editar entrada */}
-      {editingEntryFor && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
-          <div className="bg-white rounded-lg p-4 w-[360px]">
-            <div className="font-semibold mb-3">Editar data de entrada</div>
-            <input
-              type="datetime-local"
-              value={entryAtInput}
-              onChange={(e) => setEntryAtInput(e.target.value)}
-              className="w-full p-2 border rounded mb-3"
-            />
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  setEditingEntryFor(null);
-                  setEntryAtInput('');
-                }}
-              >
-                Cancelar
-              </Button>
-              <Button onClick={saveEntryAt}>Salvar</Button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* MODAL PRINCIPAL */}
       <Dialog
         open={open}
         onOpenChange={(o) => {
-          // quando fechar, recarrega
           if (!o) {
             if (refreshAll) refreshAll();
             setSelectedCar(null);
@@ -989,26 +994,23 @@ const VehicleManager = ({
                               key={pub.id}
                               className="bg-white p-3 border rounded flex items-center justify-between"
                             >
-                              <div className="flex items-center gap-2">
-                                <SocialIcon name={pf?.name} link={pub.link} />
-                                <div>
-                                  <div className="font-medium">{pf?.name || '(sem título)'}</div>
-                                  <div className="text-xs text-gray-500">
-                                    {pub.link ? (
-                                      <a
-                                        className="text-blue-600"
-                                        href={pub.link}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                      >
-                                        Ver post
-                                      </a>
-                                    ) : (
-                                      'Sem link'
-                                    )}
-                                  </div>
-                                  <div className="text-xs text-gray-500">{pub.status}</div>
+                              <div>
+                                <div className="font-medium">{pf?.name || '(sem título)'}</div>
+                                <div className="text-xs text-gray-500">
+                                  {pub.link ? (
+                                    <a
+                                      className="text-blue-600"
+                                      href={pub.link}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                    >
+                                      Ver post
+                                    </a>
+                                  ) : (
+                                    'Sem link'
+                                  )}
                                 </div>
+                                <div className="text-xs text-gray-500">{pub.status}</div>
                               </div>
                               <div className="flex items-center gap-2">
                                 <button
@@ -1067,7 +1069,9 @@ const VehicleManager = ({
                   <input
                     placeholder="Descrição"
                     value={expenseForm.description}
-                    onChange={(e) => setExpenseForm((f) => ({ ...f, description: e.target.value }))}
+                    onChange={(e) =>
+                      setExpenseForm((f) => ({ ...f, description: e.target.value }))
+                    }
                     className="p-2 border rounded md:col-span-2"
                   />
                   <div className="col-span-full flex gap-2">
@@ -1155,9 +1159,7 @@ const VehicleManager = ({
                 </div>
 
                 <div className="mb-4">
-                  <div className="text-sm text-gray-600">
-                    Resumo de gastos registrados para este veículo
-                  </div>
+                  <div className="text-sm text-gray-600">Resumo de gastos registrados</div>
                   <div className="mt-2 flex gap-4 flex-wrap">
                     <div className="text-sm">
                       Gasto com anúncios:{' '}
@@ -1184,9 +1186,9 @@ const VehicleManager = ({
                     <div className="text-sm">
                       Lucro calculado:{' '}
                       <strong
-                        className={` ${
+                        className={
                           computeProfitForSelected() >= 0 ? 'text-green-600' : 'text-red-600'
-                        }`}
+                        }
                       >
                         <Money value={computeProfitForSelected()} />
                       </strong>

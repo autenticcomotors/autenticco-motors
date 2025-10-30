@@ -373,21 +373,19 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
   const viewportWidth = window.innerWidth;
   const modalWidth = 280;
 
-  // posição base: logo ABAIXO e quase colado
-  let top = rect.top + window.scrollY; // ponto do botão na página
+  // posição na tela (sem somar scroll)
+  let top = rect.top + 6; // só pra não colar
   let left = rect.left;
 
-  // se não couber à direita, puxa pra esquerda
+  // se não couber à direita, joga mais pra esquerda
   if (left + modalWidth + 8 > viewportWidth) {
     left = viewportWidth - modalWidth - 8;
   }
 
-  // dar só 6px pra não colar demais
-  top = top + 6;
-
   setEntryPos({ top, left });
   setEntryMiniOpenFor(car.id);
 };
+
 
 
   const handleSaveEntry = async () => {
@@ -418,18 +416,17 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
   const viewportWidth = window.innerWidth;
   const modalWidth = 280;
 
-  let top = rect.top + window.scrollY;
+  let top = rect.top + 6; // encostado no botão
   let left = rect.left;
 
   if (left + modalWidth + 8 > viewportWidth) {
     left = viewportWidth - modalWidth - 8;
   }
 
-  top = top + 6;
-
   setDeliverPos({ top, left });
   setDeliverMiniOpenFor(car.id);
 };
+
 
 
   const handleSaveDeliver = async () => {

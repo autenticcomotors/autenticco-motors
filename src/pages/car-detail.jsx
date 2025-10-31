@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import BackgroundShape from '@/components/BackgroundShape';
 import InterestModal from '@/components/InterestModal';
 import Seo from '@/components/Seo'; // ▶️ nosso componente SEO
+import { Share2 } from 'lucide-react';
+
 
 // FUNÇÃO 100% CORRIGIDA E FINAL
 const getYouTubeEmbedUrl = (url) => {
@@ -87,6 +89,35 @@ const CarDetail = () => {
     const seoImage = makeAbsoluteUrl(selectedImage || car.main_photo_url || (car.photo_urls && car.photo_urls[0]) || '');
     const seoUrl = `${window.location.origin}/veiculo/${car.slug || slug}`;
 
+
+    const [shareMessage, setShareMessage] = useState('');
+    const handleShare = async () => {
+  const url = window.location.href;
+  // se o navegador tiver share nativo (mobile)
+  if (navigator.share) {
+    try {
+      await navigator.share({
+        title: `${car.brand} ${car.model}`,
+        text: 'Dá uma olhada nesse carro 👇',
+        url,
+      });
+      return;
+    } catch (e) {
+      // se cancelar, só ignora
+    }
+  }
+
+  // fallback: copia link
+  try {
+    await navigator.clipboard.writeText(url);
+    setShareMessage('Link copiado!');
+    setTimeout(() => setShareMessage(''), 3000);
+  } catch (e) {
+    setShareMessage('Não deu pra copiar, copie manualmente.');
+    setTimeout(() => setShareMessage(''), 3000);
+  }
+};
+
     return (
         <>
             <Seo title={seoTitle} description={seoDescription} image={seoImage} url={seoUrl} />
@@ -95,10 +126,25 @@ const CarDetail = () => {
                 <BackgroundShape />
                 <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
                     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
-                            <h1 className="text-4xl md:text-5xl font-extrabold text-gray-900 tracking-tight">{car.brand} <span className="font-light">{car.model}</span></h1>
-                            <span className="text-3xl md:text-4xl font-bold text-gray-900 mt-2 md:mt-0">{priceFormatted}</span>
-                        </div>
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+  <h1 className="text-4xl md:text-5xl font-extrabold text-gray-900 tracking-tight">
+    {car.brand} <span className="font-light">{car.model}</span>
+  </h1>
+
+  <div className="flex items-center gap-3">
+    <span className="text-3xl md:text-4xl font-bold text-gray-900">{priceFormatted}</span>
+
+    <Button
+      onClick={handleShare}
+      variant="outline"
+      className="flex items-center gap-2 border-gray-200 hover:border-yellow-400 hover:text-yellow-600"
+    >
+      <Share2 className="w-4 h-4" />
+      Compartilhar
+    </Button>
+  </div>
+</div>
+
                         <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 items-start">
                             <div className="lg:col-span-3">
                                 <AnimatePresence mode="wait">

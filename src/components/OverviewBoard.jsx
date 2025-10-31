@@ -1,22 +1,12 @@
 // src/components/OverviewBoard.jsx
 import React, { useEffect, useMemo, useState } from 'react';
-import { Search, ExternalLink, ArrowUp, ArrowDown, X } from 'lucide-react';
+import { Search, ExternalLink, ArrowUp, ArrowDown, X, SlidersHorizontal } from 'lucide-react';
 import {
   getCars,
   getPlatforms,
   getPublicationsForCars,
   updatePlatformOrder,
-  // para o modal interno:
-  getPublicationsByCar,
-  getExpensesByCar,
-  addPublication,
-  addExpense,
-  updateCar,
-  getFipeForCar,
 } from '@/lib/car-api';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { toast } from '@/components/ui/use-toast';
 
 const EXCLUDE_COL_NAMES = ['indicação', 'indicacao'];
 
@@ -28,6 +18,7 @@ const Money = (v) =>
 
 const normalize = (s = '') => String(s || '').trim().toLowerCase();
 
+// pega foto igual usamos em outras telas
 const getCarImage = (car) => {
   return (
     car.main_photo_url ||
@@ -40,6 +31,7 @@ const getCarImage = (car) => {
   );
 };
 
+// detectar se é anúncio (pra pintar)
 const isAdPlatformName = (name = '') => {
   const n = name.toLowerCase();
   return (
@@ -52,7 +44,7 @@ const isAdPlatformName = (name = '') => {
   );
 };
 
-const OverviewBoard = () => {
+const OverviewBoard = ({ onOpenGestaoForCar = () => {} }) => {
   const [cars, setCars] = useState([]);
   const [platforms, setPlatforms] = useState([]);
   const [pubsMap, setPubsMap] = useState({});
@@ -63,32 +55,10 @@ const OverviewBoard = () => {
   const [orderModalOpen, setOrderModalOpen] = useState(false);
   const [orderingPlatforms, setOrderingPlatforms] = useState([]);
 
-  // modal interno de gestão
-  const [gestaoOpen, setGestaoOpen] = useState(false);
-  const [gestaoTab, setGestaoTab] = useState('marketplaces');
-  const [gestaoCar, setGestaoCar] = useState(null);
-  const [gestaoPubs, setGestaoPubs] = useState([]);
-  const [gestaoExps, setGestaoExps] = useState([]);
-  const [gestaoFinance, setGestaoFinance] = useState({
-    fipe_value: '',
-    commission: '',
-    return_to_seller: '',
-  });
-  const [pubForm, setPubForm] = useState({
-    platform_id: '',
-    link: '',
-    spent: '',
-    status: 'active',
-    published_at: '',
-    notes: '',
-  });
-  const [expForm, setExpForm] = useState({
-    category: '',
-    amount: '',
-    charged_value: '',
-    incurred_at: '',
-    description: '',
-  });
+  // NOVO: filtros
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [stockFilter, setStockFilter] = useState('all'); // all | stock | sold
+  const [platformFilterId, setPlatformFilterId] = useState(''); // id da plataforma para ver quem NÃO tem
 
   useEffect(() => {
     const run = async () => {
@@ -99,6 +69,7 @@ const OverviewBoard = () => {
         getPlatforms(),
       ]);
 
+      // ordena pelas ordens salvas
       const sortedPlatforms = (platformsRes || [])
         .map((p) => ({ ...p, order: p.order ?? 9999 }))
         .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
@@ -106,6 +77,7 @@ const OverviewBoard = () => {
       setCars(carsRes || []);
       setPlatforms(sortedPlatforms);
 
+      // carrega publicações
       const carIds = (carsRes || []).map((c) => c.id).filter(Boolean);
       if (carIds.length) {
         const pubs = await getPublicationsForCars(carIds);
@@ -115,18 +87,21 @@ const OverviewBoard = () => {
           const cid = p.car_id;
           if (!map[cid]) map[cid] = {};
 
+          // por id da plataforma
           if (p.platform_id) {
             const key = `platform_${p.platform_id}`;
             if (!map[cid][key]) map[cid][key] = [];
             map[cid][key].push(p);
           }
 
+          // por nome
           if (p.platform_name) {
             const n = p.platform_name.toLowerCase();
             if (!map[cid][n]) map[cid][n] = [];
             map[cid][n].push(p);
           }
 
+          // por link
           const link = (p.link || '').toLowerCase();
           if (link.includes('instagram'))
             (map[cid].instagram = map[cid].instagram || []).push(p);
@@ -150,6 +125,7 @@ const OverviewBoard = () => {
     run();
   }, []);
 
+  // montar colunas
   const allColumns = useMemo(() => {
     const list = [];
     (platforms || []).forEach((p) => {
@@ -161,20 +137,51 @@ const OverviewBoard = () => {
         key: `platform_${p.id}`,
         label,
         isAd: isAdPlatformName(label),
+        id: p.id,
       });
     });
     return list;
   }, [platforms]);
 
+  // verifica se carro tem pub naquela coluna
+  const hasPub = (car, col) => {
+    const map = pubsMap[car.id] || {};
+    if (map[col.key] && Array.isArray(map[col.key]) && map[col.key].length > 0) return true;
+    const byName = map[col.label?.toLowerCase()];
+    if (byName && Array.isArray(byName) && byName.length > 0) return true;
+    return false;
+  };
+
+  // filtro
   const filteredCars = useMemo(() => {
     const term = search.trim().toLowerCase();
-    if (!term) return cars;
-    return (cars || []).filter((c) => {
+    let base = cars || [];
+
+    // 1) filtro de status
+    if (stockFilter === 'stock') {
+      // mostrar só não vendidos
+      base = base.filter((c) => !c.is_sold);
+    } else if (stockFilter === 'sold') {
+      base = base.filter((c) => !!c.is_sold);
+    }
+
+    // 2) filtro de plataforma (mostrar quem NÃO tem publicação nela)
+    if (platformFilterId) {
+      const colToCheck = allColumns.find((c) => String(c.id) === String(platformFilterId));
+      if (colToCheck) {
+        base = base.filter((car) => !hasPub(car, colToCheck));
+      }
+    }
+
+    // 3) filtro de texto
+    if (!term) return base;
+    return base.filter((c) => {
       const hay = `${c.brand || ''} ${c.model || ''} ${c.year || ''} ${c.plate || ''}`.toLowerCase();
       return hay.includes(term);
     });
-  }, [cars, search]);
+  }, [cars, search, stockFilter, platformFilterId, allColumns, pubsMap]);
 
+  // modal ordem
   const openOrderModal = () => {
     const base = (platforms || [])
       .map((p) => ({ ...p }))
@@ -215,227 +222,18 @@ const OverviewBoard = () => {
     setOrderModalOpen(false);
   };
 
-  const hasPub = (car, col) => {
-    const map = pubsMap[car.id] || {};
-    if (map[col.key] && Array.isArray(map[col.key]) && map[col.key].length > 0) return true;
-    const byName = map[col.label?.toLowerCase()];
-    if (byName && Array.isArray(byName) && byName.length > 0) return true;
-    return false;
-  };
-
-  // 👇 apertamos tudo aqui
-  const COL_IMG = 110;
-  const COL_VEHICLE = 210;
-  const COL_PRICE = 78;
-  const COL_PLATE = 72;
-  const COL_ACTION = 88;
-  const COL_PLATFORM = 66; // antes 80
-
-  // ====== FUNÇÕES DO MODAL DE GESTÃO ======
-  const marketplacePlatforms = (platforms || []).filter(
-    (p) => p.platform_type === 'marketplace'
-  );
-  const socialPlatforms = (platforms || []).filter((p) => p.platform_type === 'social');
-
-  const openGestao = async (car) => {
-    setGestaoCar(car);
-    setGestaoTab('marketplaces');
-    setGestaoOpen(true);
-
-    try {
-      const [pubs, exps] = await Promise.all([
-        getPublicationsByCar(car.id),
-        getExpensesByCar(car.id),
-      ]);
-      setGestaoPubs(pubs || []);
-      setGestaoExps(exps || []);
-      setGestaoFinance({
-        fipe_value: car.fipe_value ?? '',
-        commission: car.commission ?? '',
-        return_to_seller: car.return_to_seller ?? '',
-      });
-      setPubForm({
-        platform_id: '',
-        link: '',
-        spent: '',
-        status: 'active',
-        published_at: '',
-        notes: '',
-      });
-      setExpForm({
-        category: '',
-        amount: '',
-        charged_value: '',
-        incurred_at: '',
-        description: '',
-      });
-    } catch (err) {
-      console.error(err);
-      setGestaoPubs([]);
-      setGestaoExps([]);
-    }
-  };
-
-  const reloadSingleCarData = async (carId) => {
-    const [carsRes, pubs] = await Promise.all([
-      getCars({ includeSold: true }),
-      getPublicationsForCars([carId]),
-    ]);
-    setCars(carsRes || []);
-    if (pubs && pubs.length) {
-      setPubsMap((prev) => ({
-        ...prev,
-        [carId]: {
-          ...(prev[carId] || {}),
-          ...pubs.reduce((acc, p) => {
-            if (p.platform_id) {
-              const key = `platform_${p.platform_id}`;
-              if (!acc[key]) acc[key] = [];
-              acc[key].push(p);
-            }
-            return acc;
-          }, {}),
-        },
-      }));
-    }
-  };
-
-  const handleSavePub = async () => {
-    if (!gestaoCar) return;
-    try {
-      const payload = {
-        car_id: gestaoCar.id,
-        platform_id: pubForm.platform_id || null,
-        link: pubForm.link || null,
-        spent: pubForm.spent ? Number(pubForm.spent) : null,
-        status: pubForm.status || 'active',
-        published_at: pubForm.published_at || null,
-        notes: pubForm.notes || '',
-      };
-      await addPublication(payload);
-      toast({ title: 'Registro salvo' });
-
-      const [pubs, exps] = await Promise.all([
-        getPublicationsByCar(gestaoCar.id),
-        getExpensesByCar(gestaoCar.id),
-      ]);
-      setGestaoPubs(pubs || []);
-      setGestaoExps(exps || []);
-
-      setPubForm({
-        platform_id: '',
-        link: '',
-        spent: '',
-        status: 'active',
-        published_at: '',
-        notes: '',
-      });
-
-      await reloadSingleCarData(gestaoCar.id);
-    } catch (err) {
-      console.error(err);
-      toast({
-        title: 'Erro ao salvar publicação',
-        description: err.message || String(err),
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const handleSaveExp = async () => {
-    if (!gestaoCar) return;
-    try {
-      const payload = {
-        car_id: gestaoCar.id,
-        category: expForm.category || 'Outros',
-        amount: expForm.amount ? Number(expForm.amount) : 0,
-        charged_value:
-          expForm.charged_value !== '' && expForm.charged_value !== null
-            ? Number(expForm.charged_value)
-            : 0,
-        incurred_at: expForm.incurred_at
-          ? new Date(`${expForm.incurred_at}T00:00:00-03:00`).toISOString()
-          : new Date().toISOString(),
-        description: expForm.description || '',
-      };
-      await addExpense(payload);
-      toast({ title: 'Gasto/Ganho salvo' });
-
-      const [pubs, exps] = await Promise.all([
-        getPublicationsByCar(gestaoCar.id),
-        getExpensesByCar(gestaoCar.id),
-      ]);
-      setGestaoPubs(pubs || []);
-      setGestaoExps(exps || []);
-
-      setExpForm({
-        category: '',
-        amount: '',
-        charged_value: '',
-        incurred_at: '',
-        description: '',
-      });
-
-      await reloadSingleCarData(gestaoCar.id);
-    } catch (err) {
-      console.error(err);
-      toast({
-        title: 'Erro ao salvar gasto/ganho',
-        description: err.message || String(err),
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const handleSaveFinance = async () => {
-    if (!gestaoCar) return;
-    try {
-      await updateCar(gestaoCar.id, {
-        fipe_value:
-          gestaoFinance.fipe_value !== '' ? Number(gestaoFinance.fipe_value) : null,
-        commission: gestaoFinance.commission
-          ? Number(gestaoFinance.commission)
-          : null,
-        return_to_seller: gestaoFinance.return_to_seller
-          ? Number(gestaoFinance.return_to_seller)
-          : null,
-      });
-      toast({ title: 'Financeiro atualizado' });
-      await reloadSingleCarData(gestaoCar.id);
-    } catch (err) {
-      console.error(err);
-      toast({
-        title: 'Erro ao salvar financeiro',
-        description: err.message || String(err),
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const handleFetchFipe = async () => {
-    if (!gestaoCar) return;
-    try {
-      const val = await getFipeForCar(gestaoCar);
-      if (!val) {
-        toast({ title: 'FIPE não encontrada' });
-        return;
-      }
-      setGestaoFinance((prev) => ({ ...prev, fipe_value: val }));
-      toast({ title: 'FIPE carregada' });
-    } catch (err) {
-      console.error(err);
-      toast({
-        title: 'Erro ao buscar FIPE',
-        description: err.message || String(err),
-        variant: 'destructive',
-      });
-    }
-  };
+  // larguras fixas (aumentei um pouco pra não cortar)
+  const COL_IMG = 90;
+  const COL_VEHICLE = 240;
+  const COL_PRICE = 90;
+  const COL_PLATE = 80;
+  const COL_ACTION = 90;
+  const COL_PLATFORM = 80;
 
   return (
     <div className="w-full space-y-4">
       {/* topo */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <div className="relative w-80 max-w-md">
           <Search
             size={15}
@@ -454,14 +252,40 @@ const OverviewBoard = () => {
         >
           Editar ordem das plataformas
         </button>
+        <button
+          onClick={() => setFiltersOpen(true)}
+          className="flex items-center gap-2 bg-white border px-3 py-2 rounded-md text-sm hover:bg-slate-50"
+        >
+          <SlidersHorizontal size={14} /> Filtros
+        </button>
+        {/* info filtro rápido */}
+        {(stockFilter !== 'all' || platformFilterId) && (
+          <span className="text-xs text-slate-500">
+            Filtros ativos:
+            {stockFilter === 'stock' && ' só em estoque'}
+            {stockFilter === 'sold' && ' só vendidos'}
+            {platformFilterId &&
+              ` | faltando na plataforma: ${
+                (allColumns.find((c) => String(c.id) === String(platformFilterId)) || {}).label || ''
+              }`}
+            <button
+              onClick={() => {
+                setStockFilter('all');
+                setPlatformFilterId('');
+              }}
+              className="ml-2 text-[10px] text-red-500 underline"
+            >
+              limpar
+            </button>
+          </span>
+        )}
       </div>
 
       {/* tabela */}
       <div className="bg-white border rounded-md overflow-hidden">
-        {/* 👇 só rolagem vertical, SEM horizontal */}
         <div
-          className="relative"
-          style={{ maxHeight: '72vh', overflowY: 'auto', overflowX: 'hidden' }}
+          className="relative overflow-auto"
+          style={{ maxHeight: '70vh' }}
         >
           <table
             className="text-sm"
@@ -549,13 +373,13 @@ const OverviewBoard = () => {
                       background: col.isAd ? '#fff5dd' : '#f7f7f8',
                       borderBottom: '1px solid #e5e7eb',
                       textAlign: 'center',
-                      padding: '3px 1px',
+                      padding: '4px 2px',
                       position: 'sticky',
                       top: 0,
                       zIndex: 25,
                     }}
                   >
-                    <div className="text-[9.5px] leading-tight text-slate-700 break-words whitespace-normal">
+                    <div className="text-[10px] leading-tight text-slate-700 break-words whitespace-normal">
                       {col.label}
                     </div>
                   </th>
@@ -599,7 +423,7 @@ const OverviewBoard = () => {
                     <tr
                       key={car.id}
                       className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}
-                      style={{ height: 78 }}
+                      style={{ height: 74 }}
                     >
                       {/* foto */}
                       <td
@@ -613,7 +437,7 @@ const OverviewBoard = () => {
                           padding: '6px 4px',
                         }}
                       >
-                        <div className="w-[96px] h-[70px] rounded-md bg-slate-200 overflow-hidden flex items-center justify-center">
+                        <div className="w-[78px] h-[60px] rounded-md bg-slate-200 overflow-hidden flex items-center justify-center">
                           {img ? (
                             <img
                               src={img}
@@ -647,6 +471,11 @@ const OverviewBoard = () => {
                               <span className="text-xs text-slate-400">({car.year})</span>
                             ) : null}
                           </span>
+                          {car.is_sold ? (
+                            <span className="text-[10px] text-red-500 font-semibold mt-0.5">
+                              VENDIDO
+                            </span>
+                          ) : null}
                         </div>
                       </td>
 
@@ -701,11 +530,11 @@ const OverviewBoard = () => {
                                 : idx % 2 === 0
                                 ? '#fff'
                                 : '#f8fafc',
-                              padding: '3px 1px',
+                              padding: '4px 2px',
                             }}
                           >
                             <span
-                              className={`inline-flex items-center justify-center rounded-full text-[9.5px] font-semibold w-[48px] h-[20px] ${
+                              className={`inline-flex items-center justify-center rounded-full text-[10px] font-semibold w-[50px] h-[20px] ${
                                 ok
                                   ? 'bg-emerald-100 text-emerald-700'
                                   : 'bg-rose-100 text-rose-700'
@@ -730,8 +559,8 @@ const OverviewBoard = () => {
                         }}
                       >
                         <button
-                          onClick={() => openGestao(car)}
-                          className="px-3 py-1 rounded-md border text-[10.5px] font-medium hover:bg-slate-50"
+                          onClick={() => onOpenGestaoForCar(car)}
+                          className="px-3 py-1 rounded-md border text-[11px] font-medium hover:bg-slate-50"
                         >
                           Gerenciar
                         </button>
@@ -766,7 +595,7 @@ const OverviewBoard = () => {
       {/* modal de ordem */}
       {orderModalOpen && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-[999]">
-          <div className="bg-white rounded-md shadow-lg w-full max-w-3xl max-h-[90vh] overflow-y-auto p-6">
+          <div className="bg-white rounded-md shadow-lg w-full max-w-3xl max-height-[90vh] overflow-y-auto p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold">Editar ordem das plataformas</h2>
               <button
@@ -827,277 +656,96 @@ const OverviewBoard = () => {
         </div>
       )}
 
-      {/* modal interno de gestão */}
-      <Dialog open={gestaoOpen} onOpenChange={setGestaoOpen}>
-        <DialogContent className="max-w-4xl bg-white text-gray-900">
-          <DialogHeader>
-            <DialogTitle>
-              Gestão —{' '}
-              {gestaoCar
-                ? `${gestaoCar.brand} ${gestaoCar.model} ${gestaoCar.year || ''}`
-                : ''}
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="flex gap-2 mb-4">
-            <button
-              onClick={() => setGestaoTab('marketplaces')}
-              className={`px-3 py-1 rounded ${
-                gestaoTab === 'marketplaces'
-                  ? 'bg-yellow-400 text-black'
-                  : 'bg-gray-100'
-              }`}
-            >
-              Anúncios (Marketplaces)
-            </button>
-            <button
-              onClick={() => setGestaoTab('social')}
-              className={`px-3 py-1 rounded ${
-                gestaoTab === 'social' ? 'bg-yellow-400 text-black' : 'bg-gray-100'
-              }`}
-            >
-              Redes Sociais
-            </button>
-            <button
-              onClick={() => setGestaoTab('expenses')}
-              className={`px-3 py-1 rounded ${
-                gestaoTab === 'expenses' ? 'bg-yellow-400 text-black' : 'bg-gray-100'
-              }`}
-            >
-              Gastos/Ganhos
-            </button>
-            <button
-              onClick={() => setGestaoTab('finance')}
-              className={`px-3 py-1 rounded ${
-                gestaoTab === 'finance' ? 'bg-yellow-400 text-black' : 'bg-gray-100'
-              }`}
-            >
-              Financeiro
-            </button>
-          </div>
-
-          {gestaoTab === 'marketplaces' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-3">
-                <select
-                  value={pubForm.platform_id}
-                  onChange={(e) => setPubForm((p) => ({ ...p, platform_id: e.target.value }))}
-                  className="w-full border rounded px-2 py-2"
-                >
-                  <option value="">Plataforma (Marketplaces)</option>
-                  {marketplacePlatforms.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  value={pubForm.spent}
-                  onChange={(e) => setPubForm((p) => ({ ...p, spent: e.target.value }))}
-                  placeholder="Gasto (R$)"
-                  type="number"
-                  className="w-full border rounded px-2 py-2"
-                />
-                <input
-                  value={pubForm.link}
-                  onChange={(e) => setPubForm((p) => ({ ...p, link: e.target.value }))}
-                  placeholder="Link do anúncio"
-                  className="w-full border rounded px-2 py-2"
-                />
-                <Button onClick={handleSavePub} className="bg-yellow-400 text-black w-full">
-                  Salvar anúncio
-                </Button>
-              </div>
-
-              <div className="border rounded-lg p-2 max-h-64 overflow-y-auto">
-                {(gestaoPubs || [])
-                  .filter((p) => {
-                    const pf = platforms.find((pl) => pl.id === p.platform_id);
-                    return pf?.platform_type === 'marketplace';
-                  })
-                  .map((p) => {
-                    const pf = platforms.find((pl) => pl.id === p.platform_id);
-                    return (
-                      <div
-                        key={p.id}
-                        className="flex justify-between items-center border-b last:border-b-0 py-2"
-                      >
-                        <div>
-                          <p className="text-sm font-semibold">{pf ? pf.name : '---'}</p>
-                          <p className="text-xs text-gray-500">
-                            Gasto: {Money(p.spent)} | {p.status}
-                          </p>
-                        </div>
-                      </div>
-                    );
-                  })}
-              </div>
+      {/* modal de filtros */}
+      {filtersOpen && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-[999]">
+          <div className="bg-white rounded-md shadow-lg w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">Filtros da Matriz</h2>
+              <button
+                onClick={() => setFiltersOpen(false)}
+                className="p-1 rounded hover:bg-slate-100"
+              >
+                <X size={18} />
+              </button>
             </div>
-          )}
 
-          {gestaoTab === 'social' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-3">
-                <select
-                  value={pubForm.platform_id}
-                  onChange={(e) => setPubForm((p) => ({ ...p, platform_id: e.target.value }))}
-                  className="w-full border rounded px-2 py-2"
-                >
-                  <option value="">Plataforma (Redes Sociais)</option>
-                  {socialPlatforms.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  value={pubForm.link}
-                  onChange={(e) => setPubForm((p) => ({ ...p, link: e.target.value }))}
-                  placeholder="Link da publicação"
-                  className="w-full border rounded px-2 py-2"
-                />
-                <Button onClick={handleSavePub} className="bg-yellow-400 text-black w-full">
-                  Salvar publicação
-                </Button>
-              </div>
-
-              <div className="border rounded-lg p-2 max-h-64 overflow-y-auto">
-                {(gestaoPubs || [])
-                  .filter((p) => {
-                    const pf = platforms.find((pl) => pl.id === p.platform_id);
-                    return pf?.platform_type !== 'marketplace';
-                  })
-                  .map((p) => {
-                    const pf = platforms.find((pl) => pl.id === p.platform_id);
-                    return (
-                      <div
-                        key={p.id}
-                        className="flex justify-between items-center border-b last:border-b-0 py-2"
-                      >
-                        <div>
-                          <p className="text-sm font-semibold">{pf ? pf.name : '---'}</p>
-                          <p className="text-xs text-gray-500">{p.link || 'Sem link'}</p>
-                        </div>
-                      </div>
-                    );
-                  })}
-              </div>
-            </div>
-          )}
-
-          {gestaoTab === 'expenses' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-3">
-                <input
-                  value={expForm.category}
-                  onChange={(e) => setExpForm((p) => ({ ...p, category: e.target.value }))}
-                  placeholder="Categoria"
-                  className="w-full border rounded px-2 py-2"
-                />
-                <input
-                  value={expForm.amount}
-                  onChange={(e) => setExpForm((p) => ({ ...p, amount: e.target.value }))}
-                  placeholder="Gasto (R$)"
-                  type="number"
-                  className="w-full border rounded px-2 py-2"
-                />
-                <input
-                  value={expForm.charged_value}
-                  onChange={(e) => setExpForm((p) => ({ ...p, charged_value: e.target.value }))}
-                  placeholder="Valor cobrado (R$)"
-                  type="number"
-                  className="w-full border rounded px-2 py-2"
-                />
-                <input
-                  value={expForm.incurred_at}
-                  onChange={(e) => setExpForm((p) => ({ ...p, incurred_at: e.target.value }))}
-                  type="date"
-                  className="w-full border rounded px-2 py-2"
-                />
-                <input
-                  value={expForm.description}
-                  onChange={(e) => setExpForm((p) => ({ ...p, description: e.target.value }))}
-                  placeholder="Descrição"
-                  className="w-full border rounded px-2 py-2"
-                />
-                <Button onClick={handleSaveExp} className="bg-yellow-400 text-black w-full">
-                  Salvar gasto/ganho
-                </Button>
-              </div>
-
-              <div className="border rounded-lg p-2 max-h-64 overflow-y-auto">
-                {(gestaoExps || []).map((e) => (
-                  <div
-                    key={e.id}
-                    className="flex justify-between items-center border-b last:border-b-0 py-2"
-                  >
-                    <div>
-                      <p className="text-sm font-semibold">{e.category}</p>
-                      <p className="text-xs text-gray-500">
-                        Gasto: {Money(e.amount)}{' '}
-                        {e.charged_value ? `| Cobrado: ${Money(e.charged_value)}` : ''}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {gestaoTab === 'finance' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-3">
-                <div className="flex gap-2 items-center">
-                  <input
-                    value={gestaoFinance.fipe_value}
-                    onChange={(e) =>
-                      setGestaoFinance((p) => ({ ...p, fipe_value: e.target.value }))
-                    }
-                    placeholder="Valor FIPE"
-                    type="number"
-                    className="w-full border rounded px-2 py-2"
-                  />
-                  <Button
-                    type="button"
-                    onClick={handleFetchFipe}
-                    className="bg-gray-100 text-gray-900 border border-gray-200"
-                  >
-                    Buscar FIPE
-                  </Button>
+            <div className="space-y-4">
+              <div>
+                <p className="text-xs text-slate-500 mb-2">Status do veículo</p>
+                <div className="flex flex-col gap-1 text-sm">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="stockFilter"
+                      value="all"
+                      checked={stockFilter === 'all'}
+                      onChange={() => setStockFilter('all')}
+                    />
+                    Mostrar todos
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="stockFilter"
+                      value="stock"
+                      checked={stockFilter === 'stock'}
+                      onChange={() => setStockFilter('stock')}
+                    />
+                    Somente em estoque (não vendidos)
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="stockFilter"
+                      value="sold"
+                      checked={stockFilter === 'sold'}
+                      onChange={() => setStockFilter('sold')}
+                    />
+                    Somente vendidos
+                  </label>
                 </div>
-                <input
-                  value={gestaoFinance.commission}
-                  onChange={(e) =>
-                    setGestaoFinance((p) => ({ ...p, commission: e.target.value }))
-                  }
-                  placeholder="Comissão (R$)"
-                  type="number"
-                  className="w-full border rounded px-2 py-2"
-                />
-                <input
-                  value={gestaoFinance.return_to_seller}
-                  onChange={(e) =>
-                    setGestaoFinance((p) => ({ ...p, return_to_seller: e.target.value }))
-                  }
-                  placeholder="Devolver ao cliente (R$)"
-                  type="number"
-                  className="w-full border rounded px-2 py-2"
-                />
-                <Button onClick={handleSaveFinance} className="bg-yellow-400 text-black w-full">
-                  Salvar financeiro
-                </Button>
               </div>
-              <div className="bg-gray-50 rounded-lg p-4 text-sm">
-                <p className="font-semibold mb-2">Observação:</p>
-                <p className="text-gray-600">
-                  Esses dados ficam salvos direto no veículo. Ao fechar o modal a tabela da Matriz
-                  já reflete essas mudanças.
+
+              <div>
+                <p className="text-xs text-slate-500 mb-2">
+                  Plataforma (mostrar só veículos que AINDA NÃO estão nessa plataforma)
                 </p>
+                <select
+                  value={platformFilterId}
+                  onChange={(e) => setPlatformFilterId(e.target.value)}
+                  className="w-full border rounded-md px-2 py-2 text-sm"
+                >
+                  <option value="">— não filtrar por plataforma —</option>
+                  {allColumns.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
-          )}
-        </DialogContent>
-      </Dialog>
+
+            <div className="flex justify-end gap-2 mt-6">
+              <button
+                onClick={() => {
+                  setStockFilter('all');
+                  setPlatformFilterId('');
+                }}
+                className="text-sm text-slate-500 underline"
+              >
+                Limpar tudo
+              </button>
+              <button
+                onClick={() => setFiltersOpen(false)}
+                className="px-4 py-2 rounded-md bg-yellow-400 hover:bg-yellow-500 text-sm font-medium"
+              >
+                Aplicar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

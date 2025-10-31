@@ -14,7 +14,7 @@ import {
   getPublicationsForCars,
   getExpensesForCars,
   updateCar,
-  getFipeForCar, // agora existe no car-api
+  getFipeForCar,
 } from '@/lib/car-api';
 import { X, Megaphone, Wallet, DollarSign, PenSquare } from 'lucide-react';
 
@@ -84,41 +84,35 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
   const isoFromDateTime = (dateStr, timeStr) => {
     if (!dateStr) return null;
     const t = timeStr || '00:00';
-    // monta ISO já considerando horário digitado
     const iso = new Date(`${dateStr}T${t}:00-03:00`).toISOString();
     return iso;
   };
 
-  // diferença em dias (ignorando fuso):
-// - se tiver sold_at → conta da entry_at até o dia da venda (inclusivo no sentido "até esse dia")
-// - se não tiver sold_at → conta até hoje
-const diffInDays = (car) => {
-  if (!car) return '-';
+  // diferença em dias
+  const diffInDays = (car) => {
+    if (!car) return '-';
 
-  const startIso = car.entry_at || car.entered_at;
-  if (!startIso) return '-';
+    const startIso = car.entry_at || car.entered_at;
+    if (!startIso) return '-';
 
-  // pega só a parte da data
-  const startStr = String(startIso).slice(0, 10); // "2025-06-25"
-  const startDate = new Date(`${startStr}T00:00:00`);
+    const startStr = String(startIso).slice(0, 10);
+    const startDate = new Date(`${startStr}T00:00:00`);
 
-  // se vendido, usa o dia da venda; senão, hoje
-  let endDate;
-  if (car.sold_at) {
-    const soldStr = String(car.sold_at).slice(0, 10); // "2025-10-25"
-    endDate = new Date(`${soldStr}T00:00:00`);
-  } else {
-    const today = new Date();
-    const todayStr = today.toISOString().slice(0, 10);
-    endDate = new Date(`${todayStr}T00:00:00`);
-  }
+    let endDate;
+    if (car.sold_at) {
+      const soldStr = String(car.sold_at).slice(0, 10);
+      endDate = new Date(`${soldStr}T00:00:00`);
+    } else {
+      const today = new Date();
+      const todayStr = today.toISOString().slice(0, 10);
+      endDate = new Date(`${todayStr}T00:00:00`);
+    }
 
-  const ms = endDate.getTime() - startDate.getTime();
-  const days = Math.floor(ms / (1000 * 60 * 60 * 24));
+    const ms = endDate.getTime() - startDate.getTime();
+    const days = Math.floor(ms / (1000 * 60 * 60 * 24));
 
-  return `${days} dia(s) em estoque`;
-};
-
+    return `${days} dia(s) em estoque`;
+  };
 
   const dispatchGlobalUpdate = async () => {
     await refreshAll();
@@ -138,7 +132,7 @@ const diffInDays = (car) => {
     })();
   }, []);
 
-  // montar mapa de resumo (anúncios / redes / gastos) de todos os carros
+  // montar mapa de resumo
   useEffect(() => {
     const ids = (cars || []).map((c) => c.id).filter(Boolean);
     if (!ids.length) {
@@ -431,7 +425,7 @@ const diffInDays = (car) => {
     }
   };
 
-  // abrir mini-modal de entrada (com posição)
+  // abrir mini-modal de entrada (com posição melhor)
   const openEntryMini = (car, e) => {
     const d = car.entry_at ? new Date(car.entry_at) : new Date();
     setEntryDate(d.toISOString().slice(0, 10));
@@ -441,13 +435,22 @@ const diffInDays = (car) => {
     const scrollY = window.scrollY || document.documentElement.scrollTop;
     const scrollX = window.scrollX || document.documentElement.scrollLeft;
     const modalWidth = 280;
+    const modalHeight = 190; // aproximado
     const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
 
-    let top = rect.top + scrollY + 4;
+    // nasce logo abaixo do botão
+    let top = rect.bottom + scrollY + 8;
     let left = rect.left + scrollX;
 
+    // se não couber pra direita, cola na direita visível
     if (left + modalWidth + 8 > viewportWidth + scrollX) {
       left = viewportWidth + scrollX - modalWidth - 8;
+    }
+
+    // se estiver muito pra baixo (quase fora), sobe pra cima do botão
+    if (top + modalHeight > viewportHeight + scrollY) {
+      top = rect.top + scrollY - modalHeight - 8;
     }
 
     setEntryPos({ top, left });
@@ -472,7 +475,7 @@ const diffInDays = (car) => {
     }
   };
 
-  // abrir mini-modal de entrega (com posição)
+  // abrir mini-modal de entrega (com posição melhor)
   const openDeliverMini = (car, e) => {
     const d = car.delivered_at ? new Date(car.delivered_at) : new Date();
     setDeliverDate(d.toISOString().slice(0, 10));
@@ -482,13 +485,19 @@ const diffInDays = (car) => {
     const scrollY = window.scrollY || document.documentElement.scrollTop;
     const scrollX = window.scrollX || document.documentElement.scrollLeft;
     const modalWidth = 280;
+    const modalHeight = 190;
     const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
 
-    let top = rect.top + scrollY + 4;
+    let top = rect.bottom + scrollY + 8;
     let left = rect.left + scrollX;
 
     if (left + modalWidth + 8 > viewportWidth + scrollX) {
       left = viewportWidth + scrollX - modalWidth - 8;
+    }
+
+    if (top + modalHeight > viewportHeight + scrollY) {
+      top = rect.top + scrollY - modalHeight - 8;
     }
 
     setDeliverPos({ top, left });
@@ -539,7 +548,6 @@ const diffInDays = (car) => {
       );
     });
 
-    // aplicar ordenação
     if (sortBy === 'days') {
       list = [...list].sort((a, b) => {
         const da = a.entry_at ? new Date(a.entry_at).getTime() : Date.now();
@@ -721,42 +729,35 @@ const diffInDays = (car) => {
                       </button>
                     )}
                     {isSold && (
-  <p className="text-xs text-red-600">
-    {(() => {
-      const raw = car.sold_at;
-      if (!raw) return 'Vendido';
-
-      // raw pode vir: "2025-10-25 00:00:00+00" ou "2025-10-25T00:00:00+00:00"
-      const clean = String(raw).replace('T', ' ').trim();
-
-      // pega só a parte da data (primeiros 10 chars = YYYY-MM-DD)
-      const y = clean.slice(0, 4);
-      const m = clean.slice(5, 7);
-      const d = clean.slice(8, 10);
-
-      // se por algum motivo não vier assim, mostra cru
-      if (!y || !m || !d) {
-        return `Vendido em ${raw} — ${
-          car.sale_price
-            ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
-                car.sale_price
-              )
-            : ''
-        }`;
-      }
-
-      const dataBR = `${d}/${m}/${y}`;
-      const preco = car.sale_price
-        ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
-            car.sale_price
-          )
-        : '';
-
-      return `Vendido em ${dataBR}${preco ? ` — ${preco}` : ''}`;
-    })()}
-  </p>
-)}
-
+                      <p className="text-xs text-red-600">
+                        {(() => {
+                          const raw = car.sold_at;
+                          if (!raw) return 'Vendido';
+                          const clean = String(raw).replace('T', ' ').trim();
+                          const y = clean.slice(0, 4);
+                          const m = clean.slice(5, 7);
+                          const d = clean.slice(8, 10);
+                          if (!y || !m || !d) {
+                            return `Vendido em ${raw} — ${
+                              car.sale_price
+                                ? new Intl.NumberFormat('pt-BR', {
+                                    style: 'currency',
+                                    currency: 'BRL',
+                                  }).format(car.sale_price)
+                                : ''
+                            }`;
+                          }
+                          const dataBR = `${d}/${m}/${y}`;
+                          const preco = car.sale_price
+                            ? new Intl.NumberFormat('pt-BR', {
+                                style: 'currency',
+                                currency: 'BRL',
+                              }).format(car.sale_price)
+                            : '';
+                          return `Vendido em ${dataBR}${preco ? ` — ${preco}` : ''}`;
+                        })()}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>

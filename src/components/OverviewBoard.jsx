@@ -261,13 +261,11 @@ const OverviewBoard = () => {
     return false;
   };
 
-  // larguras
+  // larguras — agora só 2 colunas fixas à esquerda
   const COL_IMG = 110;
-  const COL_VEHICLE = 210;
-  const COL_PRICE = 78;
-  const COL_PLATE = 72;
+  const COL_VEHICLE = 260; // aumentei pra caber nome + preço + placa
   const COL_ACTION = 88;
-  const COL_PLATFORM = 66;
+  const COL_PLATFORM = 62; // dei uma apertada
 
   const marketplacePlatforms = (platforms || []).filter(
     (p) => p.platform_type === 'marketplace'
@@ -518,7 +516,6 @@ const OverviewBoard = () => {
 
       {/* tabela */}
       <div className="bg-white border rounded-md overflow-hidden">
-        {/* AQUI era overflowX: 'hidden' — trocamos pra 'auto' */}
         <div
           className="relative"
           style={{
@@ -551,7 +548,7 @@ const OverviewBoard = () => {
                     borderBottom: '1px solid #e5e7eb',
                   }}
                 />
-                {/* veículo */}
+                {/* veículo (com preço e placa dentro) */}
                 <th
                   style={{
                     position: 'sticky',
@@ -567,41 +564,7 @@ const OverviewBoard = () => {
                     padding: '6px 8px',
                   }}
                 >
-                  Veículo
-                </th>
-                {/* preço */}
-                <th
-                  style={{
-                    position: 'sticky',
-                    top: 0,
-                    left: COL_IMG + COL_VEHICLE,
-                    width: COL_PRICE,
-                    minWidth: COL_PRICE,
-                    background: '#ffffff',
-                    zIndex: 50,
-                    borderBottom: '1px solid #e5e7eb',
-                    textAlign: 'center',
-                    fontSize: '0.7rem',
-                  }}
-                >
-                  Preço
-                </th>
-                {/* placa */}
-                <th
-                  style={{
-                    position: 'sticky',
-                    top: 0,
-                    left: COL_IMG + COL_VEHICLE + COL_PRICE,
-                    width: COL_PLATE,
-                    minWidth: COL_PLATE,
-                    background: '#ffffff',
-                    zIndex: 50,
-                    borderBottom: '1px solid #e5e7eb',
-                    textAlign: 'center',
-                    fontSize: '0.7rem',
-                  }}
-                >
-                  Placa
+                  Veículo / Preço / Placa
                 </th>
 
                 {/* plataformas */}
@@ -649,7 +612,7 @@ const OverviewBoard = () => {
               {loading && (
                 <tr>
                   <td
-                    colSpan={4 + allColumns.length + 1}
+                    colSpan={2 + allColumns.length + 1}
                     className="py-6 text-center text-slate-400 text-sm"
                   >
                     Carregando veículos e publicações...
@@ -693,7 +656,7 @@ const OverviewBoard = () => {
                         </div>
                       </td>
 
-                      {/* veículo */}
+                      {/* veículo + preço + placa */}
                       <td
                         style={{
                           position: 'sticky',
@@ -705,48 +668,22 @@ const OverviewBoard = () => {
                           padding: '6px 8px',
                         }}
                       >
-                        <div className="flex flex-col leading-tight">
+                        <div className="flex flex-col leading-tight gap-[2px]">
                           <span className="font-medium text-[12.5px] text-slate-800 truncate">
                             {car.brand} {car.model}{' '}
                             {car.year ? (
                               <span className="text-xs text-slate-400">({car.year})</span>
                             ) : null}
                           </span>
+                          <div className="flex items-center gap-3 text-[10.5px] text-slate-500">
+                            <span>
+                              {car.price ? Money(car.price) : '--'}
+                            </span>
+                            <span className="text-slate-400">
+                              {car.plate || '--'}
+                            </span>
+                          </div>
                         </div>
-                      </td>
-
-                      {/* preço */}
-                      <td
-                        style={{
-                          position: 'sticky',
-                          left: COL_IMG + COL_VEHICLE,
-                          background: idx % 2 === 0 ? '#fff' : '#f8fafc',
-                          width: COL_PRICE,
-                          minWidth: COL_PRICE,
-                          zIndex: 40,
-                          textAlign: 'center',
-                          padding: '4px 2px',
-                        }}
-                        className="text-[11px] text-slate-700"
-                      >
-                        {car.price ? Money(car.price) : '--'}
-                      </td>
-
-                      {/* placa */}
-                      <td
-                        style={{
-                          position: 'sticky',
-                          left: COL_IMG + COL_VEHICLE + COL_PRICE,
-                          background: idx % 2 === 0 ? '#fff' : '#f8fafc',
-                          width: COL_PLATE,
-                          minWidth: COL_PLATE,
-                          zIndex: 40,
-                          textAlign: 'center',
-                          padding: '4px 2px',
-                        }}
-                        className="text-[11px] text-slate-600"
-                      >
-                        {car.plate || '--'}
                       </td>
 
                       {/* plataformas */}
@@ -816,7 +753,7 @@ const OverviewBoard = () => {
               {!loading && filteredCars.length === 0 && (
                 <tr>
                   <td
-                    colSpan={4 + allColumns.length + 1}
+                    colSpan={2 + allColumns.length + 1}
                     className="py-6 text-center text-slate-400 text-sm"
                   >
                     Nenhum veículo encontrado.

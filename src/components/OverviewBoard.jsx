@@ -18,7 +18,6 @@ import {
 } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 
-// se mudar cor aqui, muda tudo
 const AMBER = '#F5C301';
 
 const OverviewBoard = () => {
@@ -35,10 +34,10 @@ const OverviewBoard = () => {
   const [orderingList, setOrderingList] = useState([]);
   const [savingOrder, setSavingOrder] = useState(false);
 
-  // modal GERENCIAR
+  // modal gerenciar
   const [showManageModal, setShowManageModal] = useState(false);
   const [manageCar, setManageCar] = useState(null);
-  const [manageTab, setManageTab] = useState('marketplace'); // marketplace | social
+  const [manageTab, setManageTab] = useState('marketplace');
   const [selectedPlatformId, setSelectedPlatformId] = useState('');
   const [manageLink, setManageLink] = useState('');
   const [manageSpent, setManageSpent] = useState('');
@@ -54,7 +53,6 @@ const OverviewBoard = () => {
 
         setCars(carsData || []);
 
-        // ordena plataformas levando em conta coluna "order"
         const orderedPlatforms = [...(platformsData || [])].sort((a, b) => {
           if (a.order != null && b.order != null) return a.order - b.order;
           if (a.order != null) return -1;
@@ -63,7 +61,6 @@ const OverviewBoard = () => {
         });
         setPlatforms(orderedPlatforms);
 
-        // pega publicações e gastos
         const carIds = (carsData || []).map((c) => c.id);
         if (carIds.length > 0) {
           const [pubs, exps] = await Promise.all([
@@ -86,7 +83,6 @@ const OverviewBoard = () => {
     loadAll();
   }, []);
 
-  // carros filtrados
   const filteredCars = useMemo(() => {
     let list = [...(cars || [])];
     if (searchTerm.trim() !== '') {
@@ -99,14 +95,12 @@ const OverviewBoard = () => {
     return list;
   }, [cars, searchTerm]);
 
-  // função pra achar publicação do carro em determinada plataforma
   const getCarPublicationOnPlatform = (carId, platformId) => {
     return (publications || []).find(
       (pub) => pub.car_id === carId && pub.platform_id === platformId
     );
   };
 
-  // abrir modal de ordem (agora é UMA lista só)
   const openOrderModal = () => {
     setOrderingList([...platforms].map((p) => ({ ...p })));
     setShowOrderModal(true);
@@ -125,10 +119,10 @@ const OverviewBoard = () => {
   const handleSaveOrder = async () => {
     try {
       setSavingOrder(true);
-      const updates = [];
-      orderingList.forEach((p, idx) => {
-        updates.push({ id: p.id, order: idx + 1 });
-      });
+      const updates = orderingList.map((p, idx) => ({
+        id: p.id,
+        order: idx + 1,
+      }));
 
       const { error } = await updatePlatformOrder(updates);
       if (error) {
@@ -141,7 +135,6 @@ const OverviewBoard = () => {
         return;
       }
 
-      // recarrega
       const refreshed = await getPlatforms();
       const reordered = [...(refreshed || [])].sort((a, b) => {
         if (a.order != null && b.order != null) return a.order - b.order;
@@ -168,7 +161,6 @@ const OverviewBoard = () => {
     }
   };
 
-  // abrir modal GERENCIAR
   const openManage = (car) => {
     setManageCar(car);
     setManageTab('marketplace');
@@ -178,7 +170,6 @@ const OverviewBoard = () => {
     setShowManageModal(true);
   };
 
-  // salvar publicação pelo modal
   const handleSavePublication = async () => {
     if (!manageCar || !selectedPlatformId) {
       toast({
@@ -197,7 +188,7 @@ const OverviewBoard = () => {
         platform_name: plat?.name ?? null,
         platform_type: plat?.platform_type ?? null,
         link: manageLink || null,
-        spent: manageSpent ? Number(manageSpent) : null,
+        spent: manageTab === 'marketplace' && manageSpent ? Number(manageSpent) : null,
         status: 'active',
       };
 
@@ -212,7 +203,6 @@ const OverviewBoard = () => {
         return;
       }
 
-      // recarrega só as publicações
       const carIds = (cars || []).map((c) => c.id);
       if (carIds.length > 0) {
         const pubs = await getPublicationsForCars(carIds);
@@ -224,7 +214,6 @@ const OverviewBoard = () => {
         description: 'Publicação registrada.',
       });
 
-      // limpa campos
       setSelectedPlatformId('');
       setManageLink('');
       setManageSpent('');
@@ -271,23 +260,22 @@ const OverviewBoard = () => {
     }
   };
 
-  // função pra pegar imagem de forma resiliente
+  // >>>>>>>>>>>> FOTO igual gestão
   const getCarImage = (car) => {
     return (
       car.main_image_url ||
       car.image_url ||
       car.cover_url ||
       car.photo_url ||
-      car.thumbnail_url ||
       car.featured_image ||
-      car.image ||
+      (Array.isArray(car.images) && car.images.length > 0 ? car.images[0] : null) ||
+      (Array.isArray(car.photos) && car.photos.length > 0 ? car.photos[0] : null) ||
       null
     );
   };
 
   return (
     <div className="mt-6">
-      {/* título */}
       <div className="mb-4">
         <h2 className="text-lg font-semibold text-gray-900">Matriz de Publicações</h2>
         <p className="text-sm text-gray-500">
@@ -295,7 +283,6 @@ const OverviewBoard = () => {
         </p>
       </div>
 
-      {/* barra de busca + botão ordem */}
       <div className="flex flex-wrap gap-3 mb-4 items-center">
         <div className="flex items-center gap-2 px-3 py-2 bg-white rounded-md border min-w-[280px] shadow-sm">
           <Search size={16} className="text-gray-400" />
@@ -317,7 +304,7 @@ const OverviewBoard = () => {
         </button>
       </div>
 
-      {/* TABELA */}
+      {/* tabela */}
       <div className="bg-white border rounded-lg shadow-sm overflow-hidden">
         <div
           className="max-h-[540px] overflow-y-auto overflow-x-hidden"
@@ -326,29 +313,31 @@ const OverviewBoard = () => {
           <table className="min-w-full text-sm">
             <thead className="bg-gray-50 sticky top-0 z-20">
               <tr>
-                <th className="px-4 py-3 text-left w-[280px] text-xs font-semibold text-gray-500 bg-gray-50">
+                <th className="px-4 py-3 text-left w-[260px] text-xs font-semibold text-gray-500 bg-gray-50">
                   Veículo
                 </th>
-                <th className="px-4 py-3 text-left w-[110px] text-xs font-semibold text-gray-500 bg-gray-50">
+                <th className="px-3 py-3 text-left w-[90px] text-xs font-semibold text-gray-500 bg-gray-50">
                   Preço
                 </th>
-                <th className="px-4 py-3 text-left w-[90px] text-xs font-semibold text-gray-500 bg-gray-50">
+                <th className="px-3 py-3 text-left w-[80px] text-xs font-semibold text-gray-500 bg-gray-50">
                   Placa
                 </th>
                 {platforms.map((p) => (
                   <th
                     key={p.id}
-                    className="px-3 py-3 text-left text-xs font-semibold text-gray-600 whitespace-nowrap"
+                    className="px-2 py-3 text-left text-xs font-semibold text-gray-600 whitespace-nowrap"
                     style={{
-                      minWidth: 80,
+                      minWidth: 70,
                       backgroundColor:
-                        p.platform_type === 'marketplace' ? 'rgba(245, 195, 1, 0.16)' : '#f9fafb',
+                        p.platform_type === 'marketplace'
+                          ? 'rgba(245, 195, 1, 0.16)'
+                          : '#f9fafb',
                     }}
                   >
                     {p.name}
                   </th>
                 ))}
-                <th className="px-4 py-3 text-left w-[90px] text-xs font-semibold text-gray-500 bg-gray-50">
+                <th className="px-3 py-3 text-left w-[90px] text-xs font-semibold text-gray-500 bg-gray-50">
                   Ações
                 </th>
               </tr>
@@ -373,7 +362,7 @@ const OverviewBoard = () => {
                     <tr key={car.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}>
                       <td className="px-4 py-3">
                         <div className="flex gap-3 items-center">
-                          <div className="w-16 h-12 rounded-md overflow-hidden bg-gray-200 flex items-center justify-center flex-shrink-0">
+                          <div className="w-14 h-11 rounded-md overflow-hidden bg-gray-200 flex items-center justify-center flex-shrink-0">
                             {img ? (
                               <img
                                 src={img}
@@ -394,7 +383,7 @@ const OverviewBoard = () => {
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                      <td className="px-3 py-3 text-sm text-gray-900 whitespace-nowrap">
                         {car.price ? (
                           <>
                             R{'$ '}
@@ -406,17 +395,16 @@ const OverviewBoard = () => {
                           <span className="text-gray-400 text-xs">--</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-900">
+                      <td className="px-3 py-3 text-sm text-gray-900">
                         {car.plate || <span className="text-gray-400 text-xs">---</span>}
                       </td>
 
-                      {/* todas as plataformas */}
                       {platforms.map((p) => {
                         const pub = getCarPublicationOnPlatform(car.id, p.id);
                         return (
                           <td
                             key={p.id}
-                            className="px-3 py-3"
+                            className="px-2 py-3"
                             style={{
                               backgroundColor:
                                 p.platform_type === 'marketplace'
@@ -437,7 +425,7 @@ const OverviewBoard = () => {
                         );
                       })}
 
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-3">
                         <button
                           onClick={() => openManage(car)}
                           className="text-xs text-[#d3a301] hover:underline"
@@ -454,7 +442,7 @@ const OverviewBoard = () => {
         </div>
       </div>
 
-      {/* MODAL DE ORDEM */}
+      {/* MODAL ORDEM */}
       {showOrderModal && (
         <div className="fixed inset-0 bg-black/25 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-lg w-full max-w-xl p-5 relative">
@@ -535,13 +523,13 @@ const OverviewBoard = () => {
             </button>
 
             <h3 className="text-lg font-semibold mb-1 text-gray-900">
-              Gestão – {manageCar.brand} {manageCar.model} {manageCar.year ? `(${manageCar.year})` : ''}
+              Gestão – {manageCar.brand} {manageCar.model}{' '}
+              {manageCar.year ? `(${manageCar.year})` : ''}
             </h3>
             <p className="text-xs text-gray-500 mb-4">
               Cadastre anúncios e publicações desse veículo sem sair da matriz.
             </p>
 
-            {/* abas */}
             <div className="flex gap-2 mb-4">
               <button
                 onClick={() => setManageTab('marketplace')}
@@ -565,7 +553,6 @@ const OverviewBoard = () => {
               </button>
             </div>
 
-            {/* formulário */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-xs text-gray-600 mb-1 block">
@@ -590,7 +577,6 @@ const OverviewBoard = () => {
                     ))}
                 </select>
 
-                {/* gasto só mostra em marketplace */}
                 {manageTab === 'marketplace' && (
                   <>
                     <label className="text-xs text-gray-600 mt-3 mb-1 block">Gasto (R$)</label>
@@ -624,7 +610,6 @@ const OverviewBoard = () => {
                 </button>
               </div>
 
-              {/* lista do que já tem */}
               <div>
                 <p className="text-xs text-gray-600 mb-2">
                   Já cadastrados ({manageTab === 'marketplace' ? 'marketplaces' : 'redes/outras'}):

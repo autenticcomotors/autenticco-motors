@@ -107,7 +107,6 @@ const OverviewBoard = () => {
       setCars(carsRes || []);
       setPlatforms(sortedPlatforms);
 
-      // mapa de publicações
       const carIds = (carsRes || []).map((c) => c.id).filter(Boolean);
       if (carIds.length) {
         const pubs = await getPublicationsForCars(carIds);
@@ -172,14 +171,12 @@ const OverviewBoard = () => {
   const filteredCars = useMemo(() => {
     let base = cars || [];
 
-    // estoque / vendidos
     if (stockFilter === 'stock') {
       base = base.filter((c) => !c.is_sold);
     } else if (stockFilter === 'sold') {
       base = base.filter((c) => !!c.is_sold);
     }
 
-    // por plataforma
     if (platformFilterId) {
       const col = allColumns.find((c) => String(c.id) === String(platformFilterId));
       if (col) {
@@ -195,7 +192,6 @@ const OverviewBoard = () => {
       }
     }
 
-    // busca texto
     const term = search.trim().toLowerCase();
     if (!term) return base;
     return base.filter((c) => {
@@ -252,16 +248,15 @@ const OverviewBoard = () => {
     return false;
   };
 
-  // LARGURAS
+  // LARGURAS (aqui o ajuste)
   const COL_IMG = 130;
   const COL_VEHICLE = 220;
   const COL_PRICE = 88;
   const COL_PLATE = 78;
   const COL_ACTION = 96;
-  const COL_GHOST = 24; // coluninha pra empurrar
-  const COL_PLATFORM = 78;
+  const COL_GHOST = 30; // AUMENTEI
+  const COL_PLATFORM = 80; // +2 pra dar respiro
 
-  // ====== gestão ======
   const marketplacePlatforms = (platforms || []).filter(
     (p) => p.platform_type === 'marketplace'
   );
@@ -500,6 +495,7 @@ const OverviewBoard = () => {
             maxHeight: '72vh',
             overflowY: 'auto',
             overflowX: 'hidden',
+            paddingRight: '2.75rem', // espaço pro sticky e pra última coluna
           }}
         >
           <table
@@ -603,7 +599,7 @@ const OverviewBoard = () => {
                   </th>
                 ))}
 
-                {/* 2 colunas fantasmas pra dar espaço pro sticky da direita */}
+                {/* colunas fantasmas */}
                 <th
                   style={{
                     width: COL_GHOST,
@@ -770,7 +766,7 @@ const OverviewBoard = () => {
                             }}
                           >
                             <span
-                              className={`inline-flex items-center justify-center rounded-full text-[11px] font-semibold w-[54px] h-[22px] ${
+                              className={`inline-flex items-center justify-center rounded-full text-[11px] font-semibold w-[56px] h-[22px] ${
                                 ok
                                   ? 'bg-emerald-100 text-emerald-700'
                                   : 'bg-rose-100 text-rose-700'

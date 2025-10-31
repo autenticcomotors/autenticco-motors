@@ -1,6 +1,6 @@
 // src/components/OverviewBoard.jsx
 import React, { useEffect, useMemo, useState } from 'react';
-import { Search, ExternalLink, ArrowUp, ArrowDown, X, SlidersHorizontal } from 'lucide-react';
+import { Search, ExternalLink, ArrowUp, ArrowDown, X } from 'lucide-react';
 import {
   getCars,
   getPlatforms,
@@ -90,11 +90,6 @@ const OverviewBoard = () => {
     description: '',
   });
 
-  // NOVO: filtros da matriz
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const [stockFilter, setStockFilter] = useState('all'); // all | stock | sold
-  const [platformFilterId, setPlatformFilterId] = useState(''); // id da plataforma p/ mostrar quem NÃO tem
-
   useEffect(() => {
     const run = async () => {
       setLoading(true);
@@ -155,7 +150,6 @@ const OverviewBoard = () => {
     run();
   }, []);
 
-  // monta colunas a partir das plataformas
   const allColumns = useMemo(() => {
     const list = [];
     (platforms || []).forEach((p) => {
@@ -167,47 +161,19 @@ const OverviewBoard = () => {
         key: `platform_${p.id}`,
         label,
         isAd: isAdPlatformName(label),
-        id: p.id,
       });
     });
     return list;
   }, [platforms]);
 
-  // filtrar carros
   const filteredCars = useMemo(() => {
-    let base = cars || [];
-
-    // 1) filtro de estoque/vendido
-    if (stockFilter === 'stock') {
-      base = base.filter((c) => !c.is_sold);
-    } else if (stockFilter === 'sold') {
-      base = base.filter((c) => !!c.is_sold);
-    }
-
-    // 2) filtro por plataforma (mostrar só quem AINDA NÃO está nela)
-    if (platformFilterId) {
-      const col = allColumns.find((c) => String(c.id) === String(platformFilterId));
-      if (col) {
-        base = base.filter((car) => {
-          const map = pubsMap[car.id] || {};
-          const has =
-            (map[col.key] && Array.isArray(map[col.key]) && map[col.key].length > 0) ||
-            (map[col.label?.toLowerCase()] &&
-              Array.isArray(map[col.label?.toLowerCase()]) &&
-              map[col.label?.toLowerCase()].length > 0);
-          return !has;
-        });
-      }
-    }
-
-    // 3) busca de texto
     const term = search.trim().toLowerCase();
-    if (!term) return base;
-    return base.filter((c) => {
+    if (!term) return cars;
+    return (cars || []).filter((c) => {
       const hay = `${c.brand || ''} ${c.model || ''} ${c.year || ''} ${c.plate || ''}`.toLowerCase();
       return hay.includes(term);
     });
-  }, [cars, search, stockFilter, platformFilterId, allColumns, pubsMap]);
+  }, [cars, search]);
 
   const openOrderModal = () => {
     const base = (platforms || [])
@@ -257,21 +223,20 @@ const OverviewBoard = () => {
     return false;
   };
 
-  // LARGURAS
-  const COL_IMG = 120; // ↑ foto maior
+  // 👇 apertamos tudo aqui
+  const COL_IMG = 110;
   const COL_VEHICLE = 210;
   const COL_PRICE = 78;
   const COL_PLATE = 72;
-  const COL_ACTION = 90;
-  const COL_PLATFORM = 66;
+  const COL_ACTION = 88;
+  const COL_PLATFORM = 66; // antes 80
 
-  // plataformas separadas p/ modal
+  // ====== FUNÇÕES DO MODAL DE GESTÃO ======
   const marketplacePlatforms = (platforms || []).filter(
     (p) => p.platform_type === 'marketplace'
   );
   const socialPlatforms = (platforms || []).filter((p) => p.platform_type === 'social');
 
-  // abrir modal de gestão
   const openGestao = async (car) => {
     setGestaoCar(car);
     setGestaoTab('marketplaces');
@@ -470,7 +435,7 @@ const OverviewBoard = () => {
   return (
     <div className="w-full space-y-4">
       {/* topo */}
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex items-center gap-3">
         <div className="relative w-80 max-w-md">
           <Search
             size={15}
@@ -489,45 +454,14 @@ const OverviewBoard = () => {
         >
           Editar ordem das plataformas
         </button>
-        <button
-          onClick={() => setFiltersOpen(true)}
-          className="flex items-center gap-2 bg-white border px-3 py-2 rounded-md text-sm hover:bg-slate-50"
-        >
-          <SlidersHorizontal size={14} /> Filtros
-        </button>
-        {(stockFilter !== 'all' || platformFilterId) && (
-          <span className="text-xs text-slate-500">
-            Filtros ativos:
-            {stockFilter === 'stock' && ' só em estoque'}
-            {stockFilter === 'sold' && ' só vendidos'}
-            {platformFilterId &&
-              ` | faltando: ${
-                (allColumns.find((c) => String(c.id) === String(platformFilterId)) || {}).label || ''
-              }`}
-            <button
-              onClick={() => {
-                setStockFilter('all');
-                setPlatformFilterId('');
-              }}
-              className="ml-2 text-[10px] text-red-500 underline"
-            >
-              limpar
-            </button>
-          </span>
-        )}
       </div>
 
       {/* tabela */}
       <div className="bg-white border rounded-md overflow-hidden">
-        {/* 👇 rolagem só vertical; padding-right p/ caber a coluna sticky da direita */}
+        {/* 👇 só rolagem vertical, SEM horizontal */}
         <div
           className="relative"
-          style={{
-            maxHeight: '72vh',
-            overflowY: 'auto',
-            overflowX: 'hidden',
-            paddingRight: `${COL_ACTION + 12}px`, // 👈 garante que a última coluna não seja cortada
-          }}
+          style={{ maxHeight: '72vh', overflowY: 'auto', overflowX: 'hidden' }}
         >
           <table
             className="text-sm"
@@ -539,6 +473,7 @@ const OverviewBoard = () => {
           >
             <thead>
               <tr>
+                {/* foto */}
                 <th
                   style={{
                     position: 'sticky',
@@ -551,6 +486,7 @@ const OverviewBoard = () => {
                     borderBottom: '1px solid #e5e7eb',
                   }}
                 />
+                {/* veículo */}
                 <th
                   style={{
                     position: 'sticky',
@@ -568,6 +504,7 @@ const OverviewBoard = () => {
                 >
                   Veículo
                 </th>
+                {/* preço */}
                 <th
                   style={{
                     position: 'sticky',
@@ -584,6 +521,7 @@ const OverviewBoard = () => {
                 >
                   Preço
                 </th>
+                {/* placa */}
                 <th
                   style={{
                     position: 'sticky',
@@ -601,6 +539,7 @@ const OverviewBoard = () => {
                   Placa
                 </th>
 
+                {/* plataformas */}
                 {allColumns.map((col) => (
                   <th
                     key={col.key}
@@ -622,6 +561,7 @@ const OverviewBoard = () => {
                   </th>
                 ))}
 
+                {/* ações */}
                 <th
                   style={{
                     position: 'sticky',
@@ -661,6 +601,7 @@ const OverviewBoard = () => {
                       className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}
                       style={{ height: 78 }}
                     >
+                      {/* foto */}
                       <td
                         style={{
                           position: 'sticky',
@@ -672,7 +613,7 @@ const OverviewBoard = () => {
                           padding: '6px 4px',
                         }}
                       >
-                        <div className="w-[108px] h-[74px] rounded-md bg-slate-200 overflow-hidden flex items-center justify-center">
+                        <div className="w-[96px] h-[70px] rounded-md bg-slate-200 overflow-hidden flex items-center justify-center">
                           {img ? (
                             <img
                               src={img}
@@ -687,6 +628,7 @@ const OverviewBoard = () => {
                         </div>
                       </td>
 
+                      {/* veículo */}
                       <td
                         style={{
                           position: 'sticky',
@@ -705,14 +647,10 @@ const OverviewBoard = () => {
                               <span className="text-xs text-slate-400">({car.year})</span>
                             ) : null}
                           </span>
-                          {car.is_sold ? (
-                            <span className="text-[10px] text-red-500 font-semibold mt-0.5">
-                              VENDIDO
-                            </span>
-                          ) : null}
                         </div>
                       </td>
 
+                      {/* preço */}
                       <td
                         style={{
                           position: 'sticky',
@@ -729,6 +667,7 @@ const OverviewBoard = () => {
                         {car.price ? Money(car.price) : '--'}
                       </td>
 
+                      {/* placa */}
                       <td
                         style={{
                           position: 'sticky',
@@ -745,6 +684,7 @@ const OverviewBoard = () => {
                         {car.plate || '--'}
                       </td>
 
+                      {/* plataformas */}
                       {allColumns.map((col) => {
                         const ok = hasPub(car, col);
                         return (
@@ -777,6 +717,7 @@ const OverviewBoard = () => {
                         );
                       })}
 
+                      {/* ações */}
                       <td
                         style={{
                           position: 'sticky',
@@ -886,7 +827,7 @@ const OverviewBoard = () => {
         </div>
       )}
 
-      {/* modal interno de gestão (o mesmo que já estava) */}
+      {/* modal interno de gestão */}
       <Dialog open={gestaoOpen} onOpenChange={setGestaoOpen}>
         <DialogContent className="max-w-4xl bg-white text-gray-900">
           <DialogHeader>
@@ -1157,97 +1098,6 @@ const OverviewBoard = () => {
           )}
         </DialogContent>
       </Dialog>
-
-      {/* modal de filtros */}
-      {filtersOpen && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-[999]">
-          <div className="bg-white rounded-md shadow-lg w-full max-w-md p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">Filtros da Matriz</h2>
-              <button
-                onClick={() => setFiltersOpen(false)}
-                className="p-1 rounded hover:bg-slate-100"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <p className="text-xs text-slate-500 mb-2">Status do veículo</p>
-                <div className="flex flex-col gap-1 text-sm">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="radio"
-                      name="stockFilter"
-                      value="all"
-                      checked={stockFilter === 'all'}
-                      onChange={() => setStockFilter('all')}
-                    />
-                    Mostrar todos
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="radio"
-                      name="stockFilter"
-                      value="stock"
-                      checked={stockFilter === 'stock'}
-                      onChange={() => setStockFilter('stock')}
-                    />
-                    Somente em estoque (não vendidos)
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="radio"
-                      name="stockFilter"
-                      value="sold"
-                      checked={stockFilter === 'sold'}
-                      onChange={() => setStockFilter('sold')}
-                    />
-                    Somente vendidos
-                  </label>
-                </div>
-              </div>
-
-              <div>
-                <p className="text-xs text-slate-500 mb-2">
-                  Plataforma (mostrar só veículos que AINDA NÃO estão nessa plataforma)
-                </p>
-                <select
-                  value={platformFilterId}
-                  onChange={(e) => setPlatformFilterId(e.target.value)}
-                  className="w-full border rounded-md px-2 py-2 text-sm"
-                >
-                  <option value="">— não filtrar por plataforma —</option>
-                  {allColumns.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 mt-6">
-              <button
-                onClick={() => {
-                  setStockFilter('all');
-                  setPlatformFilterId('');
-                }}
-                className="text-sm text-slate-500 underline"
-              >
-                Limpar tudo
-              </button>
-              <button
-                onClick={() => setFiltersOpen(false)}
-                className="px-4 py-2 rounded-md bg-yellow-400 hover:bg-yellow-500 text-sm font-medium"
-              >
-                Aplicar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

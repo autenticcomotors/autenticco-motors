@@ -226,7 +226,8 @@ const Reports = () => {
       (acc, e) => acc + Number(e.charged_value || 0),
       0
     );
-    const resultadoExtra = ganhosExtrasTotal - gastosExtrasTotal - anunciosTotal;
+    const resultadoExtra = lucroPeriodo + ganhosExtrasTotal - gastosExtrasTotal - anunciosTotal;
+
 
     // lucro estimado do estoque (igual VehicleManager)
     // pra isso precisamos montar mapa por carro

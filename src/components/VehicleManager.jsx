@@ -488,10 +488,14 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     return Array.from(setB).sort((a, b) => a.localeCompare(b, 'pt-BR'));
   }, [cars]);
 
+   const [showOnlyAvailable, setShowOnlyAvailable] = useState(false);
+
+
   // filtro + ordenação
   const filteredCars = useMemo(() => {
     const term = (searchTerm || '').trim().toLowerCase();
     let list = (cars || []).filter((c) => {
+      if (showOnlyAvailable && c.is_sold) return false;
       if (brandFilter && brandFilter !== 'ALL' && c.brand !== brandFilter) return false;
       if (!term) return true;
       const brand = (c.brand || '').toLowerCase();
@@ -563,7 +567,15 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
             </option>
           ))}
         </select>
-
+        <label className="flex items-center gap-2 text-sm text-gray-700">
+    <input
+      type="checkbox"
+      checked={showOnlyAvailable}
+      onChange={(e) => setShowOnlyAvailable(e.target.checked)}
+      className="w-4 h-4 accent-yellow-400"
+    />
+    Mostrar somente não vendidos
+  </label>
         <select
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value)}

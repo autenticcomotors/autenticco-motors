@@ -2,9 +2,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Search, ExternalLink, ArrowUp, ArrowDown, X } from 'lucide-react';
 import {
-  getPublicationsForCars,
-  getPlatforms,
   getCars,
+  getPlatforms,
+  getPublicationsForCars,
   updatePlatformOrder,
 } from '@/lib/car-api';
 
@@ -18,7 +18,7 @@ const Money = (v) =>
 
 const normalize = (s = '') => String(s || '').trim().toLowerCase();
 
-// tenta vários campos de foto (mesma ideia que você já usa)
+// pega foto igual usamos em outras telas
 const getCarImage = (car) => {
   return (
     car.main_photo_url ||
@@ -31,7 +31,7 @@ const getCarImage = (car) => {
   );
 };
 
-// se for anúncio pinta amarelo
+// detectar se é anúncio (pra pintar)
 const isAdPlatformName = (name = '') => {
   const n = name.toLowerCase();
   return (
@@ -55,7 +55,6 @@ const OverviewBoard = ({ onOpenGestaoForCar = () => {} }) => {
   const [orderModalOpen, setOrderModalOpen] = useState(false);
   const [orderingPlatforms, setOrderingPlatforms] = useState([]);
 
-  // carregar carros + plataformas
   useEffect(() => {
     const run = async () => {
       setLoading(true);
@@ -65,6 +64,7 @@ const OverviewBoard = ({ onOpenGestaoForCar = () => {} }) => {
         getPlatforms(),
       ]);
 
+      // ordena pelas ordens salvas
       const sortedPlatforms = (platformsRes || [])
         .map((p) => ({ ...p, order: p.order ?? 9999 }))
         .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
@@ -72,18 +72,17 @@ const OverviewBoard = ({ onOpenGestaoForCar = () => {} }) => {
       setCars(carsRes || []);
       setPlatforms(sortedPlatforms);
 
-      // agora publicações
+      // carrega publicações
       const carIds = (carsRes || []).map((c) => c.id).filter(Boolean);
       if (carIds.length) {
         const pubs = await getPublicationsForCars(carIds);
         const map = {};
         carIds.forEach((id) => (map[id] = {}));
-
         (pubs || []).forEach((p) => {
           const cid = p.car_id;
           if (!map[cid]) map[cid] = {};
 
-          // por id de plataforma
+          // por id da plataforma
           if (p.platform_id) {
             const key = `platform_${p.platform_id}`;
             if (!map[cid][key]) map[cid][key] = [];
@@ -110,7 +109,6 @@ const OverviewBoard = ({ onOpenGestaoForCar = () => {} }) => {
             (map[cid].mercadolivre = map[cid].mercadolivre || []).push(p);
           if (link.includes('olx')) (map[cid].olx = map[cid].olx || []).push(p);
         });
-
         setPubsMap(map);
       } else {
         setPubsMap({});
@@ -118,10 +116,11 @@ const OverviewBoard = ({ onOpenGestaoForCar = () => {} }) => {
 
       setLoading(false);
     };
+
     run();
   }, []);
 
-  // colunas
+  // montar colunas
   const allColumns = useMemo(() => {
     const list = [];
     (platforms || []).forEach((p) => {
@@ -189,7 +188,7 @@ const OverviewBoard = ({ onOpenGestaoForCar = () => {} }) => {
     setOrderModalOpen(false);
   };
 
-  // se tem publicação
+  // verifica se carro tem pub naquela coluna
   const hasPub = (car, col) => {
     const map = pubsMap[car.id] || {};
     if (map[col.key] && Array.isArray(map[col.key]) && map[col.key].length > 0) return true;
@@ -198,13 +197,13 @@ const OverviewBoard = ({ onOpenGestaoForCar = () => {} }) => {
     return false;
   };
 
-  // larguras
-  const COL_IMG = 54; // maiorzinho
-  const COL_VEHICLE = 220;
+  // larguras fixas
+  const COL_IMG = 80; // maior agora
+  const COL_VEHICLE = 230;
   const COL_PRICE = 82;
   const COL_PLATE = 74;
   const COL_ACTION = 90;
-  const COL_PLATFORM = 78;
+  const COL_PLATFORM = 80;
 
   return (
     <div className="w-full space-y-4">
@@ -232,7 +231,11 @@ const OverviewBoard = ({ onOpenGestaoForCar = () => {} }) => {
 
       {/* tabela */}
       <div className="bg-white border rounded-md overflow-hidden">
-        <div className="relative">
+        {/* esse wrapper controla o scroll e permite o header colar */}
+        <div
+          className="relative overflow-auto"
+          style={{ maxHeight: '70vh' }}
+        >
           <table
             className="text-sm"
             style={{
@@ -252,7 +255,7 @@ const OverviewBoard = ({ onOpenGestaoForCar = () => {} }) => {
                     width: COL_IMG,
                     minWidth: COL_IMG,
                     background: '#ffffff',
-                    zIndex: 40,
+                    zIndex: 50,
                     borderBottom: '1px solid #e5e7eb',
                   }}
                 />
@@ -265,7 +268,7 @@ const OverviewBoard = ({ onOpenGestaoForCar = () => {} }) => {
                     width: COL_VEHICLE,
                     minWidth: COL_VEHICLE,
                     background: '#ffffff',
-                    zIndex: 40,
+                    zIndex: 50,
                     borderBottom: '1px solid #e5e7eb',
                     textAlign: 'left',
                     fontSize: '0.7rem',
@@ -283,7 +286,7 @@ const OverviewBoard = ({ onOpenGestaoForCar = () => {} }) => {
                     width: COL_PRICE,
                     minWidth: COL_PRICE,
                     background: '#ffffff',
-                    zIndex: 40,
+                    zIndex: 50,
                     borderBottom: '1px solid #e5e7eb',
                     textAlign: 'center',
                     fontSize: '0.7rem',
@@ -300,7 +303,7 @@ const OverviewBoard = ({ onOpenGestaoForCar = () => {} }) => {
                     width: COL_PLATE,
                     minWidth: COL_PLATE,
                     background: '#ffffff',
-                    zIndex: 40,
+                    zIndex: 50,
                     borderBottom: '1px solid #e5e7eb',
                     textAlign: 'center',
                     fontSize: '0.7rem',
@@ -320,6 +323,9 @@ const OverviewBoard = ({ onOpenGestaoForCar = () => {} }) => {
                       borderBottom: '1px solid #e5e7eb',
                       textAlign: 'center',
                       padding: '4px 2px',
+                      position: 'sticky',
+                      top: 0,
+                      zIndex: 25,
                     }}
                   >
                     <div className="text-[10px] leading-tight text-slate-700 break-words whitespace-normal">
@@ -340,7 +346,7 @@ const OverviewBoard = ({ onOpenGestaoForCar = () => {} }) => {
                     borderBottom: '1px solid #e5e7eb',
                     textAlign: 'center',
                     fontSize: '0.7rem',
-                    zIndex: 40,
+                    zIndex: 60,
                   }}
                 >
                   Ações
@@ -366,7 +372,7 @@ const OverviewBoard = ({ onOpenGestaoForCar = () => {} }) => {
                     <tr
                       key={car.id}
                       className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}
-                      style={{ height: 56 }}
+                      style={{ height: 72 }}
                     >
                       {/* foto */}
                       <td
@@ -376,11 +382,11 @@ const OverviewBoard = ({ onOpenGestaoForCar = () => {} }) => {
                           background: idx % 2 === 0 ? '#fff' : '#f8fafc',
                           width: COL_IMG,
                           minWidth: COL_IMG,
-                          zIndex: 20,
-                          padding: 6,
+                          zIndex: 40,
+                          padding: '6px 4px',
                         }}
                       >
-                        <div className="w-9 h-9 rounded-md bg-slate-200 overflow-hidden flex items-center justify-center">
+                        <div className="w-[72px] h-[56px] rounded-md bg-slate-200 overflow-hidden flex items-center justify-center">
                           {img ? (
                             <img
                               src={img}
@@ -403,7 +409,7 @@ const OverviewBoard = ({ onOpenGestaoForCar = () => {} }) => {
                           background: idx % 2 === 0 ? '#fff' : '#f8fafc',
                           width: COL_VEHICLE,
                           minWidth: COL_VEHICLE,
-                          zIndex: 20,
+                          zIndex: 40,
                           padding: '6px 8px',
                         }}
                       >
@@ -425,7 +431,7 @@ const OverviewBoard = ({ onOpenGestaoForCar = () => {} }) => {
                           background: idx % 2 === 0 ? '#fff' : '#f8fafc',
                           width: COL_PRICE,
                           minWidth: COL_PRICE,
-                          zIndex: 20,
+                          zIndex: 40,
                           textAlign: 'center',
                           padding: '4px 2px',
                         }}
@@ -442,7 +448,7 @@ const OverviewBoard = ({ onOpenGestaoForCar = () => {} }) => {
                           background: idx % 2 === 0 ? '#fff' : '#f8fafc',
                           width: COL_PLATE,
                           minWidth: COL_PLATE,
-                          zIndex: 20,
+                          zIndex: 40,
                           textAlign: 'center',
                           padding: '4px 2px',
                         }}
@@ -468,6 +474,7 @@ const OverviewBoard = ({ onOpenGestaoForCar = () => {} }) => {
                                 : idx % 2 === 0
                                 ? '#fff'
                                 : '#f8fafc',
+                              padding: '4px 2px',
                             }}
                           >
                             <span
@@ -492,11 +499,11 @@ const OverviewBoard = ({ onOpenGestaoForCar = () => {} }) => {
                           width: COL_ACTION,
                           minWidth: COL_ACTION,
                           textAlign: 'center',
-                          zIndex: 20,
+                          zIndex: 40,
                         }}
                       >
                         <button
-                          onClick={() => onOpenGestaoForCar(car)}
+                          onClick={() => onOpenGestaoForCar(car)} // <<< AQUI: abre modal da própria página
                           className="px-3 py-1 rounded-md border text-[11px] font-medium hover:bg-slate-50"
                         >
                           Gerenciar

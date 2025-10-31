@@ -1256,7 +1256,8 @@ const AdminDashboard = () => {
                 cars={cars}
                 platforms={platforms}
                 onOpenGestaoForCar={(car) => {
-                  setActiveTab('gestao');
+                  setSelectedCar(car);
+    		  setIsGestaoOpen(true);
                   setTimeout(() => {
                     toast({
                       title: `Abrindo gestão do veículo ${car.brand} ${car.model}`,

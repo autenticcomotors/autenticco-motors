@@ -7,9 +7,17 @@ import {
   getExpensesForCars,
   updatePlatformOrder,
 } from '@/lib/car-api';
-import { Search, Filter, X, ArrowUp, ArrowDown, Image as ImageIcon } from 'lucide-react';
+import {
+  Search,
+  Filter,
+  X,
+  ArrowUp,
+  ArrowDown,
+  Image as ImageIcon,
+} from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 
+// tipos do banco
 const MARKETPLACE_TYPES = ['marketplace'];
 const SOCIAL_TYPES = ['social'];
 
@@ -22,9 +30,10 @@ const OverviewBoard = () => {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPlatforms, setSelectedPlatforms] = useState([]);
-  const [showColumnsModal, setShowColumnsModal] = useState(false);
 
+  const [showColumnsModal, setShowColumnsModal] = useState(false);
   const [showOrderModal, setShowOrderModal] = useState(false);
+
   const [orderingMarketplace, setOrderingMarketplace] = useState([]);
   const [orderingSocial, setOrderingSocial] = useState([]);
   const [savingOrder, setSavingOrder] = useState(false);
@@ -33,6 +42,7 @@ const OverviewBoard = () => {
     const loadAll = async () => {
       try {
         setLoading(true);
+        // 1) carros + plataformas
         const [carsData, platformsData] = await Promise.all([
           getCars({ includeSold: true }),
           getPlatforms(),
@@ -40,6 +50,7 @@ const OverviewBoard = () => {
 
         setCars(carsData || []);
 
+        // ordenar plataformas levando em conta a coluna "order" nova
         const orderedPlatforms = [...(platformsData || [])].sort((a, b) => {
           if (a.order != null && b.order != null) return a.order - b.order;
           if (a.order != null) return -1;
@@ -48,6 +59,7 @@ const OverviewBoard = () => {
         });
         setPlatforms(orderedPlatforms);
 
+        // 2) publicações e gastos
         const carIds = (carsData || []).map((c) => c.id);
         if (carIds.length > 0) {
           const [pubs, exps] = await Promise.all([
@@ -70,6 +82,7 @@ const OverviewBoard = () => {
     loadAll();
   }, []);
 
+  // separa plataformas por tipo
   const { marketplacePlatforms, socialPlatforms } = useMemo(() => {
     const m = [];
     const s = [];
@@ -79,27 +92,26 @@ const OverviewBoard = () => {
       } else if (SOCIAL_TYPES.includes(p.platform_type)) {
         s.push(p);
       } else {
-        s.push(p);
+        s.push(p); // outros caem aqui
       }
     });
     return { marketplacePlatforms: m, socialPlatforms: s };
   }, [platforms]);
 
+  // filtro de carros
   const filteredCars = useMemo(() => {
     let list = [...(cars || [])];
-
     if (searchTerm.trim() !== '') {
       const term = searchTerm.trim().toLowerCase();
       list = list.filter((car) => {
-        const base =
-          `${car.brand || ''} ${car.model || ''} ${car.year || ''} ${car.plate || ''}`.toLowerCase();
+        const base = `${car.brand || ''} ${car.model || ''} ${car.year || ''} ${car.plate || ''}`.toLowerCase();
         return base.includes(term);
       });
     }
-
     return list;
   }, [cars, searchTerm]);
 
+  // acha publicação de um carro em uma plataforma
   const getCarPublicationOnPlatform = (carId, platformId) => {
     return (publications || []).find(
       (pub) => pub.car_id === carId && pub.platform_id === platformId
@@ -119,11 +131,10 @@ const OverviewBoard = () => {
     setSelectedPlatforms([]);
   };
 
+  // abrir modal de ordem já com as listas separadas
   const openOrderModal = () => {
-    const mk = [...marketplacePlatforms].map((p) => ({ ...p }));
-    const sc = [...socialPlatforms].map((p) => ({ ...p }));
-    setOrderingMarketplace(mk);
-    setOrderingSocial(sc);
+    setOrderingMarketplace([...marketplacePlatforms].map((p) => ({ ...p })));
+    setOrderingSocial([...socialPlatforms].map((p) => ({ ...p })));
     setShowOrderModal(true);
   };
 
@@ -146,16 +157,17 @@ const OverviewBoard = () => {
     try {
       setSavingOrder(true);
 
-      const finalArr = [];
+      // monta payload na ordem nova
+      const updates = [];
       orderingMarketplace.forEach((p, idx) => {
-        finalArr.push({ id: p.id, order: idx + 1 });
+        updates.push({ id: p.id, order: idx + 1 });
       });
-      const startSocial = orderingMarketplace.length + 1;
+      const nextStart = orderingMarketplace.length + 1;
       orderingSocial.forEach((p, idx) => {
-        finalArr.push({ id: p.id, order: startSocial + idx });
+        updates.push({ id: p.id, order: nextStart + idx });
       });
 
-      const { error } = await updatePlatformOrder(finalArr);
+      const { error } = await updatePlatformOrder(updates);
       if (error) {
         console.error('Erro ao salvar ordem plataformas:', error);
         toast({
@@ -166,19 +178,20 @@ const OverviewBoard = () => {
         return;
       }
 
-      const newPlats = await getPlatforms();
-      const orderedAgain = [...(newPlats || [])].sort((a, b) => {
+      // recarrega plataformas já ordenadas
+      const refreshed = await getPlatforms();
+      const reordered = [...(refreshed || [])].sort((a, b) => {
         if (a.order != null && b.order != null) return a.order - b.order;
         if (a.order != null) return -1;
         if (b.order != null) return 1;
         return (a.name || '').localeCompare(b.name || '');
       });
-      setPlatforms(orderedAgain);
+      setPlatforms(reordered);
 
       setShowOrderModal(false);
       toast({
         title: 'Ordem salva',
-        description: 'As plataformas foram reordenadas com sucesso.',
+        description: 'Plataformas reordenadas com sucesso.',
       });
     } catch (err) {
       console.error('Erro geral ao salvar ordem:', err);
@@ -192,46 +205,20 @@ const OverviewBoard = () => {
     }
   };
 
-  // cor base que você usa bastante
+  // cor padrão que você usa
   const amber = '#F5C301';
 
   return (
     <div className="mt-6">
-      {/* título igual dashboard */}
+      {/* título */}
       <div className="mb-4">
         <h2 className="text-lg font-semibold text-gray-900">Matriz de Publicações</h2>
         <p className="text-sm text-gray-500">
-          Controle rápido de onde cada carro foi anunciado ou publicado.
+          Visão rápida de anúncios e publicações por veículo.
         </p>
       </div>
 
-      {/* cards de cima, 2 colunas, iguais ao que você tinha */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-        <div className="rounded-lg border bg-[#fffef7] border-[#fce59c]">
-          <div className="px-4 py-3 flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold text-gray-900">Anúncios / Marketplaces</p>
-              <p className="text-xs text-gray-500">OLX, Webmotors, MercadoLivre e afins.</p>
-            </div>
-            <span className="text-xs text-gray-400">
-              {marketplacePlatforms.length} cad.
-            </span>
-          </div>
-        </div>
-        <div className="rounded-lg border bg-[#f3f8ff] border-[#cce3ff]">
-          <div className="px-4 py-3 flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold text-gray-900">Redes Sociais</p>
-              <p className="text-xs text-gray-500">Instagram, Facebook, TikTok, Catálogo WhatsApp...</p>
-            </div>
-            <span className="text-xs text-gray-400">
-              {socialPlatforms.length} cad.
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* barra de filtros visual igual dash */}
+      {/* barra de filtros */}
       <div className="flex flex-wrap gap-3 mb-4 items-center">
         <div className="flex items-center gap-2 px-3 py-2 bg-white rounded-md border min-w-[280px] shadow-sm">
           <Search size={16} className="text-gray-400" />
@@ -258,7 +245,6 @@ const OverviewBoard = () => {
           className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-semibold shadow-sm"
           style={{ backgroundColor: amber, color: '#000' }}
         >
-          <span className="inline-block w-2 h-2 bg-black rounded-sm" />
           Editar ordem das plataformas
         </button>
 
@@ -271,13 +257,13 @@ const OverviewBoard = () => {
         </button>
       </div>
 
-      {/* chips do topo (iguais ao que você costuma usar) */}
-      <div className="flex flex-wrap gap-2 mb-4">
+      {/* chips de plataformas (finos, mesma linha) */}
+      <div className="flex flex-wrap gap-2 mb-3">
         {platforms.map((p) => (
           <button
             key={p.id}
             onClick={() => togglePlatformFilter(p.id)}
-            className={`px-3 py-1 text-xs rounded-full border transition ${
+            className={`px-3 py-[5px] text-xs rounded-full border transition ${
               selectedPlatforms.includes(p.id)
                 ? 'bg-[#ffe082] border-[#ffc400] text-gray-900'
                 : 'bg-white hover:bg-gray-50'
@@ -289,26 +275,30 @@ const OverviewBoard = () => {
         {platforms.length > 0 && (
           <button
             onClick={resetPlatformFilter}
-            className="px-3 py-1 text-xs rounded-full bg-gray-200 hover:bg-gray-300"
+            className="px-3 py-[5px] text-xs rounded-full bg-gray-200 hover:bg-gray-300"
           >
             Reset
           </button>
         )}
       </div>
 
-      {/* tabela */}
+      {/* container da tabela - SEM rolagem lateral do body */}
       <div className="bg-white border rounded-lg shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* esse wrapper permite scroll só na vertical e mantém cabeçalho sticky */}
+        <div
+          className="max-h-[540px] overflow-y-auto overflow-x-hidden"
+          style={{ scrollbarWidth: 'thin' }}
+        >
           <table className="min-w-full text-sm">
-            <thead className="bg-gray-50 sticky top-0 z-10">
+            <thead className="bg-gray-50 sticky top-0 z-20">
               <tr>
-                <th className="px-4 py-3 text-left w-[280px] text-xs font-semibold text-gray-500">
+                <th className="px-4 py-3 text-left w-[280px] text-xs font-semibold text-gray-500 bg-gray-50">
                   Veículo
                 </th>
-                <th className="px-4 py-3 text-left w-[110px] text-xs font-semibold text-gray-500">
+                <th className="px-4 py-3 text-left w-[110px] text-xs font-semibold text-gray-500 bg-gray-50">
                   Preço
                 </th>
-                <th className="px-4 py-3 text-left w-[90px] text-xs font-semibold text-gray-500">
+                <th className="px-4 py-3 text-left w-[90px] text-xs font-semibold text-gray-500 bg-gray-50">
                   Placa
                 </th>
                 {marketplacePlatforms.map((p) => {
@@ -316,7 +306,8 @@ const OverviewBoard = () => {
                   return (
                     <th
                       key={p.id}
-                      className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap"
+                      className="px-3 py-3 text-left text-xs font-semibold text-gray-500 bg-gray-50 whitespace-nowrap"
+                      style={{ minWidth: 80 }}
                     >
                       {p.name}
                     </th>
@@ -327,13 +318,14 @@ const OverviewBoard = () => {
                   return (
                     <th
                       key={p.id}
-                      className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap"
+                      className="px-3 py-3 text-left text-xs font-semibold text-gray-500 bg-gray-50 whitespace-nowrap"
+                      style={{ minWidth: 80 }}
                     >
                       {p.name}
                     </th>
                   );
                 })}
-                <th className="px-4 py-3 text-left w-[90px] text-xs font-semibold text-gray-500">
+                <th className="px-4 py-3 text-left w-[90px] text-xs font-semibold text-gray-500 bg-gray-50">
                   Ações
                 </th>
               </tr>
@@ -341,19 +333,19 @@ const OverviewBoard = () => {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-6 text-center text-gray-500">
+                  <td colSpan={4} className="px-4 py-6 text-center text-gray-500">
                     Carregando matriz...
                   </td>
                 </tr>
               ) : filteredCars.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-6 text-center text-gray-500">
+                  <td colSpan={4} className="px-4 py-6 text-center text-gray-500">
                     Nenhum veículo encontrado.
                   </td>
                 </tr>
               ) : (
                 filteredCars.map((car, idx) => {
-                  // imagem que você já costuma usar
+                  // força a imagem aparecer
                   const img =
                     car.main_image_url ||
                     car.image_url ||
@@ -365,7 +357,7 @@ const OverviewBoard = () => {
                     <tr key={car.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}>
                       <td className="px-4 py-3">
                         <div className="flex gap-3 items-center">
-                          <div className="w-16 h-10 rounded-md overflow-hidden bg-gray-200 flex items-center justify-center">
+                          <div className="w-16 h-12 rounded-md overflow-hidden bg-gray-200 flex items-center justify-center flex-shrink-0">
                             {img ? (
                               <img
                                 src={img}
@@ -376,8 +368,8 @@ const OverviewBoard = () => {
                               <ImageIcon className="w-5 h-5 text-gray-400" />
                             )}
                           </div>
-                          <div>
-                            <div className="font-semibold text-gray-900 leading-tight text-sm">
+                          <div className="min-w-0">
+                            <div className="font-semibold text-gray-900 leading-tight text-sm truncate">
                               {car.brand} {car.model}{' '}
                               {car.year ? (
                                 <span className="text-gray-400 text-xs">({car.year})</span>
@@ -385,19 +377,19 @@ const OverviewBoard = () => {
                             </div>
                             <div className="text-xs text-gray-400 flex gap-2">
                               <span>{car.status_text || 'Disponível'}</span>
-                              {car.plate ? <span>• Placa: {car.plate}</span> : null}
+                              {car.plate ? <span>• {car.plate}</span> : null}
                             </div>
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-900">
+                      <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
                         {car.price ? (
-                          <span>
-                            R${' '}
+                          <>
+                            R{'$ '}
                             {Number(car.price).toLocaleString('pt-BR', {
                               minimumFractionDigits: 2,
                             })}
-                          </span>
+                          </>
                         ) : (
                           <span className="text-gray-400 text-xs">--</span>
                         )}
@@ -406,12 +398,13 @@ const OverviewBoard = () => {
                         {car.plate || <span className="text-gray-400 text-xs">---</span>}
                       </td>
 
+                      {/* MARKETPLACES */}
                       {marketplacePlatforms.map((p) => {
                         if (selectedPlatforms.length > 0 && !selectedPlatforms.includes(p.id))
                           return null;
                         const pub = getCarPublicationOnPlatform(car.id, p.id);
                         return (
-                          <td key={p.id} className="px-4 py-3">
+                          <td key={p.id} className="px-3 py-3">
                             {pub ? (
                               <span className="inline-flex px-2 py-1 bg-green-100 text-green-700 rounded text-xs">
                                 SIM
@@ -425,12 +418,13 @@ const OverviewBoard = () => {
                         );
                       })}
 
+                      {/* SOCIAIS */}
                       {socialPlatforms.map((p) => {
                         if (selectedPlatforms.length > 0 && !selectedPlatforms.includes(p.id))
                           return null;
                         const pub = getCarPublicationOnPlatform(car.id, p.id);
                         return (
-                          <td key={p.id} className="px-4 py-3">
+                          <td key={p.id} className="px-3 py-3">
                             {pub ? (
                               <span className="inline-flex px-2 py-1 bg-green-100 text-green-700 rounded text-xs">
                                 SIM
@@ -456,7 +450,7 @@ const OverviewBoard = () => {
         </div>
       </div>
 
-      {/* modal colunas */}
+      {/* modal de colunas */}
       {showColumnsModal && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-lg w-full max-w-lg p-5 relative">
@@ -507,7 +501,7 @@ const OverviewBoard = () => {
         </div>
       )}
 
-      {/* modal ordem */}
+      {/* modal de ordem */}
       {showOrderModal && (
         <div className="fixed inset-0 bg-black/25 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-lg w-full max-w-3xl p-5 relative">
@@ -539,7 +533,7 @@ const OverviewBoard = () => {
                         key={p.id}
                         className="flex items-center justify-between px-3 py-2 border-b last:border-b-0 bg-white/70"
                       >
-                        <span className="text-sm text-gray-800">{p.name}</span>
+                        <span className="text-sm text-gray-800 truncate">{p.name}</span>
                         <div className="flex gap-1">
                           <button
                             onClick={() => moveItem('marketplace', idx, -1)}
@@ -561,6 +555,7 @@ const OverviewBoard = () => {
                   )}
                 </div>
               </div>
+
               <div className="bg-gray-50 border rounded-md">
                 <div className="px-3 py-2 border-b">
                   <h4 className="text-sm font-semibold text-gray-800">Redes sociais / outros</h4>
@@ -576,7 +571,7 @@ const OverviewBoard = () => {
                         key={p.id}
                         className="flex items-center justify-between px-3 py-2 border-b last:border-b-0 bg-white/70"
                       >
-                        <span className="text-sm text-gray-800">{p.name}</span>
+                        <span className="text-sm text-gray-800 truncate">{p.name}</span>
                         <div className="flex gap-1">
                           <button
                             onClick={() => moveItem('social', idx, -1)}

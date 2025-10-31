@@ -57,7 +57,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     published_at: '',
     notes: '',
   });
-  const [editingPubId, setEditingPubId] = useState(null); // 👈 NOVO
+  const [editingPubId, setEditingPubId] = useState(null);
 
   const [expenseForm, setExpenseForm] = useState({
     category: '',
@@ -66,7 +66,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     incurred_at: '',
     description: '',
   });
-  const [editingExpenseId, setEditingExpenseId] = useState(null); // 👈 NOVO
+  const [editingExpenseId, setEditingExpenseId] = useState(null);
 
   const [financeForm, setFinanceForm] = useState({
     fipe_value: '',
@@ -211,10 +211,20 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
       const [pubs, exps] = await Promise.all([getPublicationsByCar(car.id), getExpensesByCar(car.id)]);
       setPublications(pubs || []);
       setExpenses(exps || []);
+
+      // 👇 aqui já deixo o DEVOLVER calculado automático (preço - comissão)
+      const priceNum = Number(car.price || 0);
+      const commissionNum = Number(car.commission || 0);
+      const autoReturn = Math.max(priceNum - commissionNum, 0);
+
       setFinanceForm({
         fipe_value: car.fipe_value ?? '',
         commission: car.commission ?? '',
-        return_to_seller: car.return_to_seller ?? '',
+        // se já tinha salvo no banco, usa; se não, usa o automático
+        return_to_seller:
+          car.return_to_seller !== null && car.return_to_seller !== undefined
+            ? car.return_to_seller
+            : autoReturn ? String(autoReturn) : '',
       });
     } catch (err) {
       console.error('Erro abrir modal', err);
@@ -238,11 +248,9 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
       };
 
       if (editingPubId) {
-        // atualizar
         await updatePublication(editingPubId, payload);
         toast({ title: 'Registro atualizado' });
       } else {
-        // criar
         await addPublication(payload);
         toast({ title: 'Registro salvo' });
       }
@@ -254,7 +262,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
       setPublications(pubs || []);
       setExpenses(exps || []);
 
-      // limpa form e estado de edição
       setPubForm({
         platform_id: '',
         link: '',
@@ -311,7 +318,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
         setExpenses(exps || []);
       }
 
-      // se eu estava editando esse, reseta
       if (editingPubId === id) {
         setEditingPubId(null);
         setPubForm({
@@ -455,9 +461,13 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
 
       const fipe_value = financeForm.fipe_value !== '' ? Number(financeForm.fipe_value) : null;
       const commission = financeForm.commission !== '' ? Number(financeForm.commission) : 0;
-      const return_to_seller =
-        financeForm.return_to_seller !== '' ? Number(financeForm.return_to_seller) : 0;
 
+      // 👇 AQUI entra o que você pediu:
+      // DEVOLVER = VALOR DE VENDA (price) - COMISSÃO (fixa que você digitou)
+      const carPrice = Number(selectedCar.price || 0);
+      const autoReturn = Math.max(carPrice - commission, 0);
+
+      // lucro estimado permanece como estava
       const estimated_profit =
         commission +
         Number(summary.extraChargedTotal || 0) -
@@ -467,9 +477,16 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
       await updateCar(selectedCar.id, {
         fipe_value,
         commission,
-        return_to_seller,
+        // força salvar o devolver calculado
+        return_to_seller: autoReturn,
         profit: estimated_profit,
       });
+
+      // reflete no form sem quebrar layout
+      setFinanceForm((prev) => ({
+        ...prev,
+        return_to_seller: String(autoReturn),
+      }));
 
       toast({ title: 'Financeiro atualizado' });
 
@@ -702,6 +719,11 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
           const isSold = !!car.is_sold;
           const isDelivered = !!car.delivered_at;
 
+          // 👇 DEVOLVER automático também na LISTA
+          const priceNum = Number(car.price || 0);
+          const commissionNum = Number(car.commission || 0);
+          const autoReturnList = Math.max(priceNum - commissionNum, 0);
+
           return (
             <div
               key={car.id}
@@ -811,13 +833,12 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                     ) : null}
                   </p>
 
-                  {car.return_to_seller ? (
-                    <p className="mt-1">
-                      <span className="text-xs bg-amber-50 text-amber-900 px-2 py-0.5 rounded">
-                        Devolver: {moneyBR(car.return_to_seller)}
-                      </span>
-                    </p>
-                  ) : null}
+                  {/* DEVOLVER AGORA SEMPRE AUTOMÁTICO */}
+                  <p className="mt-1">
+                    <span className="text-xs bg-amber-50 text-amber-900 px-2 py-0.5 rounded">
+                      Devolver: {moneyBR(autoReturnList)}
+                    </span>
+                  </p>
 
                   <p className="text-sm text-gray-600">
                     Placa: <span className="font-semibold">{car.plate || '-'}</span>
@@ -953,7 +974,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
           setOpen(isOpen);
           if (!isOpen) {
             await dispatchGlobalUpdate();
-            // limpa estados de edição ao fechar
             setEditingPubId(null);
             setEditingExpenseId(null);
             setPubForm({
@@ -1294,6 +1314,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                   Comissão: quanto a AutenTicco recebe pela operação (fixo ou % convertido).
                 </p>
 
+                {/* deixei o campo visível, mas ele será sobrescrito no salvar */}
                 <input
                   value={financeForm.return_to_seller}
                   onChange={(e) =>
@@ -1304,7 +1325,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                   className="w-full border rounded px-2 py-2"
                 />
                 <p className="text-xs text-gray-500">
-                  Devolver: valor que volta pro dono do carro após a venda.
+                  Devolver: valor que volta pro dono do carro após a venda (preço - comissão).
                 </p>
 
                 <Button onClick={handleSaveFinance} className="bg-yellow-400 text-black w-full">

@@ -1,218 +1,327 @@
 // src/pages/Reports.jsx
 import React, { useEffect, useMemo, useState } from 'react';
-import { Helmet } from 'react-helmet';
-import { motion } from 'framer-motion';
-import { Calendar, Filter, LineChart, PieChart as PieIcon, Wallet, ArrowRight } from 'lucide-react';
+import {
+  getCars,
+  getPlatforms,
+  getSales,
+  getPublicationsForCars,
+  getExpensesForCars,
+} from '@/lib/car-api';
 import { Button } from '@/components/ui/button';
-import BackgroundShape from '@/components/BackgroundShape';
-import { format, startOfWeek, startOfMonth, startOfYear } from 'date-fns';
-import { getCars, getPublicationsForCars, getExpensesForCars, getSales, getPlatforms } from '@/lib/car-api';
+import {
+  Calendar,
+  RefreshCw,
+  PieChart as PieIcon,
+  BarChart3,
+  LineChart as LineIcon,
+  Wallet,
+  ArrowDownRight,
+  ArrowUpRight,
+} from 'lucide-react';
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+} from 'recharts';
+
+const MONTHS_PT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+const CHART_COLORS = ['#FACC15', '#0F172A', '#6366F1', '#F97316', '#22C55E', '#EC4899', '#0EA5E9', '#F43F5E'];
 
 const moneyBR = (n) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(n || 0));
 
+const getCarEntryDate = (car) => car.entry_at || car.stock_entry_at || car.created_at;
+
 const Reports = () => {
-  // dados
   const [loading, setLoading] = useState(true);
   const [cars, setCars] = useState([]);
+  const [platforms, setPlatforms] = useState([]);
+  const [sales, setSales] = useState([]);
   const [publications, setPublications] = useState([]);
   const [expenses, setExpenses] = useState([]);
-  const [sales, setSales] = useState([]);
-  const [platforms, setPlatforms] = useState([]);
 
   // filtros
   const today = new Date();
-  const [startDate, setStartDate] = useState(() => {
-    const s = new Date();
-    s.setMonth(s.getMonth() - 2);
-    return s.toISOString().slice(0, 10);
-  });
-  const [endDate, setEndDate] = useState(today.toISOString().slice(0, 10));
-  const [selectedPlatform, setSelectedPlatform] = useState('ALL');
+  const firstDayMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
+  const todayIso = today.toISOString().slice(0, 10);
 
-  // 1) carregar carros e plataformas
+  const [startDate, setStartDate] = useState(firstDayMonth);
+  const [endDate, setEndDate] = useState(todayIso);
+  const [selectedYear, setSelectedYear] = useState(today.getFullYear());
+
+  // carregar tudo
   useEffect(() => {
-    let mounted = true;
-    (async () => {
+    const load = async () => {
       setLoading(true);
       try {
-        const [cs, pls] = await Promise.all([getCars(), getPlatforms()]);
-        if (!mounted) return;
-        setCars(Array.isArray(cs) ? cs : []);
-        setPlatforms(Array.isArray(pls) ? pls : []);
-      } catch (err) {
-        console.error('Erro ao carregar base:', err);
-        if (mounted) {
-          setCars([]);
-          setPlatforms([]);
-        }
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  // 2) quando tiver carros OU mudar data, buscar publicações+gastos+vendas
-  useEffect(() => {
-    if (!cars.length) return;
-    let mounted = true;
-    (async () => {
-      setLoading(true);
-      try {
-        const carIds = cars.map((c) => c.id).filter(Boolean);
-        const [pubs, exps, salesData] = await Promise.all([
-          getPublicationsForCars(carIds),
-          getExpensesForCars(carIds),
-          getSales({
-            startDate,
-            endDate,
-            ...(selectedPlatform !== 'ALL' ? { platform_id: selectedPlatform } : {}),
-          }),
+        const [carsData, platformsData, salesData] = await Promise.all([
+          getCars(), // traz todos
+          getPlatforms(),
+          getSales(), // já traz sales com platforms(name)
         ]);
-        if (!mounted) return;
-        setPublications(Array.isArray(pubs) ? pubs : []);
-        setExpenses(Array.isArray(exps) ? exps : []);
-        setSales(Array.isArray(salesData) ? salesData : []);
-      } catch (err) {
-        console.error('Erro ao carregar dados do período:', err);
-        if (mounted) {
+
+        setCars(carsData || []);
+        setPlatforms(platformsData || []);
+        setSales(salesData || []);
+
+        const carIds = (carsData || []).map((c) => c.id).filter(Boolean);
+        if (carIds.length) {
+          const [pubs, exps] = await Promise.all([
+            getPublicationsForCars(carIds),
+            getExpensesForCars(carIds),
+          ]);
+          setPublications(pubs || []);
+          setExpenses(exps || []);
+        } else {
           setPublications([]);
           setExpenses([]);
-          setSales([]);
         }
+      } catch (err) {
+        console.error('Erro carregando dados para relatórios:', err);
+        setCars([]);
+        setPlatforms([]);
+        setSales([]);
+        setPublications([]);
+        setExpenses([]);
       } finally {
-        if (mounted) setLoading(false);
+        setLoading(false);
       }
-    })();
-    return () => {
-      mounted = false;
     };
-  }, [cars, startDate, endDate, selectedPlatform]);
+    load();
+  }, []);
 
-  // mapas auxiliares
-  const adMap = useMemo(() => {
-    const map = {};
-    (publications || []).forEach((p) => {
-      if (!p.car_id) return;
-      const spent = Number(p.spent || 0);
-      const isAd = !!p.platform_id; // marketplace ou rede, mas vamos contar tudo aqui
-      if (!map[p.car_id]) {
-        map[p.car_id] = {
-          adSpend: 0,
-        };
-      }
-      if (isAd) {
-        map[p.car_id].adSpend += spent;
+  // anos disponíveis (de vendas e entradas)
+  const availableYears = useMemo(() => {
+    const yearSet = new Set();
+    (sales || []).forEach((s) => {
+      if (s.sale_date) {
+        yearSet.add(new Date(s.sale_date).getFullYear());
       }
     });
-    return map;
-  }, [publications]);
-
-  const expMap = useMemo(() => {
-    const map = {};
-    (expenses || []).forEach((e) => {
-      if (!e.car_id) return;
-      const amt = Number(e.amount || 0);
-      const charged = Number(e.charged_value || 0);
-      if (!map[e.car_id]) {
-        map[e.car_id] = { expenses: 0, gains: 0 };
-      }
-      map[e.car_id].expenses += amt;
-      map[e.car_id].gains += charged;
+    (cars || []).forEach((c) => {
+      const d = getCarEntryDate(c);
+      if (d) yearSet.add(new Date(d).getFullYear());
     });
-    return map;
-  }, [expenses]);
+    const arr = Array.from(yearSet);
+    if (!arr.includes(today.getFullYear())) arr.push(today.getFullYear());
+    return arr.sort((a, b) => b - a);
+  }, [sales, cars, today]);
 
-  // totais de cartão principal
-  const dashboard = useMemo(() => {
-    let estoqueAtual = 0;
-    let entradasPeriodo = 0;
-    let vendidosPeriodo = 0;
-    let faturamentoPeriodo = 0;
-    let lucroPeriodo = 0;
-    let anunciosPeriodo = 0;
-    let gastosExtrasPeriodo = 0;
-    let ganhosExtrasPeriodo = 0;
+  // aplicar ano direto
+  const handleSelectYear = (year) => {
+    setSelectedYear(year);
+    const start = new Date(year, 0, 1).toISOString().slice(0, 10);
+    const end = new Date(year, 11, 31).toISOString().slice(0, 10);
+    setStartDate(start);
+    setEndDate(end);
+  };
 
-    const start = new Date(`${startDate}T00:00:00`);
-    const end = new Date(`${endDate}T23:59:59`);
+  // dados filtrados por período
+  const {
+    estoqueAtual,
+    entradasPeriodo,
+    vendidosPeriodo,
+    faturamentoPeriodo,
+    lucroPeriodo,
+    anunciosTotal,
+    gastosExtrasTotal,
+    ganhosExtrasTotal,
+    resultadoExtra,
+    lucroEstimadoEstoque,
+    vendasPorMes,
+    vendasPorPlataforma,
+    gastosPorPlataforma,
+    gastosPorCategoria,
+  } = useMemo(() => {
+    if (!cars.length) {
+      return {
+        estoqueAtual: 0,
+        entradasPeriodo: 0,
+        vendidosPeriodo: 0,
+        faturamentoPeriodo: 0,
+        lucroPeriodo: 0,
+        anunciosTotal: 0,
+        gastosExtrasTotal: 0,
+        ganhosExtrasTotal: 0,
+        resultadoExtra: 0,
+        lucroEstimadoEstoque: 0,
+        vendasPorMes: [],
+        vendasPorPlataforma: [],
+        gastosPorPlataforma: [],
+        gastosPorCategoria: [],
+      };
+    }
 
-    // estoque atual (independe de data)
-    cars.forEach((c) => {
-      const disponivel = c.is_sold !== true && c.is_available !== false;
-      if (disponivel) estoqueAtual += 1;
-      // entradas no período -> entry_at / stock_entry_at / created_at
-      const entryIso = c.entry_at || c.stock_entry_at || c.created_at;
-      if (entryIso) {
-        const dt = new Date(entryIso);
-        if (dt >= start && dt <= end) {
-          entradasPeriodo += 1;
-        }
-      }
-    });
+    const start = new Date(startDate + 'T00:00:00');
+    const end = new Date(endDate + 'T23:59:59');
+
+    // estoque atual (não vendidos)
+    const estoqueAtualCars = cars.filter((c) => !c.is_sold && c.is_available !== false);
+    const estoqueAtual = estoqueAtualCars.length;
+
+    // entradas no período
+    const entradasPeriodo = cars.filter((c) => {
+      const d = getCarEntryDate(c);
+      if (!d) return false;
+      const dt = new Date(d);
+      return dt >= start && dt <= end;
+    }).length;
 
     // vendas no período
-    (sales || []).forEach((s) => {
-      const saleDt = new Date(s.sale_date || s.created_at || new Date());
-      if (saleDt >= start && saleDt <= end) {
-        vendidosPeriodo += 1;
-        const salePrice = Number(s.sale_price || 0);
-        faturamentoPeriodo += salePrice;
-
-        // lucro real da venda:
-        // base = commission (da sale) se tiver, senão commission do carro
-        const car = cars.find((c) => c.id === s.car_id);
-        const carCommission = car ? Number(car.commission || 0) : 0;
-        const saleCommission = Number(s.commission || 0);
-        const base = saleCommission > 0 ? saleCommission : carCommission;
-        // custos do carro
-        const ad = adMap[s.car_id] ? adMap[s.car_id].adSpend : 0;
-        const ex = expMap[s.car_id] ? expMap[s.car_id].expenses : 0;
-        const gn = expMap[s.car_id] ? expMap[s.car_id].gains : 0;
-        const lucro = base + gn - ex - ad;
-        lucroPeriodo += lucro;
-      }
+    const vendasPeriodo = (sales || []).filter((s) => {
+      if (!s.sale_date) return false;
+      const dt = new Date(s.sale_date);
+      return dt >= start && dt <= end;
     });
 
-    // anúncios / gastos / ganhos no período (por data do registro)
+    const vendidosPeriodo = vendasPeriodo.length;
+    const faturamentoPeriodo = vendasPeriodo.reduce(
+      (acc, s) => acc + Number(s.sale_price || 0),
+      0
+    );
+
+    // lucro baseado no que vc já salva no carro (commission + extras - gastos - anuncios)
+    // mas pro período vamos pegar só as vendas do período e somar comissão/impostos do carro vendido
+    // simplificado: lucroPeriodo = soma das commissions dos carros vendidos no período
+    const vendasCarIds = new Set(vendasPeriodo.map((s) => s.car_id));
+    const lucroPeriodo = cars
+      .filter((c) => vendasCarIds.has(c.id))
+      .reduce((acc, c) => acc + Number(c.commission || 0), 0);
+
+    // anúncios do período (marketplace)
+    const pfById = {};
+    (platforms || []).forEach((p) => {
+      pfById[String(p.id)] = p;
+    });
+
+    const anunciosPeriodo = (publications || []).filter((p) => {
+      const baseDate = p.published_at || p.created_at;
+      if (!baseDate) return false;
+      const dt = new Date(baseDate);
+      return dt >= start && dt <= end;
+    });
+
+    const anunciosTotal = anunciosPeriodo.reduce((acc, p) => acc + Number(p.spent || 0), 0);
+
+    // gastos/ganhos extras do período
+    const expensesPeriodo = (expenses || []).filter((e) => {
+      const baseDate = e.incurred_at || e.created_at;
+      if (!baseDate) return false;
+      const dt = new Date(baseDate);
+      return dt >= start && dt <= end;
+    });
+
+    const gastosExtrasTotal = expensesPeriodo.reduce((acc, e) => acc + Number(e.amount || 0), 0);
+    const ganhosExtrasTotal = expensesPeriodo.reduce(
+      (acc, e) => acc + Number(e.charged_value || 0),
+      0
+    );
+    const resultadoExtra = ganhosExtrasTotal - gastosExtrasTotal - anunciosTotal;
+
+    // lucro estimado do estoque (igual VehicleManager)
+    // pra isso precisamos montar mapa por carro
+    const byCar = {};
+    cars.forEach((c) => {
+      byCar[c.id] = {
+        adSpend: 0,
+        extraExpenses: 0,
+        extraCharged: 0,
+      };
+    });
+
     (publications || []).forEach((p) => {
-      const dt = p.published_at || p.created_at;
-      if (!dt) return;
-      const d = new Date(dt);
-      if (d >= start && d <= end) {
-        anunciosPeriodo += Number(p.spent || 0);
+      const carId = p.car_id;
+      if (!byCar[carId]) return;
+      const pf = pfById[String(p.platform_id)];
+      const type = pf?.platform_type || 'social';
+      if (type === 'marketplace') {
+        byCar[carId].adSpend += Number(p.spent || 0);
       }
     });
 
     (expenses || []).forEach((e) => {
-      const dt = e.incurred_at || e.created_at;
-      if (!dt) return;
-      const d = new Date(dt);
-      if (d >= start && d <= end) {
-        gastosExtrasPeriodo += Number(e.amount || 0);
-        ganhosExtrasPeriodo += Number(e.charged_value || 0);
+      const carId = e.car_id;
+      if (!byCar[carId]) return;
+      byCar[carId].extraExpenses += Number(e.amount || 0);
+      byCar[carId].extraCharged += Number(e.charged_value || 0);
+    });
+
+    const lucroEstimadoEstoque = estoqueAtualCars.reduce((acc, c) => {
+      const entry = byCar[c.id] || { adSpend: 0, extraExpenses: 0, extraCharged: 0 };
+      const lucro =
+        Number(c.commission || 0) +
+        Number(entry.extraCharged || 0) -
+        Number(entry.extraExpenses || 0) -
+        Number(entry.adSpend || 0);
+      return acc + lucro;
+    }, 0);
+
+    // vendas por mês (do ano selecionado)
+    const vendasPorMes = Array.from({ length: 12 }).map((_, idx) => ({
+      mes: MONTHS_PT[idx],
+      vendas: 0,
+      valor: 0,
+    }));
+
+    (sales || []).forEach((s) => {
+      if (!s.sale_date) return;
+      const d = new Date(s.sale_date);
+      if (d.getFullYear() !== selectedYear) return;
+      const m = d.getMonth();
+      vendasPorMes[m].vendas += 1;
+      vendasPorMes[m].valor += Number(s.sale_price || 0);
+    });
+
+    // vendas por plataforma (pizza)
+    const vendasPorPlataformaMap = {};
+    vendasPeriodo.forEach((s) => {
+      const name = s.platforms?.name || 'Outras';
+      if (!vendasPorPlataformaMap[name]) {
+        vendasPorPlataformaMap[name] = { name, vendas: 0, valor: 0 };
       }
+      vendasPorPlataformaMap[name].vendas += 1;
+      vendasPorPlataformaMap[name].valor += Number(s.sale_price || 0);
     });
+    const vendasPorPlataforma = Object.values(vendasPorPlataformaMap).sort(
+      (a, b) => b.vendas - a.vendas
+    );
 
-    // lucro estimado do estoque atual (independe de data)
-    let lucroEstimadoEstoque = 0;
-    let carrosNoEstimado = 0;
-    cars.forEach((c) => {
-      const disponivel = c.is_sold !== true && c.is_available !== false;
-      if (!disponivel) return;
-      const ad = adMap[c.id] ? adMap[c.id].adSpend : 0;
-      const ex = expMap[c.id] ? expMap[c.id].expenses : 0;
-      const gn = expMap[c.id] ? expMap[c.id].gains : 0;
-      const base = Number(c.commission || 0);
-      const estimado = base + gn - ex - ad;
-      lucroEstimadoEstoque += estimado;
-      carrosNoEstimado += 1;
+    // gastos por plataforma (anúncios) - período
+    const gastosPorPlataformaMap = {};
+    anunciosPeriodo.forEach((p) => {
+      const pf = pfById[String(p.platform_id)];
+      const name = pf?.name || 'Outras';
+      if (!gastosPorPlataformaMap[name]) {
+        gastosPorPlataformaMap[name] = { name, gasto: 0 };
+      }
+      gastosPorPlataformaMap[name].gasto += Number(p.spent || 0);
     });
+    const gastosPorPlataforma = Object.values(gastosPorPlataformaMap).sort(
+      (a, b) => b.gasto - a.gasto
+    );
 
-    const resultadoExtra = ganhosExtrasPeriodo - gastosExtrasPeriodo - anunciosPeriodo;
+    // gastos por categoria (veículo)
+    const gastosPorCategoriaMap = {};
+    expensesPeriodo.forEach((e) => {
+      const cat = e.category || 'Outros';
+      if (!gastosPorCategoriaMap[cat]) {
+        gastosPorCategoriaMap[cat] = { name: cat, gasto: 0 };
+      }
+      gastosPorCategoriaMap[cat].gasto += Number(e.amount || 0);
+    });
+    const gastosPorCategoria = Object.values(gastosPorCategoriaMap).sort(
+      (a, b) => b.gasto - a.gasto
+    );
 
     return {
       estoqueAtual,
@@ -220,343 +329,316 @@ const Reports = () => {
       vendidosPeriodo,
       faturamentoPeriodo,
       lucroPeriodo,
-      anunciosPeriodo,
-      gastosExtrasPeriodo,
-      ganhosExtrasPeriodo,
+      anunciosTotal,
+      gastosExtrasTotal,
+      ganhosExtrasTotal,
       resultadoExtra,
       lucroEstimadoEstoque,
-      carrosNoEstimado,
+      vendasPorMes,
+      vendasPorPlataforma,
+      gastosPorPlataforma,
+      gastosPorCategoria,
     };
-  }, [cars, sales, publications, expenses, startDate, endDate, adMap, expMap]);
-
-  // vendas por mês (gráfico)
-  const vendasPorMes = useMemo(() => {
-    // criar range de meses entre start e end
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    const list = [];
-    const cursor = new Date(start.getFullYear(), start.getMonth(), 1);
-    while (cursor <= end) {
-      list.push({
-        key: `${cursor.getFullYear()}-${cursor.getMonth() + 1}`,
-        label: format(cursor, 'MMM/yy'),
-        count: 0,
-        total: 0,
-      });
-      cursor.setMonth(cursor.getMonth() + 1);
-    }
-
-    (sales || []).forEach((s) => {
-      const d = new Date(s.sale_date || s.created_at || new Date());
-      const key = `${d.getFullYear()}-${d.getMonth() + 1}`;
-      const item = list.find((x) => x.key === key);
-      if (item) {
-        item.count += 1;
-        item.total += Number(s.sale_price || 0);
-      }
-    });
-
-    return list;
-  }, [sales, startDate, endDate]);
-
-  // vendas por plataforma (pizza fake estilizada)
-  const vendasPorPlataforma = useMemo(() => {
-    const counts = {};
-    (sales || []).forEach((s) => {
-      const name =
-        (s.platforms && s.platforms.name) ||
-        (platforms.find((p) => p.id === s.platform_id)?.name ?? 'Outro');
-      counts[name] = (counts[name] || 0) + 1;
-    });
-    return Object.entries(counts)
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count);
-  }, [sales, platforms]);
-
-  const setShortcut = (type) => {
-    const now = new Date();
-    if (type === 'week') {
-      const s = startOfWeek(now, { weekStartsOn: 1 });
-      setStartDate(s.toISOString().slice(0, 10));
-      setEndDate(now.toISOString().slice(0, 10));
-    } else if (type === 'month') {
-      const s = startOfMonth(now);
-      setStartDate(s.toISOString().slice(0, 10));
-      setEndDate(now.toISOString().slice(0, 10));
-    } else if (type === '3months') {
-      const s = new Date();
-      s.setMonth(s.getMonth() - 2);
-      setStartDate(s.toISOString().slice(0, 10));
-      setEndDate(now.toISOString().slice(0, 10));
-    } else if (type === 'year') {
-      const s = startOfYear(now);
-      setStartDate(s.toISOString().slice(0, 10));
-      setEndDate(now.toISOString().slice(0, 10));
-    }
-  };
+  }, [
+    cars,
+    platforms,
+    sales,
+    publications,
+    expenses,
+    startDate,
+    endDate,
+    selectedYear,
+  ]);
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-yellow-500 font-semibold animate-pulse">Carregando números...</div>
+      <div className="min-h-[60vh] flex items-center justify-center text-yellow-500 text-lg font-semibold">
+        Carregando painel de relatórios...
       </div>
     );
   }
 
   return (
-    <div className="relative isolate min-h-screen bg-gray-50 text-gray-900 pt-28 pb-12">
-      <Helmet>
-        <title>Relatórios - AutenTicco Motors</title>
-      </Helmet>
-      <BackgroundShape />
-
-      <div className="relative z-10 max-w-7xl mx-auto px-4 md:px-8 space-y-6">
-        {/* título + filtros */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          <div>
-            <h1 className="text-3xl font-extrabold tracking-tight">Relatórios</h1>
-            <p className="text-sm text-gray-500 -mt-1">
-              Visão financeira em tempo real da operação.
-            </p>
+    <div className="min-h-[62vh] w-full space-y-6">
+      {/* filtros */}
+      <div className="bg-white/90 backdrop-blur rounded-2xl border border-slate-200/70 p-4 flex flex-wrap gap-3 items-center justify-between shadow-sm">
+        <div className="flex gap-3 items-center flex-wrap">
+          <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200">
+            <Calendar className="w-4 h-4 text-slate-500" />
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="bg-transparent text-sm outline-none"
+            />
+            <span className="text-slate-400 text-xs">até</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="bg-transparent text-sm outline-none"
+            />
           </div>
-          <div className="flex flex-wrap gap-2 items-center">
-            <div className="flex items-center gap-2 bg-white rounded-xl px-3 py-2 shadow-sm border">
-              <Calendar className="w-4 h-4 text-yellow-500" />
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="bg-transparent text-sm outline-none"
-              />
-              <span className="text-gray-300">—</span>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="bg-transparent text-sm outline-none"
-              />
-            </div>
-            <select
-              value={selectedPlatform}
-              onChange={(e) => setSelectedPlatform(e.target.value)}
-              className="bg-white border rounded-xl px-3 py-2 text-sm shadow-sm"
+
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="rounded-xl border-slate-200 text-slate-700 hover:bg-yellow-50"
+              onClick={() => {
+                const fm = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
+                const td = new Date().toISOString().slice(0, 10);
+                setStartDate(fm);
+                setEndDate(td);
+                setSelectedYear(today.getFullYear());
+              }}
             >
-              <option value="ALL">Todas as plataformas</option>
-              {platforms.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
+              Mês atual
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="rounded-xl border-slate-200 text-slate-700 hover:bg-yellow-50"
+              onClick={() => handleSelectYear(today.getFullYear())}
+            >
+              Ano atual
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="rounded-xl border-slate-200 text-slate-700 hover:bg-yellow-50"
+              onClick={() => {
+                const d30 = new Date();
+                d30.setDate(d30.getDate() - 30);
+                setStartDate(d30.toISOString().slice(0, 10));
+                setEndDate(new Date().toISOString().slice(0, 10));
+              }}
+            >
+              Últimos 30d
+            </Button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-500">Ano:</span>
+            <select
+              value={selectedYear}
+              onChange={(e) => handleSelectYear(Number(e.target.value))}
+              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm"
+            >
+              {availableYears.map((y) => (
+                <option key={y} value={y}>
+                  {y}
                 </option>
               ))}
             </select>
-            <div className="flex gap-1">
-              <Button variant="ghost" size="sm" onClick={() => setShortcut('week')}>
-                Semana
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => setShortcut('month')}>
-                Mês
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => setShortcut('3months')}>
-                3 meses
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => setShortcut('year')}>
-                Ano
-              </Button>
-            </div>
           </div>
         </div>
 
-        {/* cards principais */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {/* estoque */}
-          <motion.div
-            whileHover={{ y: -2 }}
-            className="bg-white/90 rounded-2xl border border-gray-100 shadow-sm p-5 flex flex-col gap-2"
-          >
-            <span className="text-xs uppercase tracking-wide text-gray-400">Estoque atual</span>
-            <div className="flex items-end gap-2">
-              <span className="text-3xl font-bold">{dashboard.estoqueAtual}</span>
-              <span className="text-xs text-gray-400 pb-1">veículos</span>
-            </div>
-            <p className="text-xs text-gray-400">
-              Dentro do estoque (não vendidos)
-            </p>
-          </motion.div>
+        <Button
+          size="sm"
+          className="bg-yellow-400 hover:bg-yellow-500 text-slate-900 rounded-xl gap-2"
+          onClick={() => {
+            // só refaz os cálculos, já tá tudo em memória
+            setStartDate((s) => s);
+          }}
+        >
+          <RefreshCw className="w-4 h-4" /> Aplicar
+        </Button>
+      </div>
 
-          {/* entradas */}
-          <motion.div
-            whileHover={{ y: -2 }}
-            className="bg-white/90 rounded-2xl border border-gray-100 shadow-sm p-5 flex flex-col gap-2"
-          >
-            <span className="text-xs uppercase tracking-wide text-gray-400">Entradas no período</span>
-            <div className="flex items-end gap-2">
-              <span className="text-3xl font-bold">{dashboard.entradasPeriodo}</span>
-            </div>
-            <p className="text-xs text-gray-400">
-              {format(new Date(startDate), 'dd/MM')} — {format(new Date(endDate), 'dd/MM')}
-            </p>
-          </motion.div>
-
-          {/* vendidos */}
-          <motion.div
-            whileHover={{ y: -2 }}
-            className="bg-emerald-50 rounded-2xl border border-emerald-100 shadow-sm p-5 flex flex-col gap-2"
-          >
-            <span className="text-xs uppercase tracking-wide text-emerald-500">
-              Vendidos no período
+      {/* cards principais */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-4 text-white shadow-lg relative overflow-hidden">
+          <p className="text-sm text-slate-200/90">Estoque atual</p>
+          <h2 className="text-4xl font-bold mt-2">{estoqueAtual}</h2>
+          <p className="text-xs text-slate-200/60 mt-2">
+            veículos disponíveis
+          </p>
+          <LineIcon className="w-12 h-12 text-slate-200/20 absolute -right-4 -bottom-2" />
+        </div>
+        <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm">
+          <p className="text-sm text-slate-500">Entradas no período</p>
+          <div className="flex items-center gap-2 mt-2">
+            <h2 className="text-3xl font-bold text-slate-900">{entradasPeriodo}</h2>
+            <span className="text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded-full text-xs flex items-center gap-1">
+              <ArrowUpRight className="w-3 h-3" /> +{entradasPeriodo}
             </span>
-            <div className="flex items-end gap-2">
-              <span className="text-3xl font-bold text-emerald-800">{dashboard.vendidosPeriodo}</span>
-            </div>
-            <p className="text-xs text-emerald-500">
-              Faturamento: {moneyBR(dashboard.faturamentoPeriodo)}
-            </p>
-          </motion.div>
-
-          {/* faturamento / lucro */}
-          <motion.div
-            whileHover={{ y: -2 }}
-            className="bg-gradient-to-br from-yellow-400 to-yellow-500 rounded-2xl shadow-sm p-5 text-black flex flex-col gap-2"
-          >
-            <span className="text-xs uppercase tracking-wide text-black/80">
-              Lucro real do período
+          </div>
+          <p className="text-xs text-slate-400 mt-2">carros que entraram em {startDate} — {endDate}</p>
+        </div>
+        <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm">
+          <p className="text-sm text-slate-500">Vendidos no período</p>
+          <div className="flex items-center gap-2 mt-2">
+            <h2 className="text-3xl font-bold text-slate-900">{vendidosPeriodo}</h2>
+            <span className="text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded-full text-xs flex items-center gap-1">
+              <ArrowUpRight className="w-3 h-3" /> {vendidosPeriodo}
             </span>
-            <div className="text-3xl font-extrabold leading-tight">
-              {moneyBR(dashboard.lucroPeriodo)}
-            </div>
-            <p className="text-xs text-black/60">
-              Base = comissão + ganhos – gastos – anúncios
-            </p>
-          </motion.div>
+          </div>
+          <p className="text-xs text-slate-400 mt-2">veículos entregues/vendidos</p>
+        </div>
+        <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm">
+          <p className="text-sm text-slate-500">Faturamento no período</p>
+          <h2 className="text-3xl font-bold text-slate-900 mt-2">{moneyBR(faturamentoPeriodo)}</h2>
+          <p className="text-xs text-slate-400 mt-2">
+            Lucro (comissão): <span className="text-slate-900 font-semibold">{moneyBR(lucroPeriodo)}</span>
+          </p>
+        </div>
+      </div>
+
+      {/* linha de cards secundários */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm">
+          <p className="text-sm text-slate-500 flex items-center gap-2">
+            <PieIcon className="w-4 h-4 text-slate-400" /> Anúncios (marketplaces)
+          </p>
+          <h2 className="text-2xl font-bold text-slate-900 mt-2">{moneyBR(anunciosTotal)}</h2>
+          <p className="text-xs text-slate-400 mt-1">investidos no período</p>
+        </div>
+        <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm">
+          <p className="text-sm text-slate-500">Gastos extras</p>
+          <h2 className="text-2xl font-bold text-red-600 mt-2">{moneyBR(gastosExtrasTotal)}</h2>
+          <p className="text-xs text-slate-400 mt-1">lançados em veículos</p>
+        </div>
+        <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm">
+          <p className="text-sm text-slate-500">Ganhos extras (repasses)</p>
+          <h2 className="text-2xl font-bold text-emerald-600 mt-2">{moneyBR(ganhosExtrasTotal)}</h2>
+          <p className="text-xs text-slate-400 mt-1">que você cobrou</p>
+        </div>
+        <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm">
+          <p className="text-sm text-slate-500 flex items-center gap-1">
+            <Wallet className="w-4 h-4 text-slate-400" /> Resultado extra
+          </p>
+          <h2
+            className={`text-2xl font-bold mt-2 ${
+              resultadoExtra >= 0 ? 'text-emerald-600' : 'text-red-600'
+            }`}
+          >
+            {moneyBR(resultadoExtra)}
+          </h2>
+          <p className="text-xs text-slate-400 mt-1">
+            base = ganhos + comissão - gastos - anúncios
+          </p>
+        </div>
+      </div>
+
+      {/* bloco com gráfico de vendas por mês + pizza de vendas por plataforma */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+        <div className="col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+              <LineIcon className="w-4 h-4 text-yellow-400" /> Vendas por mês — {selectedYear}
+            </h3>
+            <span className="text-xs text-slate-400">
+              {vendasPorMes.reduce((acc, m) => acc + m.vendas, 0)} venda(s) no ano
+            </span>
+          </div>
+          <div className="h-56">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={vendasPorMes}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                <XAxis dataKey="mes" stroke="#94A3B8" />
+                <YAxis stroke="#94A3B8" />
+                <Tooltip formatter={(value, name) => (name === 'valor' ? moneyBR(value) : value)} />
+                <Line
+                  type="monotone"
+                  dataKey="vendas"
+                  stroke="#FACC15"
+                  strokeWidth={3}
+                  dot={{ r: 3, strokeWidth: 1, stroke: '#0F172A', fill: '#FACC15' }}
+                />
+                <Line type="monotone" dataKey="valor" stroke="#0F172A" strokeWidth={2} yAxisId={1} />
+                <YAxis yAxisId={1} orientation="right" stroke="#94A3B8" hide />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         </div>
 
-        {/* cards de custos/ganhos */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-white rounded-2xl shadow-sm border p-4">
-            <p className="text-xs text-gray-400 flex items-center gap-1">
-              <Wallet className="w-4 h-4 text-yellow-400" /> Anúncios (marketplaces)
-            </p>
-            <p className="text-2xl font-semibold mt-2">{moneyBR(dashboard.anunciosPeriodo)}</p>
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+          <h3 className="text-sm font-semibold text-slate-800 mb-4 flex items-center gap-2">
+            <PieIcon className="w-4 h-4 text-yellow-400" /> Vendas por plataforma
+          </h3>
+          <div className="h-56">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={vendasPorPlataforma.length ? vendasPorPlataforma : [{ name: 'Sem vendas', vendas: 1 }]}
+                  dataKey="vendas"
+                  nameKey="name"
+                  innerRadius={45}
+                  outerRadius={80}
+                  paddingAngle={4}
+                >
+                  {(vendasPorPlataforma.length ? vendasPorPlataforma : [{ name: 'Sem vendas', vendas: 1 }]).map(
+                    (entry, index) => (
+                      <Cell key={entry.name} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                    )
+                  )}
+                </Pie>
+                <Legend layout="vertical" align="right" verticalAlign="middle" />
+              </PieChart>
+            </ResponsiveContainer>
           </div>
-          <div className="bg-white rounded-2xl shadow-sm border p-4">
-            <p className="text-xs text-gray-400">Gastos extras</p>
-            <p className="text-2xl font-semibold text-red-500 mt-2">
-              {moneyBR(dashboard.gastosExtrasPeriodo)}
-            </p>
+        </div>
+      </div>
+
+      {/* bloco com gastos por plataforma e gastos por categoria */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 text-yellow-400" /> Gastos por plataforma (anúncios)
+            </h3>
+            <span className="text-xs text-slate-400">{moneyBR(anunciosTotal)} no período</span>
           </div>
-          <div className="bg-white rounded-2xl shadow-sm border p-4">
-            <p className="text-xs text-gray-400">Ganhos extras</p>
-            <p className="text-2xl font-semibold text-emerald-500 mt-2">
-              {moneyBR(dashboard.ganhosExtrasPeriodo)}
-            </p>
-          </div>
-          <div className="bg-white rounded-2xl shadow-sm border p-4">
-            <p className="text-xs text-gray-400">Resultado extra (ganhos - gastos - anúncios)</p>
-            <p
-              className={`text-2xl font-semibold mt-2 ${
-                dashboard.resultadoExtra >= 0 ? 'text-emerald-500' : 'text-red-500'
-              }`}
-            >
-              {moneyBR(dashboard.resultadoExtra)}
-            </p>
+          <div className="h-52">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={gastosPorPlataforma}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                <XAxis dataKey="name" stroke="#94A3B8" />
+                <YAxis stroke="#94A3B8" />
+                <Tooltip formatter={(value) => moneyBR(value)} />
+                <Bar dataKey="gasto" radius={[8, 8, 0, 0]} fill="#FACC15" />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </div>
 
-        {/* lucro estimado */}
-        <div className="bg-white rounded-2xl shadow-sm border p-5 flex items-center justify-between gap-6">
-          <div>
-            <p className="text-xs text-gray-400">Lucro estimado do estoque</p>
-            <p className="text-3xl font-bold mt-1">{moneyBR(dashboard.lucroEstimadoEstoque)}</p>
-            <p className="text-xs text-gray-400 mt-1">
-              {dashboard.carrosNoEstimado} veículos no cálculo (não vendidos)
-            </p>
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 text-yellow-400" /> Gastos por tipo (veículo)
+            </h3>
+            <span className="text-xs text-slate-400">{moneyBR(gastosExtrasTotal)} no período</span>
           </div>
-          <div className="hidden md:flex items-center gap-3 text-sm text-gray-500">
-            <LineChart className="w-7 h-7 text-yellow-400" />
-            Estimativa baseada em: comissão + ganhos – gastos – anúncios
+          <div className="h-52">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={gastosPorCategoria}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                <XAxis dataKey="name" stroke="#94A3B8" />
+                <YAxis stroke="#94A3B8" />
+                <Tooltip formatter={(value) => moneyBR(value)} />
+                <Bar dataKey="gasto" radius={[8, 8, 0, 0]} fill="#0F172A" />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </div>
+      </div>
 
-        {/* gráficos */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* vendas por mês */}
-          <div className="bg-white rounded-2xl shadow-sm border p-5 lg:col-span-2">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <LineChart className="w-5 h-5 text-yellow-400" />
-                <h3 className="font-semibold">Vendas por mês</h3>
-              </div>
-              <p className="text-xs text-gray-400">Período selecionado</p>
-            </div>
-            <div className="flex gap-3 items-end min-h-[140px]">
-              {vendasPorMes.length === 0 ? (
-                <p className="text-sm text-gray-400">Sem vendas neste recorte.</p>
-              ) : (
-                vendasPorMes.map((m) => {
-                  const max = Math.max(...vendasPorMes.map((x) => x.count), 1);
-                  const height = (m.count / max) * 100;
-                  return (
-                    <div key={m.key} className="flex-1 flex flex-col items-center gap-2">
-                      <div
-                        className="w-full bg-gradient-to-t from-yellow-200 to-yellow-400 rounded-t-2xl shadow-sm flex items-end justify-center"
-                        style={{ height: `${Math.max(18, height)}%` }}
-                      >
-                        <span className="text-xs font-semibold text-yellow-900 mb-2">
-                          {m.count}
-                        </span>
-                      </div>
-                      <div className="text-xs text-gray-400">{m.label}</div>
-                      <div className="text-[10px] text-gray-300">{moneyBR(m.total)}</div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
+      {/* bloco final - lucro estimado do estoque */}
+      <div className="bg-gradient-to-r from-yellow-400 to-yellow-300 rounded-2xl p-5 flex items-center justify-between shadow-lg">
+        <div>
+          <p className="text-sm text-slate-800/80">Lucro estimado do estoque (todos os carros disponíveis)</p>
+          <h2 className="text-3xl font-extrabold text-slate-900 mt-2">{moneyBR(lucroEstimadoEstoque)}</h2>
+          <p className="text-xs text-slate-800/80 mt-2">
+            baseado em: comissão + repasses - gastos - anúncios (por veículo)
+          </p>
+        </div>
+        <div className="hidden md:flex gap-2">
+          <div className="bg-white/25 backdrop-blur rounded-xl px-4 py-2 text-sm text-slate-900 flex items-center gap-2">
+            <ArrowUpRight className="w-4 h-4" /> {estoqueAtual} veículos
           </div>
-
-          {/* vendas por plataforma */}
-          <div className="bg-white rounded-2xl shadow-sm border p-5">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <PieIcon className="w-5 h-5 text-pink-400" />
-                <h3 className="font-semibold">Vendas por plataforma</h3>
-              </div>
-              <span className="text-xs text-gray-400">
-                {sales.length} venda(s)
-              </span>
-            </div>
-
-            <div className="space-y-3">
-              {vendasPorPlataforma.length === 0 ? (
-                <p className="text-sm text-gray-400">Sem vendas no período.</p>
-              ) : (
-                vendasPorPlataforma.map((item, idx) => {
-                  const total = vendasPorPlataforma.reduce((acc, it) => acc + it.count, 0);
-                  const pct = Math.round((item.count / total) * 100);
-                  return (
-                    <div key={item.name}>
-                      <div className="flex justify-between text-xs mb-1">
-                        <span className="font-medium">{item.name}</span>
-                        <span className="text-gray-400">
-                          {item.count} — {pct}%
-                        </span>
-                      </div>
-                      <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
-                        <div
-                          className={`h-full rounded-full ${
-                            idx % 3 === 0
-                              ? 'bg-gradient-to-r from-yellow-400 to-amber-500'
-                              : idx % 3 === 1
-                              ? 'bg-gradient-to-r from-pink-400 to-rose-500'
-                              : 'bg-gradient-to-r from-emerald-400 to-green-500'
-                          }`}
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
+          <div className="bg-white/25 backdrop-blur rounded-xl px-4 py-2 text-sm text-slate-900 flex items-center gap-2">
+            <ArrowDownRight className="w-4 h-4" /> anúncios: {moneyBR(anunciosTotal)}
           </div>
         </div>
       </div>

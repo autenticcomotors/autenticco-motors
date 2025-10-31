@@ -537,11 +537,21 @@ const OverviewBoard = () => {
 
       {/* tabela */}
       <div className="bg-white border rounded-md overflow-hidden">
-        {/* 👇 só rolagem vertical, SEM horizontal */}
-        <div
-          className="relative"
-          style={{ maxHeight: '72vh', overflowY: 'auto', overflowX: 'hidden' }}
-        >
+        {/* 👇 rolagem horizontal automática em telas pequenas ou zoom */}
+<div
+  className="relative w-full overflow-x-auto overflow-y-auto"
+  style={{
+    maxHeight: '72vh',
+    WebkitOverflowScrolling: 'touch', // rolagem suave
+  }}
+>
+  <div
+    style={{
+      minWidth: '1200px', // largura mínima total pra forçar scroll
+      width: 'max-content', // ocupa apenas o necessário
+    }}
+  >
+
           <table
             className="text-sm"
             style={{

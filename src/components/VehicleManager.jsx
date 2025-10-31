@@ -73,13 +73,13 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
   const [entryMiniOpenFor, setEntryMiniOpenFor] = useState(null);
   const [entryDate, setEntryDate] = useState('');
   const [entryTime, setEntryTime] = useState('');
-  const [entryPos, setEntryPos] = useState({ top: 0, left: 0 });
+  
 
   // mini-modal entrega
   const [deliverMiniOpenFor, setDeliverMiniOpenFor] = useState(null);
   const [deliverDate, setDeliverDate] = useState('');
   const [deliverTime, setDeliverTime] = useState('');
-  const [deliverPos, setDeliverPos] = useState({ top: 0, left: 0 });
+  
 
   const isoFromDateTime = (dateStr, timeStr) => {
     if (!dateStr) return null;
@@ -425,24 +425,13 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     }
   };
 
- // abrir mini-modal de entrada (usa posição do clique, não do scroll)
-  const openEntryMini = (car, e) => {
+ // abrir mini-modal de ENTRADA dentro do próprio card
+  const openEntryMini = (car) => {
     const d = car.entry_at ? new Date(car.entry_at) : new Date();
     setEntryDate(d.toISOString().slice(0, 10));
     setEntryTime(d.toTimeString().slice(0, 5));
-
-    const modalWidth = 280;
-    // posição bruta do clique na tela
-    let top = e.clientY + 6;
-    let left = e.clientX;
-
-    // limite na direita
-    const maxLeft = window.innerWidth - modalWidth - 12;
-    if (left > maxLeft) left = maxLeft;
-    if (left < 8) left = 8;
-
-    setEntryPos({ top, left });
     setEntryMiniOpenFor(car.id);
+    setDeliverMiniOpenFor(null);
   };
 
   const handleSaveEntry = async () => {
@@ -463,22 +452,13 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     }
   };
 
-  // abrir mini-modal de entrega (mesma lógica)
-  const openDeliverMini = (car, e) => {
+  // abrir mini-modal de ENTREGA dentro do próprio card
+  const openDeliverMini = (car) => {
     const d = car.delivered_at ? new Date(car.delivered_at) : new Date();
     setDeliverDate(d.toISOString().slice(0, 10));
     setDeliverTime(d.toTimeString().slice(0, 5));
-
-    const modalWidth = 280;
-    let top = e.clientY + 6;
-    let left = e.clientX;
-
-    const maxLeft = window.innerWidth - modalWidth - 12;
-    if (left > maxLeft) left = maxLeft;
-    if (left < 8) left = 8;
-
-    setDeliverPos({ top, left });
     setDeliverMiniOpenFor(car.id);
+    setEntryMiniOpenFor(null);
   };
 
   const handleSaveDeliver = async () => {
@@ -656,6 +636,66 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                         VENDIDO
                       </span>
                     )}
+                    
+                    
+                    
+                                  {/* mini-modal ENTRADA - colado no card */}
+              {entryMiniOpenFor === car.id && (
+                <div className="absolute top-10 left-10 md:left-40 z-[999] bg-white rounded-xl shadow-lg p-4 w-[280px] space-y-3 border border-gray-200">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-sm font-semibold">Data de entrada</h3>
+                    <button onClick={() => setEntryMiniOpenFor(null)}>
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <input
+                    type="date"
+                    value={entryDate}
+                    onChange={(e) => setEntryDate(e.target.value)}
+                    className="w-full border rounded px-2 py-1"
+                  />
+                  <input
+                    type="time"
+                    value={entryTime}
+                    onChange={(e) => setEntryTime(e.target.value)}
+                    className="w-full border rounded px-2 py-1"
+                  />
+                  <Button onClick={handleSaveEntry} className="w-full bg-yellow-400 text-black">
+                    Salvar
+                  </Button>
+                </div>
+              )}
+
+              {/* mini-modal ENTREGA - colado no card */}
+              {deliverMiniOpenFor === car.id && (
+                <div className="absolute top-10 left-10 md:left-40 z-[999] bg-white rounded-xl shadow-lg p-4 w-[280px] space-y-3 border border-gray-200">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-sm font-semibold">Registrar entrega</h3>
+                    <button onClick={() => setDeliverMiniOpenFor(null)}>
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <input
+                    type="date"
+                    value={deliverDate}
+                    onChange={(e) => setDeliverDate(e.target.value)}
+                    className="w-full border rounded px-2 py-1"
+                  />
+                  <input
+                    type="time"
+                    value={deliverTime}
+                    onChange={(e) => setDeliverTime(e.target.value)}
+                    className="w-full border rounded px-2 py-1"
+                  />
+                  <Button onClick={handleSaveDeliver} className="w-full bg-yellow-400 text-black">
+                    Salvar
+                  </Button>
+                </div>
+              )}
+
+                    
+                    
+                    
                   </div>
                   <p className="text-sm text-gray-600 flex gap-2 items-center">
                     Preço:{' '}
@@ -685,7 +725,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                         : '-'}
                     </span>
                     <button
-                      onClick={(e) => openEntryMini(car, e)}
+                      onClick={() => openEntryMini(car)}
                       className="text-xs text-blue-600 hover:underline flex items-center gap-1"
                     >
                       <PenSquare className="w-3 h-3" /> editar
@@ -699,7 +739,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                     </span>
                     {!isSold && (
                       <button
-                        onClick={(e) => openDeliverMini(car, e)}
+                        onClick={() => openDeliverMini(car)}
                         className="text-xs text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded flex items-center gap-1"
                       >
                         Marcar como Entregue
@@ -1087,71 +1127,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
         </DialogContent>
       </Dialog>
 
-      {/* mini-modal entrada (posicionado) */}
-      {entryMiniOpenFor && (
-        <div
-          className="fixed z-[9999] bg-white rounded-xl shadow-lg p-4 w-[280px] space-y-3 border border-gray-200"
-          style={{
-            top: `${entryPos.top}px`,
-            left: `${entryPos.left}px`,
-          }}
-        >
-          <div className="flex justify-between items-center">
-            <h3 className="text-sm font-semibold">Data de entrada</h3>
-            <button onClick={() => setEntryMiniOpenFor(null)}>
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          <input
-            type="date"
-            value={entryDate}
-            onChange={(e) => setEntryDate(e.target.value)}
-            className="w-full border rounded px-2 py-1"
-          />
-          <input
-            type="time"
-            value={entryTime}
-            onChange={(e) => setEntryTime(e.target.value)}
-            className="w-full border rounded px-2 py-1"
-          />
-          <Button onClick={handleSaveEntry} className="w-full bg-yellow-400 text-black">
-            Salvar
-          </Button>
-        </div>
-      )}
-
-      {/* mini-modal entrega (posicionado) */}
-      {deliverMiniOpenFor && (
-        <div
-          className="fixed z-[9999] bg-white rounded-xl shadow-lg p-4 w-[280px] space-y-3 border border-gray-200"
-          style={{
-            top: `${deliverPos.top}px`,
-            left: `${deliverPos.left}px`,
-          }}
-        >
-          <div className="flex justify-between items-center">
-            <h3 className="text-sm font-semibold">Registrar entrega</h3>
-            <button onClick={() => setDeliverMiniOpenFor(null)}>
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          <input
-            type="date"
-            value={deliverDate}
-            onChange={(e) => setDeliverDate(e.target.value)}
-            className="w-full border rounded px-2 py-1"
-          />
-          <input
-            type="time"
-            value={deliverTime}
-            onChange={(e) => setDeliverTime(e.target.value)}
-            className="w-full border rounded px-2 py-1"
-          />
-          <Button onClick={handleSaveDeliver} className="w-full bg-yellow-400 text-black">
-            Salvar
-          </Button>
-        </div>
-      )}
+      
     </div>
   );
 };

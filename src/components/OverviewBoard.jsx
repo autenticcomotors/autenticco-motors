@@ -6,7 +6,17 @@ import {
   getPlatforms,
   getPublicationsForCars,
   updatePlatformOrder,
+  // para o modal interno:
+  getPublicationsByCar,
+  getExpensesByCar,
+  addPublication,
+  addExpense,
+  updateCar,
+  getFipeForCar,
 } from '@/lib/car-api';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { toast } from '@/components/ui/use-toast';
 
 const EXCLUDE_COL_NAMES = ['indicação', 'indicacao'];
 
@@ -44,7 +54,7 @@ const isAdPlatformName = (name = '') => {
   );
 };
 
-const OverviewBoard = ({ onOpenGestaoForCar = () => {} }) => {
+const OverviewBoard = () => {
   const [cars, setCars] = useState([]);
   const [platforms, setPlatforms] = useState([]);
   const [pubsMap, setPubsMap] = useState({});
@@ -55,6 +65,34 @@ const OverviewBoard = ({ onOpenGestaoForCar = () => {} }) => {
   const [orderModalOpen, setOrderModalOpen] = useState(false);
   const [orderingPlatforms, setOrderingPlatforms] = useState([]);
 
+  // 🔥 modal interno de GESTÃO
+  const [gestaoOpen, setGestaoOpen] = useState(false);
+  const [gestaoTab, setGestaoTab] = useState('marketplaces');
+  const [gestaoCar, setGestaoCar] = useState(null);
+  const [gestaoPubs, setGestaoPubs] = useState([]);
+  const [gestaoExps, setGestaoExps] = useState([]);
+  const [gestaoFinance, setGestaoFinance] = useState({
+    fipe_value: '',
+    commission: '',
+    return_to_seller: '',
+  });
+  const [pubForm, setPubForm] = useState({
+    platform_id: '',
+    link: '',
+    spent: '',
+    status: 'active',
+    published_at: '',
+    notes: '',
+  });
+  const [expForm, setExpForm] = useState({
+    category: '',
+    amount: '',
+    charged_value: '',
+    incurred_at: '',
+    description: '',
+  });
+
+  // >>> CARREGAMENTO INICIAL
   useEffect(() => {
     const run = async () => {
       setLoading(true);
@@ -197,13 +235,215 @@ const OverviewBoard = ({ onOpenGestaoForCar = () => {} }) => {
     return false;
   };
 
-  // larguras fixas
-  const COL_IMG = 80; // maior agora
+  // larguras fixas (📸 aumentei)
+  const COL_IMG = 110; // era 80
   const COL_VEHICLE = 230;
   const COL_PRICE = 82;
   const COL_PLATE = 74;
   const COL_ACTION = 90;
   const COL_PLATFORM = 80;
+
+  // ====== FUNÇÕES DO MODAL DE GESTÃO ======
+  const marketplacePlatforms = (platforms || []).filter(
+    (p) => p.platform_type === 'marketplace'
+  );
+  const socialPlatforms = (platforms || []).filter((p) => p.platform_type === 'social');
+
+  const openGestao = async (car) => {
+    setGestaoCar(car);
+    setGestaoTab('marketplaces');
+    setGestaoOpen(true);
+
+    try {
+      const [pubs, exps] = await Promise.all([
+        getPublicationsByCar(car.id),
+        getExpensesByCar(car.id),
+      ]);
+      setGestaoPubs(pubs || []);
+      setGestaoExps(exps || []);
+      setGestaoFinance({
+        fipe_value: car.fipe_value ?? '',
+        commission: car.commission ?? '',
+        return_to_seller: car.return_to_seller ?? '',
+      });
+      setPubForm({
+        platform_id: '',
+        link: '',
+        spent: '',
+        status: 'active',
+        published_at: '',
+        notes: '',
+      });
+      setExpForm({
+        category: '',
+        amount: '',
+        charged_value: '',
+        incurred_at: '',
+        description: '',
+      });
+    } catch (err) {
+      console.error(err);
+      setGestaoPubs([]);
+      setGestaoExps([]);
+    }
+  };
+
+  const reloadSingleCarData = async (carId) => {
+    // recarrega só os pubs/gastos e também a tabela grande
+    const [carsRes, pubs] = await Promise.all([
+      getCars({ includeSold: true }),
+      getPublicationsForCars([carId]),
+    ]);
+    setCars(carsRes || []);
+    if (pubs && pubs.length) {
+      setPubsMap((prev) => ({
+        ...prev,
+        [carId]: {
+          ...(prev[carId] || {}),
+          ...pubs.reduce((acc, p) => {
+            if (p.platform_id) {
+              const key = `platform_${p.platform_id}`;
+              if (!acc[key]) acc[key] = [];
+              acc[key].push(p);
+            }
+            return acc;
+          }, {}),
+        },
+      }));
+    }
+  };
+
+  const handleSavePub = async () => {
+    if (!gestaoCar) return;
+    try {
+      const payload = {
+        car_id: gestaoCar.id,
+        platform_id: pubForm.platform_id || null,
+        link: pubForm.link || null,
+        spent: pubForm.spent ? Number(pubForm.spent) : null,
+        status: pubForm.status || 'active',
+        published_at: pubForm.published_at || null,
+        notes: pubForm.notes || '',
+      };
+      await addPublication(payload);
+      toast({ title: 'Registro salvo' });
+
+      const [pubs, exps] = await Promise.all([
+        getPublicationsByCar(gestaoCar.id),
+        getExpensesByCar(gestaoCar.id),
+      ]);
+      setGestaoPubs(pubs || []);
+      setGestaoExps(exps || []);
+
+      setPubForm({
+        platform_id: '',
+        link: '',
+        spent: '',
+        status: 'active',
+        published_at: '',
+        notes: '',
+      });
+
+      await reloadSingleCarData(gestaoCar.id);
+    } catch (err) {
+      console.error(err);
+      toast({
+        title: 'Erro ao salvar publicação',
+        description: err.message || String(err),
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleSaveExp = async () => {
+    if (!gestaoCar) return;
+    try {
+      const payload = {
+        car_id: gestaoCar.id,
+        category: expForm.category || 'Outros',
+        amount: expForm.amount ? Number(expForm.amount) : 0,
+        charged_value:
+          expForm.charged_value !== '' && expForm.charged_value !== null
+            ? Number(expForm.charged_value)
+            : 0,
+        incurred_at: expForm.incurred_at
+          ? new Date(`${expForm.incurred_at}T00:00:00-03:00`).toISOString()
+          : new Date().toISOString(),
+        description: expForm.description || '',
+      };
+      await addExpense(payload);
+      toast({ title: 'Gasto/Ganho salvo' });
+
+      const [pubs, exps] = await Promise.all([
+        getPublicationsByCar(gestaoCar.id),
+        getExpensesByCar(gestaoCar.id),
+      ]);
+      setGestaoPubs(pubs || []);
+      setGestaoExps(exps || []);
+
+      setExpForm({
+        category: '',
+        amount: '',
+        charged_value: '',
+        incurred_at: '',
+        description: '',
+      });
+
+      await reloadSingleCarData(gestaoCar.id);
+    } catch (err) {
+      console.error(err);
+      toast({
+        title: 'Erro ao salvar gasto/ganho',
+        description: err.message || String(err),
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleSaveFinance = async () => {
+    if (!gestaoCar) return;
+    try {
+      await updateCar(gestaoCar.id, {
+        fipe_value:
+          gestaoFinance.fipe_value !== '' ? Number(gestaoFinance.fipe_value) : null,
+        commission: gestaoFinance.commission
+          ? Number(gestaoFinance.commission)
+          : null,
+        return_to_seller: gestaoFinance.return_to_seller
+          ? Number(gestaoFinance.return_to_seller)
+          : null,
+      });
+      toast({ title: 'Financeiro atualizado' });
+      await reloadSingleCarData(gestaoCar.id);
+    } catch (err) {
+      console.error(err);
+      toast({
+        title: 'Erro ao salvar financeiro',
+        description: err.message || String(err),
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleFetchFipe = async () => {
+    if (!gestaoCar) return;
+    try {
+      const val = await getFipeForCar(gestaoCar);
+      if (!val) {
+        toast({ title: 'FIPE não encontrada' });
+        return;
+      }
+      setGestaoFinance((prev) => ({ ...prev, fipe_value: val }));
+      toast({ title: 'FIPE carregada' });
+    } catch (err) {
+      console.error(err);
+      toast({
+        title: 'Erro ao buscar FIPE',
+        description: err.message || String(err),
+        variant: 'destructive',
+      });
+    }
+  };
 
   return (
     <div className="w-full space-y-4">
@@ -372,7 +612,7 @@ const OverviewBoard = ({ onOpenGestaoForCar = () => {} }) => {
                     <tr
                       key={car.id}
                       className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}
-                      style={{ height: 72 }}
+                      style={{ height: 78 }} // linha um pouco mais alta
                     >
                       {/* foto */}
                       <td
@@ -386,7 +626,7 @@ const OverviewBoard = ({ onOpenGestaoForCar = () => {} }) => {
                           padding: '6px 4px',
                         }}
                       >
-                        <div className="w-[72px] h-[56px] rounded-md bg-slate-200 overflow-hidden flex items-center justify-center">
+                        <div className="w-[96px] h-[70px] rounded-md bg-slate-200 overflow-hidden flex items-center justify-center">
                           {img ? (
                             <img
                               src={img}
@@ -503,7 +743,7 @@ const OverviewBoard = ({ onOpenGestaoForCar = () => {} }) => {
                         }}
                       >
                         <button
-                          onClick={() => onOpenGestaoForCar(car)} // <<< AQUI: abre modal da própria página
+                          onClick={() => openGestao(car)}
                           className="px-3 py-1 rounded-md border text-[11px] font-medium hover:bg-slate-50"
                         >
                           Gerenciar
@@ -599,6 +839,282 @@ const OverviewBoard = ({ onOpenGestaoForCar = () => {} }) => {
           </div>
         </div>
       )}
+
+      {/* 🔥 MODAL INTERNO DE GESTÃO (só da Matriz) */}
+      <Dialog open={gestaoOpen} onOpenChange={setGestaoOpen}>
+        <DialogContent className="max-w-4xl bg-white text-gray-900">
+          <DialogHeader>
+            <DialogTitle>
+              Gestão —{' '}
+              {gestaoCar
+                ? `${gestaoCar.brand} ${gestaoCar.model} ${gestaoCar.year || ''}`
+                : ''}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="flex gap-2 mb-4">
+            <button
+              onClick={() => setGestaoTab('marketplaces')}
+              className={`px-3 py-1 rounded ${
+                gestaoTab === 'marketplaces'
+                  ? 'bg-yellow-400 text-black'
+                  : 'bg-gray-100'
+              }`}
+            >
+              Anúncios (Marketplaces)
+            </button>
+            <button
+              onClick={() => setGestaoTab('social')}
+              className={`px-3 py-1 rounded ${
+                gestaoTab === 'social' ? 'bg-yellow-400 text-black' : 'bg-gray-100'
+              }`}
+            >
+              Redes Sociais
+            </button>
+            <button
+              onClick={() => setGestaoTab('expenses')}
+              className={`px-3 py-1 rounded ${
+                gestaoTab === 'expenses' ? 'bg-yellow-400 text-black' : 'bg-gray-100'
+              }`}
+            >
+              Gastos/Ganhos
+            </button>
+            <button
+              onClick={() => setGestaoTab('finance')}
+              className={`px-3 py-1 rounded ${
+                gestaoTab === 'finance' ? 'bg-yellow-400 text-black' : 'bg-gray-100'
+              }`}
+            >
+              Financeiro
+            </button>
+          </div>
+
+          {/* Marketplaces */}
+          {gestaoTab === 'marketplaces' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-3">
+                <select
+                  value={pubForm.platform_id}
+                  onChange={(e) => setPubForm((p) => ({ ...p, platform_id: e.target.value }))}
+                  className="w-full border rounded px-2 py-2"
+                >
+                  <option value="">Plataforma (Marketplaces)</option>
+                  {marketplacePlatforms.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  value={pubForm.spent}
+                  onChange={(e) => setPubForm((p) => ({ ...p, spent: e.target.value }))}
+                  placeholder="Gasto (R$)"
+                  type="number"
+                  className="w-full border rounded px-2 py-2"
+                />
+                <input
+                  value={pubForm.link}
+                  onChange={(e) => setPubForm((p) => ({ ...p, link: e.target.value }))}
+                  placeholder="Link do anúncio"
+                  className="w-full border rounded px-2 py-2"
+                />
+                <Button onClick={handleSavePub} className="bg-yellow-400 text-black w-full">
+                  Salvar anúncio
+                </Button>
+              </div>
+
+              <div className="border rounded-lg p-2 max-h-64 overflow-y-auto">
+                {(gestaoPubs || [])
+                  .filter((p) => {
+                    const pf = platforms.find((pl) => pl.id === p.platform_id);
+                    return pf?.platform_type === 'marketplace';
+                  })
+                  .map((p) => {
+                    const pf = platforms.find((pl) => pl.id === p.platform_id);
+                    return (
+                      <div
+                        key={p.id}
+                        className="flex justify-between items-center border-b last:border-b-0 py-2"
+                      >
+                        <div>
+                          <p className="text-sm font-semibold">{pf ? pf.name : '---'}</p>
+                          <p className="text-xs text-gray-500">
+                            Gasto: {Money(p.spent)} | {p.status}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          )}
+
+          {/* Social */}
+          {gestaoTab === 'social' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-3">
+                <select
+                  value={pubForm.platform_id}
+                  onChange={(e) => setPubForm((p) => ({ ...p, platform_id: e.target.value }))}
+                  className="w-full border rounded px-2 py-2"
+                >
+                  <option value="">Plataforma (Redes Sociais)</option>
+                  {socialPlatforms.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  value={pubForm.link}
+                  onChange={(e) => setPubForm((p) => ({ ...p, link: e.target.value }))}
+                  placeholder="Link da publicação"
+                  className="w-full border rounded px-2 py-2"
+                />
+                <Button onClick={handleSavePub} className="bg-yellow-400 text-black w-full">
+                  Salvar publicação
+                </Button>
+              </div>
+
+              <div className="border rounded-lg p-2 max-h-64 overflow-y-auto">
+                {(gestaoPubs || [])
+                  .filter((p) => {
+                    const pf = platforms.find((pl) => pl.id === p.platform_id);
+                    return pf?.platform_type !== 'marketplace';
+                  })
+                  .map((p) => {
+                    const pf = platforms.find((pl) => pl.id === p.platform_id);
+                    return (
+                      <div
+                        key={p.id}
+                        className="flex justify-between items-center border-b last:border-b-0 py-2"
+                      >
+                        <div>
+                          <p className="text-sm font-semibold">{pf ? pf.name : '---'}</p>
+                          <p className="text-xs text-gray-500">{p.link || 'Sem link'}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          )}
+
+          {/* Gastos */}
+          {gestaoTab === 'expenses' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-3">
+                <input
+                  value={expForm.category}
+                  onChange={(e) => setExpForm((p) => ({ ...p, category: e.target.value }))}
+                  placeholder="Categoria"
+                  className="w-full border rounded px-2 py-2"
+                />
+                <input
+                  value={expForm.amount}
+                  onChange={(e) => setExpForm((p) => ({ ...p, amount: e.target.value }))}
+                  placeholder="Gasto (R$)"
+                  type="number"
+                  className="w-full border rounded px-2 py-2"
+                />
+                <input
+                  value={expForm.charged_value}
+                  onChange={(e) => setExpForm((p) => ({ ...p, charged_value: e.target.value }))}
+                  placeholder="Valor cobrado (R$)"
+                  type="number"
+                  className="w-full border rounded px-2 py-2"
+                />
+                <input
+                  value={expForm.incurred_at}
+                  onChange={(e) => setExpForm((p) => ({ ...p, incurred_at: e.target.value }))}
+                  type="date"
+                  className="w-full border rounded px-2 py-2"
+                />
+                <input
+                  value={expForm.description}
+                  onChange={(e) => setExpForm((p) => ({ ...p, description: e.target.value }))}
+                  placeholder="Descrição"
+                  className="w-full border rounded px-2 py-2"
+                />
+                <Button onClick={handleSaveExp} className="bg-yellow-400 text-black w-full">
+                  Salvar gasto/ganho
+                </Button>
+              </div>
+
+              <div className="border rounded-lg p-2 max-h-64 overflow-y-auto">
+                {(gestaoExps || []).map((e) => (
+                  <div
+                    key={e.id}
+                    className="flex justify-between items-center border-b last:border-b-0 py-2"
+                  >
+                    <div>
+                      <p className="text-sm font-semibold">{e.category}</p>
+                      <p className="text-xs text-gray-500">
+                        Gasto: {Money(e.amount)}{' '}
+                        {e.charged_value ? `| Cobrado: ${Money(e.charged_value)}` : ''}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Financeiro */}
+          {gestaoTab === 'finance' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-3">
+                <div className="flex gap-2 items-center">
+                  <input
+                    value={gestaoFinance.fipe_value}
+                    onChange={(e) =>
+                      setGestaoFinance((p) => ({ ...p, fipe_value: e.target.value }))
+                    }
+                    placeholder="Valor FIPE"
+                    type="number"
+                    className="w-full border rounded px-2 py-2"
+                  />
+                  <Button
+                    type="button"
+                    onClick={handleFetchFipe}
+                    className="bg-gray-100 text-gray-900 border border-gray-200"
+                  >
+                    Buscar FIPE
+                  </Button>
+                </div>
+                <input
+                  value={gestaoFinance.commission}
+                  onChange={(e) =>
+                    setGestaoFinance((p) => ({ ...p, commission: e.target.value }))
+                  }
+                  placeholder="Comissão (R$)"
+                  type="number"
+                  className="w-full border rounded px-2 py-2"
+                />
+                <input
+                  value={gestaoFinance.return_to_seller}
+                  onChange={(e) =>
+                    setGestaoFinance((p) => ({ ...p, return_to_seller: e.target.value }))
+                  }
+                  placeholder="Devolver ao cliente (R$)"
+                  type="number"
+                  className="w-full border rounded px-2 py-2"
+                />
+                <Button onClick={handleSaveFinance} className="bg-yellow-400 text-black w-full">
+                  Salvar financeiro
+                </Button>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-4 text-sm">
+                <p className="font-semibold mb-2">Observação:</p>
+                <p className="text-gray-600">
+                  Esses dados ficam salvos direto no veículo. Ao fechar o modal a tabela da Matriz
+                  já reflete essas mudanças.
+                </p>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

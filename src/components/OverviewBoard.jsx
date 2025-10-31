@@ -1,666 +1,523 @@
 // src/components/OverviewBoard.jsx
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   getCars,
   getPlatforms,
   getPublicationsForCars,
-  getExpensesForCars,
   updatePlatformOrder,
-  addPublication,
-  deletePublication,
 } from '@/lib/car-api';
-import {
-  Search,
-  X,
-  ArrowUp,
-  ArrowDown,
-  Image as ImageIcon,
-} from 'lucide-react';
-import { toast } from '@/components/ui/use-toast';
+import { Search, ArrowUp, ArrowDown, X } from 'lucide-react';
 
-const AMBER = '#F5C301';
-
-const OverviewBoard = () => {
+const OverviewBoard = ({ onOpenCarManager }) => {
+  // dados
   const [cars, setCars] = useState([]);
   const [platforms, setPlatforms] = useState([]);
-  const [publications, setPublications] = useState([]);
-  const [expensesByCar, setExpensesByCar] = useState([]);
+  const [pubsByCar, setPubsByCar] = useState({});
   const [loading, setLoading] = useState(true);
 
-  const [searchTerm, setSearchTerm] = useState('');
+  // UI
+  const [search, setSearch] = useState('');
+  const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
+  const [orderingPlatforms, setOrderingPlatforms] = useState([]);
 
-  // modal ordem
-  const [showOrderModal, setShowOrderModal] = useState(false);
-  const [orderingList, setOrderingList] = useState([]);
-  const [savingOrder, setSavingOrder] = useState(false);
-
-  // modal gerenciar
-  const [showManageModal, setShowManageModal] = useState(false);
-  const [manageCar, setManageCar] = useState(null);
-  const [manageTab, setManageTab] = useState('marketplace');
-  const [selectedPlatformId, setSelectedPlatformId] = useState('');
-  const [manageLink, setManageLink] = useState('');
-  const [manageSpent, setManageSpent] = useState('');
-
+  // carrega tudo
   useEffect(() => {
-    const loadAll = async () => {
-      try {
-        setLoading(true);
-        const [carsData, platformsData] = await Promise.all([
-          getCars({ includeSold: true }),
-          getPlatforms(),
-        ]);
+    const load = async () => {
+      setLoading(true);
+      const [carsRes, platformsRes] = await Promise.all([
+        getCars({ includeSold: true }),
+        getPlatforms(),
+      ]);
 
-        setCars(carsData || []);
+      const orderedPlatforms = (platformsRes || [])
+        .map((p) => ({
+          ...p,
+          order: p.order ?? 9999,
+        }))
+        .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
 
-        const orderedPlatforms = [...(platformsData || [])].sort((a, b) => {
-          if (a.order != null && b.order != null) return a.order - b.order;
-          if (a.order != null) return -1;
-          if (b.order != null) return 1;
-          return (a.name || '').localeCompare(b.name || '');
+      setCars(carsRes || []);
+      setPlatforms(orderedPlatforms);
+
+      // publicações em lote
+      const carIds = (carsRes || []).map((c) => c.id);
+      if (carIds.length > 0) {
+        const pubs = await getPublicationsForCars(carIds);
+        // agrupar por carro
+        const map = {};
+        (pubs || []).forEach((p) => {
+          if (!map[p.car_id]) map[p.car_id] = [];
+          map[p.car_id].push(p);
         });
-        setPlatforms(orderedPlatforms);
-
-        const carIds = (carsData || []).map((c) => c.id);
-        if (carIds.length > 0) {
-          const [pubs, exps] = await Promise.all([
-            getPublicationsForCars(carIds),
-            getExpensesForCars(carIds),
-          ]);
-          setPublications(pubs || []);
-          setExpensesByCar(exps || []);
-        } else {
-          setPublications([]);
-          setExpensesByCar([]);
-        }
-      } catch (err) {
-        console.error('Erro ao carregar matriz:', err);
-      } finally {
-        setLoading(false);
+        setPubsByCar(map);
+      } else {
+        setPubsByCar({});
       }
-    };
 
-    loadAll();
+      setLoading(false);
+    };
+    load();
   }, []);
 
+  // filtrar carros
   const filteredCars = useMemo(() => {
-    let list = [...(cars || [])];
-    if (searchTerm.trim() !== '') {
-      const t = searchTerm.trim().toLowerCase();
-      list = list.filter((car) => {
-        const base = `${car.brand || ''} ${car.model || ''} ${car.year || ''} ${car.plate || ''}`.toLowerCase();
-        return base.includes(t);
-      });
-    }
-    return list;
-  }, [cars, searchTerm]);
+    const term = search.trim().toLowerCase();
+    if (!term) return cars;
+    return cars.filter((c) => {
+      const full = `${c.brand || ''} ${c.model || ''} ${c.year || ''} ${c.plate || ''}`.toLowerCase();
+      return full.includes(term);
+    });
+  }, [cars, search]);
 
-  const getCarPublicationOnPlatform = (carId, platformId) => {
-    return (publications || []).find(
-      (pub) => pub.car_id === carId && pub.platform_id === platformId
-    );
-  };
+  // helper: checar se tem publicação/plataforma
+  const hasPub = useCallback(
+    (carId, platformId) => {
+      const arr = pubsByCar[carId];
+      if (!arr || arr.length === 0) return false;
+      // vehicle_publications tem platform_id OU platform_name
+      return arr.some((p) => p.platform_id === platformId || p.platform_name === platforms.find((pl) => pl.id === platformId)?.name);
+    },
+    [pubsByCar, platforms]
+  );
 
+  // abrir modal ordenação
   const openOrderModal = () => {
-    setOrderingList([...platforms].map((p) => ({ ...p })));
-    setShowOrderModal(true);
+    const base = platforms
+      .map((p) => ({
+        ...p,
+      }))
+      .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
+    setOrderingPlatforms(base);
+    setIsOrderModalOpen(true);
   };
 
-  const moveItem = (index, direction) => {
-    const list = [...orderingList];
-    const newIndex = index + direction;
-    if (newIndex < 0 || newIndex >= list.length) return;
-    const tmp = list[index];
-    list[index] = list[newIndex];
-    list[newIndex] = tmp;
-    setOrderingList(list);
+  const movePlatform = (id, dir) => {
+    setOrderingPlatforms((prev) => {
+      const idx = prev.findIndex((p) => p.id === id);
+      if (idx === -1) return prev;
+      const newArr = [...prev];
+      const newIdx = dir === 'up' ? idx - 1 : idx + 1;
+      if (newIdx < 0 || newIdx >= newArr.length) return prev;
+      const temp = newArr[idx];
+      newArr[idx] = newArr[newIdx];
+      newArr[newIdx] = temp;
+      return newArr.map((p, i) => ({ ...p, order: i + 1 }));
+    });
   };
 
-  const handleSaveOrder = async () => {
+  const savePlatformOrder = async () => {
     try {
-      setSavingOrder(true);
-      const updates = orderingList.map((p, idx) => ({
+      const payload = orderingPlatforms.map((p, index) => ({
         id: p.id,
-        order: idx + 1,
+        order: index + 1,
       }));
-
-      const { error } = await updatePlatformOrder(updates);
+      const { error } = await updatePlatformOrder(payload);
       if (error) {
         console.error('Erro ao salvar ordem plataformas:', error);
-        toast({
-          title: 'Erro ao salvar ordem',
-          description: 'Não foi possível salvar a nova ordem no banco.',
-          variant: 'destructive',
-        });
+        alert('Não foi possível salvar a nova ordem no banco.');
         return;
       }
-
-      const refreshed = await getPlatforms();
-      const reordered = [...(refreshed || [])].sort((a, b) => {
-        if (a.order != null && b.order != null) return a.order - b.order;
-        if (a.order != null) return -1;
-        if (b.order != null) return 1;
-        return (a.name || '').localeCompare(b.name || '');
-      });
-      setPlatforms(reordered);
-
-      setShowOrderModal(false);
-      toast({
-        title: 'Ordem salva',
-        description: 'Plataformas reordenadas com sucesso.',
-      });
+      // reatualiza lista principal
+      const newPlatforms = [...orderingPlatforms].sort(
+        (a, b) => a.order - b.order || a.name.localeCompare(b.name)
+      );
+      setPlatforms(newPlatforms);
+      setIsOrderModalOpen(false);
     } catch (err) {
       console.error('Erro geral ao salvar ordem:', err);
-      toast({
-        title: 'Erro ao salvar ordem',
-        description: 'Verifique o console do navegador.',
-        variant: 'destructive',
-      });
-    } finally {
-      setSavingOrder(false);
+      alert('Erro ao salvar ordem.');
     }
   };
 
-  const openManage = (car) => {
-    setManageCar(car);
-    setManageTab('marketplace');
-    setSelectedPlatformId('');
-    setManageLink('');
-    setManageSpent('');
-    setShowManageModal(true);
-  };
-
-  const handleSavePublication = async () => {
-    if (!manageCar || !selectedPlatformId) {
-      toast({
-        title: 'Selecione a plataforma',
-        description: 'Escolha uma plataforma para salvar.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    try {
-      const plat = platforms.find((p) => p.id === selectedPlatformId);
-      const payload = {
-        car_id: manageCar.id,
-        platform_id: selectedPlatformId,
-        platform_name: plat?.name ?? null,
-        platform_type: plat?.platform_type ?? null,
-        link: manageLink || null,
-        spent: manageTab === 'marketplace' && manageSpent ? Number(manageSpent) : null,
-        status: 'active',
-      };
-
-      const { error } = await addPublication(payload);
-      if (error) {
-        console.error('Erro ao adicionar publicação:', error);
-        toast({
-          title: 'Erro ao adicionar',
-          description: 'Não foi possível salvar esse registro.',
-          variant: 'destructive',
-        });
-        return;
-      }
-
-      const carIds = (cars || []).map((c) => c.id);
-      if (carIds.length > 0) {
-        const pubs = await getPublicationsForCars(carIds);
-        setPublications(pubs || []);
-      }
-
-      toast({
-        title: 'Salvo',
-        description: 'Publicação registrada.',
-      });
-
-      setSelectedPlatformId('');
-      setManageLink('');
-      setManageSpent('');
-    } catch (err) {
-      console.error('Erro geral ao salvar publicação:', err);
-      toast({
-        title: 'Erro ao salvar',
-        description: 'Verifique o console.',
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const handleDeletePublication = async (pubId) => {
-    try {
-      const { error } = await deletePublication(pubId);
-      if (error) {
-        console.error('Erro ao excluir publicação:', error);
-        toast({
-          title: 'Erro ao excluir',
-          description: 'Não foi possível remover esse registro.',
-          variant: 'destructive',
-        });
-        return;
-      }
-
-      const carIds = (cars || []).map((c) => c.id);
-      if (carIds.length > 0) {
-        const pubs = await getPublicationsForCars(carIds);
-        setPublications(pubs || []);
-      }
-
-      toast({
-        title: 'Excluído',
-        description: 'Registro removido.',
-      });
-    } catch (err) {
-      console.error('Erro geral ao excluir publicação:', err);
-      toast({
-        title: 'Erro ao excluir',
-        description: 'Verifique o console.',
-        variant: 'destructive',
-      });
-    }
-  };
-
-  // >>>>>>>>>>>> FOTO igual gestão
-  const getCarImage = (car) => {
+  // destacar colunas de "anúncio"
+  const isAdPlatform = (name) => {
+    if (!name) return false;
+    const lower = name.toLowerCase();
     return (
-      car.main_image_url ||
-      car.image_url ||
-      car.cover_url ||
-      car.photo_url ||
-      car.featured_image ||
-      (Array.isArray(car.images) && car.images.length > 0 ? car.images[0] : null) ||
-      (Array.isArray(car.photos) && car.photos.length > 0 ? car.photos[0] : null) ||
-      null
+      lower.includes('olx') ||
+      lower.includes('webmotors') ||
+      lower.includes('mercado') ||
+      lower.includes('outro')
     );
   };
 
-  return (
-    <div className="mt-6">
-      <div className="mb-4">
-        <h2 className="text-lg font-semibold text-gray-900">Matriz de Publicações</h2>
-        <p className="text-sm text-gray-500">
-          Visão rápida de anúncios e publicações por veículo.
-        </p>
-      </div>
+  // estilos inline
+  const tableWrapperStyle = {
+    width: '100%',
+    overflowX: 'auto',
+    overflowY: 'auto',
+    maxHeight: '520px',
+    border: '1px solid #e5e7eb',
+    borderRadius: '6px',
+    background: '#fff',
+  };
 
-      <div className="flex flex-wrap gap-3 mb-4 items-center">
-        <div className="flex items-center gap-2 px-3 py-2 bg-white rounded-md border min-w-[280px] shadow-sm">
-          <Search size={16} className="text-gray-400" />
+  const headerCellBase = {
+    position: 'sticky',
+    top: 0,
+    background: '#f7f7f8',
+    zIndex: 15,
+    fontSize: '0.7rem',
+    fontWeight: 500,
+    whiteSpace: 'nowrap',
+    borderBottom: '1px solid #e5e7eb',
+  };
+
+  // largura padrão das colunas fixas
+  const colWidthVehicle = 280;
+  const colWidthPrice = 90;
+  const colWidthPlate = 80;
+  const colWidthAction = 90;
+  const colWidthPlatform = 110;
+
+  return (
+    <div className="space-y-4">
+      {/* Topo / filtros */}
+      <div className="flex items-center gap-3">
+        <div className="relative w-80 max-w-md">
+          <Search
+            size={16}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+          />
           <input
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            type="text"
+            className="pl-9 pr-3 py-2 border rounded-md w-full text-sm focus:outline-none focus:ring-1 focus:ring-yellow-400"
             placeholder="Pesquisar marca, modelo, ano ou PLACA..."
-            className="outline-none text-sm flex-1"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-
         <button
-          type="button"
           onClick={openOrderModal}
-          className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-semibold shadow-sm"
-          style={{ backgroundColor: AMBER, color: '#000' }}
+          className="bg-yellow-400 hover:bg-yellow-500 text-sm font-medium px-4 py-2 rounded-md"
         >
           Editar ordem das plataformas
         </button>
       </div>
 
-      {/* tabela */}
-      <div className="bg-white border rounded-lg shadow-sm overflow-hidden">
-        <div
-          className="max-h-[540px] overflow-y-auto overflow-x-hidden"
-          style={{ scrollbarWidth: 'thin' }}
-        >
-          <table className="min-w-full text-sm">
-            <thead className="bg-gray-50 sticky top-0 z-20">
-              <tr>
-                <th className="px-4 py-3 text-left w-[260px] text-xs font-semibold text-gray-500 bg-gray-50">
-                  Veículo
+      {/* Tabela */}
+      <div style={tableWrapperStyle}>
+        <table className="min-w-full text-sm" style={{ borderCollapse: 'separate' }}>
+          <thead>
+            <tr>
+              <th
+                style={{
+                  ...headerCellBase,
+                  left: 0,
+                  zIndex: 20,
+                  minWidth: 50,
+                  width: 50,
+                  background: '#f7f7f8',
+                }}
+              >
+                {/* coluna da foto */}
+              </th>
+              <th
+                style={{
+                  ...headerCellBase,
+                  left: 50,
+                  zIndex: 20,
+                  minWidth: colWidthVehicle,
+                  width: colWidthVehicle,
+                  background: '#f7f7f8',
+                }}
+              >
+                Veículo
+              </th>
+              <th
+                style={{
+                  ...headerCellBase,
+                  left: 50 + colWidthVehicle,
+                  zIndex: 20,
+                  minWidth: colWidthPrice,
+                  width: colWidthPrice,
+                  textAlign: 'center',
+                  background: '#f7f7f8',
+                }}
+              >
+                Preço
+              </th>
+              <th
+                style={{
+                  ...headerCellBase,
+                  left: 50 + colWidthVehicle + colWidthPrice,
+                  zIndex: 20,
+                  minWidth: colWidthPlate,
+                  width: colWidthPlate,
+                  textAlign: 'center',
+                  background: '#f7f7f8',
+                }}
+              >
+                Placa
+              </th>
+              {platforms.map((p) => (
+                <th
+                  key={p.id}
+                  style={{
+                    ...headerCellBase,
+                    minWidth: colWidthPlatform,
+                    width: colWidthPlatform,
+                    textAlign: 'center',
+                    background: isAdPlatform(p.name) ? '#fff5dd' : '#f7f7f8',
+                  }}
+                >
+                  {p.name}
                 </th>
-                <th className="px-3 py-3 text-left w-[90px] text-xs font-semibold text-gray-500 bg-gray-50">
-                  Preço
-                </th>
-                <th className="px-3 py-3 text-left w-[80px] text-xs font-semibold text-gray-500 bg-gray-50">
-                  Placa
-                </th>
-                {platforms.map((p) => (
-                  <th
-                    key={p.id}
-                    className="px-2 py-3 text-left text-xs font-semibold text-gray-600 whitespace-nowrap"
-                    style={{
-                      minWidth: 70,
-                      backgroundColor:
-                        p.platform_type === 'marketplace'
-                          ? 'rgba(245, 195, 1, 0.16)'
-                          : '#f9fafb',
-                    }}
-                  >
-                    {p.name}
-                  </th>
-                ))}
-                <th className="px-3 py-3 text-left w-[90px] text-xs font-semibold text-gray-500 bg-gray-50">
-                  Ações
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={4} className="px-4 py-6 text-center text-gray-500">
-                    Carregando matriz...
-                  </td>
-                </tr>
-              ) : filteredCars.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="px-4 py-6 text-center text-gray-500">
-                    Nenhum veículo encontrado.
-                  </td>
-                </tr>
-              ) : (
-                filteredCars.map((car, idx) => {
-                  const img = getCarImage(car);
-                  return (
-                    <tr key={car.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}>
-                      <td className="px-4 py-3">
-                        <div className="flex gap-3 items-center">
-                          <div className="w-14 h-11 rounded-md overflow-hidden bg-gray-200 flex items-center justify-center flex-shrink-0">
-                            {img ? (
-                              <img
-                                src={img}
-                                alt={car.model || 'Veículo'}
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              <ImageIcon className="w-5 h-5 text-gray-400" />
-                            )}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="font-semibold text-gray-900 leading-tight text-sm truncate">
-                              {car.brand} {car.model}{' '}
-                              {car.year ? (
-                                <span className="text-gray-400 text-xs">({car.year})</span>
-                              ) : null}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-3 py-3 text-sm text-gray-900 whitespace-nowrap">
-                        {car.price ? (
-                          <>
-                            R{'$ '}
-                            {Number(car.price).toLocaleString('pt-BR', {
-                              minimumFractionDigits: 2,
-                            })}
-                          </>
+              ))}
+              <th
+                style={{
+                  ...headerCellBase,
+                  minWidth: colWidthAction,
+                  width: colWidthAction,
+                  textAlign: 'center',
+                  background: '#f7f7f8',
+                }}
+              >
+                Ações
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {!loading &&
+              filteredCars.map((car) => {
+                const thumb =
+                  car.main_image_url ||
+                  car.cover_url ||
+                  car.image_url ||
+                  null;
+                return (
+                  <tr key={car.id} className="border-b last:border-b-0 hover:bg-slate-50/60">
+                    {/* foto */}
+                    <td
+                      style={{
+                        position: 'sticky',
+                        left: 0,
+                        background: '#fff',
+                        zIndex: 10,
+                        width: 50,
+                        minWidth: 50,
+                      }}
+                      className="py-2"
+                    >
+                      <div className="w-10 h-10 rounded-sm overflow-hidden bg-slate-200 flex items-center justify-center">
+                        {thumb ? (
+                          <img
+                            src={thumb}
+                            alt={car.name}
+                            className="w-full h-full object-cover"
+                          />
                         ) : (
-                          <span className="text-gray-400 text-xs">--</span>
+                          <span className="text-[10px] text-slate-400">sem foto</span>
                         )}
-                      </td>
-                      <td className="px-3 py-3 text-sm text-gray-900">
-                        {car.plate || <span className="text-gray-400 text-xs">---</span>}
-                      </td>
-
-                      {platforms.map((p) => {
-                        const pub = getCarPublicationOnPlatform(car.id, p.id);
-                        return (
-                          <td
-                            key={p.id}
-                            className="px-2 py-3"
-                            style={{
-                              backgroundColor:
-                                p.platform_type === 'marketplace'
-                                  ? 'rgba(245, 195, 1, 0.06)'
-                                  : 'transparent',
-                            }}
-                          >
-                            {pub ? (
-                              <span className="inline-flex px-2 py-1 bg-green-100 text-green-700 rounded text-xs">
-                                SIM
-                              </span>
-                            ) : (
-                              <span className="inline-flex px-2 py-1 bg-red-100 text-red-700 rounded text-xs">
-                                NÃO
-                              </span>
-                            )}
-                          </td>
-                        );
-                      })}
-
-                      <td className="px-3 py-3">
-                        <button
-                          onClick={() => openManage(car)}
-                          className="text-xs text-[#d3a301] hover:underline"
+                      </div>
+                    </td>
+                    {/* nome */}
+                    <td
+                      style={{
+                        position: 'sticky',
+                        left: 50,
+                        background: '#fff',
+                        zIndex: 10,
+                        width: colWidthVehicle,
+                        minWidth: colWidthVehicle,
+                      }}
+                      className="py-2 pr-2"
+                    >
+                      <div className="flex flex-col leading-tight">
+                        <span className="font-medium text-[13px] text-slate-800">
+                          {car.brand} {car.model}{' '}
+                          {car.year ? (
+                            <span className="text-xs text-slate-400">
+                              ({car.year})
+                            </span>
+                          ) : null}
+                        </span>
+                      </div>
+                    </td>
+                    {/* preço */}
+                    <td
+                      style={{
+                        position: 'sticky',
+                        left: 50 + colWidthVehicle,
+                        background: '#fff',
+                        zIndex: 10,
+                        width: colWidthPrice,
+                        minWidth: colWidthPrice,
+                        textAlign: 'center',
+                      }}
+                      className="py-2 text-xs text-slate-700"
+                    >
+                      {car.price
+                        ? `R$ ${Number(car.price).toLocaleString('pt-BR', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}`
+                        : '--'}
+                    </td>
+                    {/* placa */}
+                    <td
+                      style={{
+                        position: 'sticky',
+                        left: 50 + colWidthVehicle + colWidthPrice,
+                        background: '#fff',
+                        zIndex: 10,
+                        width: colWidthPlate,
+                        minWidth: colWidthPlate,
+                        textAlign: 'center',
+                      }}
+                      className="py-2 text-xs text-slate-600"
+                    >
+                      {car.plate || '--'}
+                    </td>
+                    {/* plataformas */}
+                    {platforms.map((p) => {
+                      const ok = hasPub(car.id, p.id);
+                      return (
+                        <td
+                          key={p.id}
+                          style={{
+                            minWidth: colWidthPlatform,
+                            width: colWidthPlatform,
+                            textAlign: 'center',
+                            background: isAdPlatform(p.name)
+                              ? '#fffaf0'
+                              : '#fff',
+                          }}
+                          className="py-2"
                         >
-                          Gerenciar
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                          <span
+                            className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-[11px] font-medium ${
+                              ok
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : 'bg-rose-100 text-rose-700'
+                            }`}
+                          >
+                            {ok ? 'SIM' : 'NÃO'}
+                          </span>
+                        </td>
+                      );
+                    })}
+                    {/* ação */}
+                    <td
+                      style={{
+                        minWidth: colWidthAction,
+                        width: colWidthAction,
+                        textAlign: 'center',
+                        background: '#fff',
+                      }}
+                      className="py-2"
+                    >
+                      <button
+                        onClick={() => onOpenCarManager && onOpenCarManager(car)}
+                        className="px-3 py-1 rounded-md border text-xs font-medium hover:bg-slate-50"
+                      >
+                        Gerenciar
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+
+            {loading && (
+              <tr>
+                <td colSpan={4 + platforms.length + 1} className="py-6 text-center text-slate-400 text-sm">
+                  Carregando veículos e publicações...
+                </td>
+              </tr>
+            )}
+            {!loading && filteredCars.length === 0 && (
+              <tr>
+                <td colSpan={4 + platforms.length + 1} className="py-6 text-center text-slate-400 text-sm">
+                  Nenhum veículo encontrado com esse filtro.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
 
-      {/* MODAL ORDEM */}
-      {showOrderModal && (
-        <div className="fixed inset-0 bg-black/25 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg w-full max-w-xl p-5 relative">
-            <button
-              onClick={() => setShowOrderModal(false)}
-              className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
-            >
-              <X size={16} />
-            </button>
-            <h3 className="text-lg font-semibold mb-2 text-gray-900">
-              Editar ordem das plataformas
-            </h3>
-            <p className="text-xs text-gray-500 mb-4">
-              Suba ou desça os itens e clique em &ldquo;Salvar ordem&rdquo; para gravar no banco.
+      {/* Modal de ordem */}
+      {isOrderModalOpen && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-[999]">
+          <div className="bg-white rounded-md shadow-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">
+                Editar ordem das plataformas
+              </h2>
+              <button
+                onClick={() => setIsOrderModalOpen(false)}
+                className="p-1 rounded hover:bg-slate-100"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <p className="text-xs text-slate-500 mb-4">
+              Arraste usando os botões de subir/descer e clique em &quot;Salvar
+              ordem&quot; para gravar no banco. Na próxima abertura da matriz
+              elas virão nessa nova ordem.
             </p>
 
-            <div className="max-h-80 overflow-y-auto border rounded-md">
-              {orderingList.length === 0 ? (
-                <div className="p-3 text-xs text-gray-400">Nenhuma plataforma cadastrada.</div>
-              ) : (
-                orderingList.map((p, idx) => (
-                  <div
-                    key={p.id}
-                    className="flex items-center justify-between px-3 py-2 border-b last:border-b-0 bg-white/70"
-                  >
-                    <span className="text-sm text-gray-800 truncate">{p.name}</span>
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => moveItem(idx, -1)}
-                        className="p-1 rounded bg-gray-100 hover:bg-gray-200"
-                        title="Subir"
-                      >
-                        <ArrowUp size={14} />
-                      </button>
-                      <button
-                        onClick={() => moveItem(idx, +1)}
-                        className="p-1 rounded bg-gray-100 hover:bg-gray-200"
-                        title="Descer"
-                      >
-                        <ArrowDown size={14} />
-                      </button>
+            <div className="grid grid-cols-2 gap-6">
+              <div>
+                <h3 className="text-xs font-semibold mb-2">Plataformas</h3>
+                <div className="border rounded-md max-h-[380px] overflow-y-auto">
+                  {orderingPlatforms.map((p, idx) => (
+                    <div
+                      key={p.id}
+                      className={`flex items-center gap-2 px-3 py-2 border-b last:border-b-0 ${
+                        isAdPlatform(p.name) ? 'bg-yellow-50' : 'bg-white'
+                      }`}
+                    >
+                      <span className="text-xs text-slate-500 w-6">
+                        {idx + 1}.
+                      </span>
+                      <span className="flex-1 text-sm">{p.name}</span>
+                      <div className="flex flex-col gap-1">
+                        <button
+                          onClick={() => movePlatform(p.id, 'up')}
+                          className="p-1 rounded bg-slate-100 hover:bg-slate-200"
+                        >
+                          <ArrowUp size={14} />
+                        </button>
+                        <button
+                          onClick={() => movePlatform(p.id, 'down')}
+                          className="p-1 rounded bg-slate-100 hover:bg-slate-200"
+                        >
+                          <ArrowDown size={14} />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))
-              )}
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-md bg-slate-50 border p-3 text-xs text-slate-500 leading-relaxed">
+                <p className="mb-2 font-semibold text-slate-700">
+                  Dica de uso
+                </p>
+                <p>
+                  Você pode colocar primeiro as plataformas mais usadas (OLX,
+                  Webmotors, MercadoLivre). As demais ficam em seguida.
+                </p>
+                <p className="mt-2">
+                  Essa ordem é salva no banco (tabela <code>platforms</code>),
+                  então todos que abrirem a matriz verão assim.
+                </p>
+              </div>
             </div>
 
-            <div className="flex justify-end gap-2 mt-5">
+            <div className="flex justify-end gap-3 mt-6">
               <button
-                onClick={() => setShowOrderModal(false)}
-                className="px-4 py-2 rounded border text-sm"
-                disabled={savingOrder}
+                onClick={() => setIsOrderModalOpen(false)}
+                className="px-4 py-2 rounded-md border text-sm"
               >
                 Cancelar
               </button>
               <button
-                onClick={handleSaveOrder}
-                className="px-4 py-2 rounded text-sm"
-                style={{ backgroundColor: AMBER }}
-                disabled={savingOrder}
+                onClick={savePlatformOrder}
+                className="px-5 py-2 rounded-md bg-yellow-400 hover:bg-yellow-500 text-sm font-medium"
               >
-                {savingOrder ? 'Salvando...' : 'Salvar ordem'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL GERENCIAR */}
-      {showManageModal && manageCar && (
-        <div className="fixed inset-0 bg-black/35 flex items-center justify-center z-[60]">
-          <div className="bg-white rounded-lg shadow-lg w-full max-w-3xl p-5 relative">
-            <button
-              onClick={() => setShowManageModal(false)}
-              className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
-            >
-              <X size={16} />
-            </button>
-
-            <h3 className="text-lg font-semibold mb-1 text-gray-900">
-              Gestão – {manageCar.brand} {manageCar.model}{' '}
-              {manageCar.year ? `(${manageCar.year})` : ''}
-            </h3>
-            <p className="text-xs text-gray-500 mb-4">
-              Cadastre anúncios e publicações desse veículo sem sair da matriz.
-            </p>
-
-            <div className="flex gap-2 mb-4">
-              <button
-                onClick={() => setManageTab('marketplace')}
-                className={`px-4 py-2 text-sm rounded ${
-                  manageTab === 'marketplace'
-                    ? 'bg-[#ffe082] text-gray-900'
-                    : 'bg-gray-100 text-gray-500'
-                }`}
-              >
-                Anúncios (Marketplaces)
-              </button>
-              <button
-                onClick={() => setManageTab('social')}
-                className={`px-4 py-2 text-sm rounded ${
-                  manageTab === 'social'
-                    ? 'bg-[#ffe082] text-gray-900'
-                    : 'bg-gray-100 text-gray-500'
-                }`}
-              >
-                Redes Sociais
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs text-gray-600 mb-1 block">
-                  Plataforma ({manageTab === 'marketplace' ? 'Marketplaces' : 'Redes / Outros'})
-                </label>
-                <select
-                  value={selectedPlatformId}
-                  onChange={(e) => setSelectedPlatformId(e.target.value)}
-                  className="w-full border rounded px-3 py-2 text-sm"
-                >
-                  <option value="">Selecione</option>
-                  {platforms
-                    .filter((p) =>
-                      manageTab === 'marketplace'
-                        ? p.platform_type === 'marketplace'
-                        : p.platform_type !== 'marketplace'
-                    )
-                    .map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                </select>
-
-                {manageTab === 'marketplace' && (
-                  <>
-                    <label className="text-xs text-gray-600 mt-3 mb-1 block">Gasto (R$)</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={manageSpent}
-                      onChange={(e) => setManageSpent(e.target.value)}
-                      className="w-full border rounded px-3 py-2 text-sm"
-                      placeholder="0,00"
-                    />
-                  </>
-                )}
-
-                <label className="text-xs text-gray-600 mt-3 mb-1 block">
-                  Link do anúncio / publicação
-                </label>
-                <input
-                  value={manageLink}
-                  onChange={(e) => setManageLink(e.target.value)}
-                  className="w-full border rounded px-3 py-2 text-sm"
-                  placeholder="https://..."
-                />
-
-                <button
-                  onClick={handleSavePublication}
-                  className="mt-4 px-4 py-2 rounded text-sm"
-                  style={{ backgroundColor: AMBER }}
-                >
-                  Salvar {manageTab === 'marketplace' ? 'anúncio' : 'publicação'}
-                </button>
-              </div>
-
-              <div>
-                <p className="text-xs text-gray-600 mb-2">
-                  Já cadastrados ({manageTab === 'marketplace' ? 'marketplaces' : 'redes/outras'}):
-                </p>
-                <div className="max-h-60 overflow-y-auto border rounded">
-                  {(publications || [])
-                    .filter(
-                      (pub) =>
-                        pub.car_id === manageCar.id &&
-                        (manageTab === 'marketplace'
-                          ? pub.platform_type === 'marketplace'
-                          : pub.platform_type !== 'marketplace')
-                    )
-                    .map((pub) => (
-                      <div
-                        key={pub.id}
-                        className="flex items-center justify-between px-3 py-2 border-b last:border-b-0"
-                      >
-                        <div>
-                          <div className="text-sm text-gray-900">{pub.platform_name || '---'}</div>
-                          <div className="text-xs text-gray-400">
-                            {pub.link ? pub.link : 'Sem link'}
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => handleDeletePublication(pub.id)}
-                          className="text-xs text-red-500 hover:underline"
-                        >
-                          x
-                        </button>
-                      </div>
-                    ))}
-                  {(publications || []).filter(
-                    (pub) =>
-                      pub.car_id === manageCar.id &&
-                      (manageTab === 'marketplace'
-                        ? pub.platform_type === 'marketplace'
-                        : pub.platform_type !== 'marketplace')
-                  ).length === 0 && (
-                    <div className="p-3 text-xs text-gray-400">Nenhum registro.</div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex justify-end mt-5">
-              <button
-                onClick={() => setShowManageModal(false)}
-                className="px-4 py-2 border rounded text-sm"
-              >
-                Fechar
+                Salvar ordem
               </button>
             </div>
           </div>

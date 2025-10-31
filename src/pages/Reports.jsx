@@ -507,7 +507,7 @@ const Reports = () => {
         </div>
         <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm">
           <p className="text-sm text-slate-500 flex items-center gap-1">
-            <Wallet className="w-4 h-4 text-slate-400" /> Resultado extra
+            <Wallet className="w-4 h-4 text-slate-400" /> Resultado 
           </p>
           <h2
             className={`text-2xl font-bold mt-2 ${

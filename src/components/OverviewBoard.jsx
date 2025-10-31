@@ -258,11 +258,11 @@ const OverviewBoard = () => {
     return false;
   };
 
-  // LARGURAS — apertadas
+  // LARGURAS — agora mais apertadas
   const COL_IMG = 110;
-  const COL_VEHICLE = 215; // antes 260 -> 215
+  const COL_VEHICLE = 178; // antes 215 -> 178, empilhado
   const COL_ACTION = 88;
-  const COL_PLATFORM = 56; // antes 62 -> 56
+  const COL_PLATFORM = 56;
 
   const marketplacePlatforms = (platforms || []).filter(
     (p) => p.platform_type === 'marketplace'
@@ -558,7 +558,7 @@ const OverviewBoard = () => {
                     borderBottom: '1px solid #e5e7eb',
                     textAlign: 'left',
                     fontSize: '0.67rem',
-                    padding: '6px 8px',
+                    padding: '6px 6px',
                   }}
                 >
                   Veículo / Preço / Placa
@@ -624,7 +624,7 @@ const OverviewBoard = () => {
                     <tr
                       key={car.id}
                       className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}
-                      style={{ height: 84 }} // linha um pouco mais alta
+                      style={{ height: 90 }}
                     >
                       {/* foto */}
                       <td
@@ -653,7 +653,7 @@ const OverviewBoard = () => {
                         </div>
                       </td>
 
-                      {/* veículo + preço + placa */}
+                      {/* veículo + ano + placa + preço (tudo empilhado) */}
                       <td
                         style={{
                           position: 'sticky',
@@ -662,20 +662,22 @@ const OverviewBoard = () => {
                           width: COL_VEHICLE,
                           minWidth: COL_VEHICLE,
                           zIndex: 40,
-                          padding: '6px 8px 4px 8px',
+                          padding: '6px 6px 4px 6px',
                         }}
                       >
-                        <div className="flex flex-col leading-tight gap-[3px]">
-                          <span className="font-medium text-[11.5px] text-slate-800 leading-snug line-clamp-2">
-                            {car.brand} {car.model}{' '}
-                            {car.year ? (
-                              <span className="text-[10px] text-slate-400">({car.year})</span>
-                            ) : null}
+                        <div className="flex flex-col leading-tight gap-[2px]">
+                          <span className="font-medium text-[11px] text-slate-800 leading-snug line-clamp-2">
+                            {car.brand} {car.model}
                           </span>
-                          <div className="flex items-center gap-2 text-[9.5px] text-slate-600">
-                            <span>{car.price ? Money(car.price) : '--'}</span>
-                            <span className="text-slate-400">{car.plate || '--'}</span>
-                          </div>
+                          {car.year ? (
+                            <span className="text-[9px] text-slate-500">{car.year}</span>
+                          ) : null}
+                          <span className="text-[9px] text-slate-400">
+                            {car.plate || '--'}
+                          </span>
+                          <span className="text-[9px] text-slate-700">
+                            {car.price ? Money(car.price) : '--'}
+                          </span>
                         </div>
                       </td>
 

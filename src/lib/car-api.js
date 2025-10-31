@@ -62,10 +62,13 @@ export const addCar = async (carData) => {
     slug,
     is_available: true,
     is_sold: false,
-    // se não vier entrada, registra agora
     entered_at: carData.entered_at || new Date().toISOString(),
   };
-  const { data, error } = await supabase.from('cars').insert([payload]).select().single();
+  const { data, error } = await supabase
+    .from('cars')
+    .insert([payload])
+    .select()
+    .single();
   if (error) console.error('Erro ao adicionar carro:', error);
   return { data, error };
 };
@@ -135,7 +138,11 @@ export const deleteTestimonial = async (id) => {
 */
 
 export const addLead = async (leadData) => {
-  const { data, error } = await supabase.from('leads').insert([leadData]).select().single();
+  const { data, error } = await supabase
+    .from('leads')
+    .insert([leadData])
+    .select()
+    .single();
   if (error) console.error('Erro ao adicionar lead:', error);
   return { data, error };
 };
@@ -187,12 +194,16 @@ export const deleteLead = async (id) => {
   -----------------------------
 */
 
+/**
+ * Pega todas as plataformas.
+ * IMPORTANTE: mantemos o select('*') pra vir name, platform_type e AGORA o order.
+ */
 export const getPlatforms = async () => {
   const { data, error } = await supabase
     .from('platforms')
     .select('*')
-    // se você já criou a coluna "order" no SQL, dá pra usar isso:
-    .order('order', { ascending: true })
+    // primeiro quem tem order, depois quem não tem
+    .order('order', { ascending: true, nullsFirst: false })
     .order('name', { ascending: true });
   if (error) console.error('Erro ao buscar plataformas:', error);
   return data || [];
@@ -200,12 +211,47 @@ export const getPlatforms = async () => {
 
 export const addPlatform = async (name) => {
   if (!name) return null;
-  const { data, error } = await supabase.from('platforms').insert([{ name }]).select().single();
+  const { data, error } = await supabase
+    .from('platforms')
+    .insert([{ name }])
+    .select()
+    .single();
   if (error) {
     console.error('Erro ao criar plataforma:', error);
     return null;
   }
   return data;
+};
+
+/**
+ * Salva ordem das plataformas.
+ * Espera um array assim:
+ *  [{ id: 'uuid', order: 1 }, { id: 'uuid2', order: 2 }, ...]
+ * NÃO atualiza name, NÃO atualiza platform_type -> isso evita o erro 23502 que você viu.
+ */
+export const savePlatformsOrder = async (orderedList = []) => {
+  if (!Array.isArray(orderedList) || orderedList.length === 0) {
+    return { data: null, error: null };
+  }
+
+  // faz vários updates em paralelo
+  const updates = orderedList.map((item) => {
+    return supabase
+      .from('platforms')
+      .update({ order: item.order })
+      .eq('id', item.id);
+  });
+
+  const results = await Promise.all(updates);
+
+  // se alguma deu erro, avisa
+  const firstError = results.find((r) => r.error);
+  if (firstError && firstError.error) {
+    console.error('Erro em savePlatformsOrder:', firstError.error);
+    return { data: null, error: firstError.error };
+  }
+
+  return { data: true, error: null };
 };
 
 /*
@@ -226,7 +272,6 @@ export const markCarAsSold = async ({
       car_id,
       platform_id,
       sale_price,
-      // IMPORTANTE: salvar a data que o usuário escolheu
       sale_date: sale_date || new Date().toISOString(),
       notes,
     };
@@ -242,7 +287,6 @@ export const markCarAsSold = async ({
       return { error: saleError };
     }
 
-    // espelha no cars
     const { data: updatedCar, error: carUpdateError } = await supabase
       .from('cars')
       .update({
@@ -302,14 +346,8 @@ export const unmarkCarAsSold = async (carId, { deleteAllSales = true } = {}) => 
         .order('created_at', { ascending: false })
         .limit(1);
 
-      if (lastErr) {
-        console.error('Erro ao buscar última sale:', lastErr);
-      } else if (Array.isArray(lastSale) && lastSale.length > 0) {
-        const { error: delErr } = await supabase.from('sales').delete().eq('id', lastSale[0].id);
-        if (delErr) {
-          console.error('Erro ao remover last sale:', delErr);
-          return { error: delErr };
-        }
+      if (!lastErr && Array.isArray(lastSale) && lastSale.length > 0) {
+        await supabase.from('sales').delete().eq('id', lastSale[0].id);
       }
     }
 
@@ -408,7 +446,10 @@ export const updatePublication = async (id, patch) => {
 };
 
 export const deletePublication = async (id) => {
-  const { data, error } = await supabase.from('vehicle_publications').delete().eq('id', id);
+  const { data, error } = await supabase
+    .from('vehicle_publications')
+    .delete()
+    .eq('id', id);
   if (error) console.error('Erro ao deletar publicação:', error);
   return { data, error };
 };
@@ -451,7 +492,10 @@ export const updateExpense = async (id, patch) => {
 };
 
 export const deleteExpense = async (id) => {
-  const { data, error } = await supabase.from('vehicle_expenses').delete().eq('id', id);
+  const { data, error } = await supabase
+    .from('vehicle_expenses')
+    .delete()
+    .eq('id', id);
   if (error) console.error('Erro ao deletar gasto:', error);
   return { data, error };
 };
@@ -474,7 +518,10 @@ export const getPublicationsForCars = async (carIds = []) => {
 
 export const getExpensesForCars = async (carIds = []) => {
   if (!Array.isArray(carIds) || carIds.length === 0) return [];
-  const { data, error } = await supabase.from('vehicle_expenses').select('*').in('car_id', carIds);
+  const { data, error } = await supabase
+    .from('vehicle_expenses')
+    .select('*')
+    .in('car_id', carIds);
   if (error) console.error('Erro ao buscar gastos (bulk):', error);
   return data || [];
 };
@@ -487,10 +534,6 @@ export const getExpensesForCars = async (carIds = []) => {
 
 import { getFipeValue } from './fipe-api';
 
-/**
- * Compat solicitado pelo VehicleManager:
- * getFipeForCar(car)
- */
 export const getFipeForCar = async (car) => {
   if (!car) return null;
   const { brand, model, year, fuel, version, body_type } = car;
@@ -550,47 +593,9 @@ export const getLatestChecklistTemplate = async () => {
   }
 };
 
-// ---- LEGADO: compat ----
+// LEGADO
 export const addChecklistItem = async (..._args) => {
   console.warn('[LEGADO] addChecklistItem chamado — checklist foi desativado. Ignorando.');
   return { data: null, error: null };
-};
-
-/*
-  -----------------------------
-  NOVO: salvar ordem das plataformas
-  -----------------------------
-  Recebe um array assim:
-  [
-    { id: 'uuid-da-platform-1' },
-    { id: 'uuid-da-platform-2' },
-    ...
-  ]
-  e grava order = posição (1,2,3...)
-*/
-export const savePlatformsOrder = async (platformsArr = []) => {
-  if (!Array.isArray(platformsArr) || platformsArr.length === 0) {
-    return { error: null, data: [] };
-  }
-
-  // vamos fazer update 1 a 1 para não exigir "name"
-  const updates = [];
-  for (let i = 0; i < platformsArr.length; i++) {
-    const item = platformsArr[i];
-    if (!item?.id) continue;
-    const { data, error } = await supabase
-      .from('platforms')
-      .update({ order: i + 1 })
-      .eq('id', item.id)
-      .select()
-      .single();
-    if (error) {
-      console.error('Erro ao atualizar ordem da plataforma:', error);
-      return { error };
-    }
-    updates.push(data);
-  }
-
-  return { data: updates, error: null };
 };
 

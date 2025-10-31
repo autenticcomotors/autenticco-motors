@@ -6,10 +6,11 @@ import {
   getPublicationsForCars,
   getExpensesForCars,
   updatePlatformOrder,
+  addPublication,
+  deletePublication,
 } from '@/lib/car-api';
 import {
   Search,
-  Filter,
   X,
   ArrowUp,
   ArrowDown,
@@ -17,9 +18,8 @@ import {
 } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 
-// tipos do banco
-const MARKETPLACE_TYPES = ['marketplace'];
-const SOCIAL_TYPES = ['social'];
+// se mudar cor aqui, muda tudo
+const AMBER = '#F5C301';
 
 const OverviewBoard = () => {
   const [cars, setCars] = useState([]);
@@ -29,20 +29,24 @@ const OverviewBoard = () => {
   const [loading, setLoading] = useState(true);
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedPlatforms, setSelectedPlatforms] = useState([]);
 
-  const [showColumnsModal, setShowColumnsModal] = useState(false);
+  // modal ordem
   const [showOrderModal, setShowOrderModal] = useState(false);
-
-  const [orderingMarketplace, setOrderingMarketplace] = useState([]);
-  const [orderingSocial, setOrderingSocial] = useState([]);
+  const [orderingList, setOrderingList] = useState([]);
   const [savingOrder, setSavingOrder] = useState(false);
+
+  // modal GERENCIAR
+  const [showManageModal, setShowManageModal] = useState(false);
+  const [manageCar, setManageCar] = useState(null);
+  const [manageTab, setManageTab] = useState('marketplace'); // marketplace | social
+  const [selectedPlatformId, setSelectedPlatformId] = useState('');
+  const [manageLink, setManageLink] = useState('');
+  const [manageSpent, setManageSpent] = useState('');
 
   useEffect(() => {
     const loadAll = async () => {
       try {
         setLoading(true);
-        // 1) carros + plataformas
         const [carsData, platformsData] = await Promise.all([
           getCars({ includeSold: true }),
           getPlatforms(),
@@ -50,7 +54,7 @@ const OverviewBoard = () => {
 
         setCars(carsData || []);
 
-        // ordenar plataformas levando em conta a coluna "order" nova
+        // ordena plataformas levando em conta coluna "order"
         const orderedPlatforms = [...(platformsData || [])].sort((a, b) => {
           if (a.order != null && b.order != null) return a.order - b.order;
           if (a.order != null) return -1;
@@ -59,7 +63,7 @@ const OverviewBoard = () => {
         });
         setPlatforms(orderedPlatforms);
 
-        // 2) publicações e gastos
+        // pega publicações e gastos
         const carIds = (carsData || []).map((c) => c.id);
         if (carIds.length > 0) {
           const [pubs, exps] = await Promise.all([
@@ -82,89 +86,48 @@ const OverviewBoard = () => {
     loadAll();
   }, []);
 
-  // separa plataformas por tipo
-  const { marketplacePlatforms, socialPlatforms } = useMemo(() => {
-    const m = [];
-    const s = [];
-    (platforms || []).forEach((p) => {
-      if (MARKETPLACE_TYPES.includes(p.platform_type)) {
-        m.push(p);
-      } else if (SOCIAL_TYPES.includes(p.platform_type)) {
-        s.push(p);
-      } else {
-        s.push(p); // outros caem aqui
-      }
-    });
-    return { marketplacePlatforms: m, socialPlatforms: s };
-  }, [platforms]);
-
-  // filtro de carros
+  // carros filtrados
   const filteredCars = useMemo(() => {
     let list = [...(cars || [])];
     if (searchTerm.trim() !== '') {
-      const term = searchTerm.trim().toLowerCase();
+      const t = searchTerm.trim().toLowerCase();
       list = list.filter((car) => {
         const base = `${car.brand || ''} ${car.model || ''} ${car.year || ''} ${car.plate || ''}`.toLowerCase();
-        return base.includes(term);
+        return base.includes(t);
       });
     }
     return list;
   }, [cars, searchTerm]);
 
-  // acha publicação de um carro em uma plataforma
+  // função pra achar publicação do carro em determinada plataforma
   const getCarPublicationOnPlatform = (carId, platformId) => {
     return (publications || []).find(
       (pub) => pub.car_id === carId && pub.platform_id === platformId
     );
   };
 
-  const togglePlatformFilter = (platformId) => {
-    setSelectedPlatforms((prev) => {
-      if (prev.includes(platformId)) {
-        return prev.filter((id) => id !== platformId);
-      }
-      return [...prev, platformId];
-    });
-  };
-
-  const resetPlatformFilter = () => {
-    setSelectedPlatforms([]);
-  };
-
-  // abrir modal de ordem já com as listas separadas
+  // abrir modal de ordem (agora é UMA lista só)
   const openOrderModal = () => {
-    setOrderingMarketplace([...marketplacePlatforms].map((p) => ({ ...p })));
-    setOrderingSocial([...socialPlatforms].map((p) => ({ ...p })));
+    setOrderingList([...platforms].map((p) => ({ ...p })));
     setShowOrderModal(true);
   };
 
-  const moveItem = (listName, index, direction) => {
-    const isMarketplace = listName === 'marketplace';
-    const list = isMarketplace ? [...orderingMarketplace] : [...orderingSocial];
+  const moveItem = (index, direction) => {
+    const list = [...orderingList];
     const newIndex = index + direction;
     if (newIndex < 0 || newIndex >= list.length) return;
     const tmp = list[index];
     list[index] = list[newIndex];
     list[newIndex] = tmp;
-    if (isMarketplace) {
-      setOrderingMarketplace(list);
-    } else {
-      setOrderingSocial(list);
-    }
+    setOrderingList(list);
   };
 
   const handleSaveOrder = async () => {
     try {
       setSavingOrder(true);
-
-      // monta payload na ordem nova
       const updates = [];
-      orderingMarketplace.forEach((p, idx) => {
+      orderingList.forEach((p, idx) => {
         updates.push({ id: p.id, order: idx + 1 });
-      });
-      const nextStart = orderingMarketplace.length + 1;
-      orderingSocial.forEach((p, idx) => {
-        updates.push({ id: p.id, order: nextStart + idx });
       });
 
       const { error } = await updatePlatformOrder(updates);
@@ -178,7 +141,7 @@ const OverviewBoard = () => {
         return;
       }
 
-      // recarrega plataformas já ordenadas
+      // recarrega
       const refreshed = await getPlatforms();
       const reordered = [...(refreshed || [])].sort((a, b) => {
         if (a.order != null && b.order != null) return a.order - b.order;
@@ -205,8 +168,122 @@ const OverviewBoard = () => {
     }
   };
 
-  // cor padrão que você usa
-  const amber = '#F5C301';
+  // abrir modal GERENCIAR
+  const openManage = (car) => {
+    setManageCar(car);
+    setManageTab('marketplace');
+    setSelectedPlatformId('');
+    setManageLink('');
+    setManageSpent('');
+    setShowManageModal(true);
+  };
+
+  // salvar publicação pelo modal
+  const handleSavePublication = async () => {
+    if (!manageCar || !selectedPlatformId) {
+      toast({
+        title: 'Selecione a plataforma',
+        description: 'Escolha uma plataforma para salvar.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      const plat = platforms.find((p) => p.id === selectedPlatformId);
+      const payload = {
+        car_id: manageCar.id,
+        platform_id: selectedPlatformId,
+        platform_name: plat?.name ?? null,
+        platform_type: plat?.platform_type ?? null,
+        link: manageLink || null,
+        spent: manageSpent ? Number(manageSpent) : null,
+        status: 'active',
+      };
+
+      const { error } = await addPublication(payload);
+      if (error) {
+        console.error('Erro ao adicionar publicação:', error);
+        toast({
+          title: 'Erro ao adicionar',
+          description: 'Não foi possível salvar esse registro.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      // recarrega só as publicações
+      const carIds = (cars || []).map((c) => c.id);
+      if (carIds.length > 0) {
+        const pubs = await getPublicationsForCars(carIds);
+        setPublications(pubs || []);
+      }
+
+      toast({
+        title: 'Salvo',
+        description: 'Publicação registrada.',
+      });
+
+      // limpa campos
+      setSelectedPlatformId('');
+      setManageLink('');
+      setManageSpent('');
+    } catch (err) {
+      console.error('Erro geral ao salvar publicação:', err);
+      toast({
+        title: 'Erro ao salvar',
+        description: 'Verifique o console.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleDeletePublication = async (pubId) => {
+    try {
+      const { error } = await deletePublication(pubId);
+      if (error) {
+        console.error('Erro ao excluir publicação:', error);
+        toast({
+          title: 'Erro ao excluir',
+          description: 'Não foi possível remover esse registro.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      const carIds = (cars || []).map((c) => c.id);
+      if (carIds.length > 0) {
+        const pubs = await getPublicationsForCars(carIds);
+        setPublications(pubs || []);
+      }
+
+      toast({
+        title: 'Excluído',
+        description: 'Registro removido.',
+      });
+    } catch (err) {
+      console.error('Erro geral ao excluir publicação:', err);
+      toast({
+        title: 'Erro ao excluir',
+        description: 'Verifique o console.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // função pra pegar imagem de forma resiliente
+  const getCarImage = (car) => {
+    return (
+      car.main_image_url ||
+      car.image_url ||
+      car.cover_url ||
+      car.photo_url ||
+      car.thumbnail_url ||
+      car.featured_image ||
+      car.image ||
+      null
+    );
+  };
 
   return (
     <div className="mt-6">
@@ -218,7 +295,7 @@ const OverviewBoard = () => {
         </p>
       </div>
 
-      {/* barra de filtros */}
+      {/* barra de busca + botão ordem */}
       <div className="flex flex-wrap gap-3 mb-4 items-center">
         <div className="flex items-center gap-2 px-3 py-2 bg-white rounded-md border min-w-[280px] shadow-sm">
           <Search size={16} className="text-gray-400" />
@@ -232,59 +309,16 @@ const OverviewBoard = () => {
 
         <button
           type="button"
-          onClick={() => setShowColumnsModal(true)}
-          className="flex items-center gap-2 px-3 py-2 bg-white border rounded-md text-sm shadow-sm hover:bg-gray-50"
-        >
-          <Filter size={14} />
-          Colunas visíveis
-        </button>
-
-        <button
-          type="button"
           onClick={openOrderModal}
           className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-semibold shadow-sm"
-          style={{ backgroundColor: amber, color: '#000' }}
+          style={{ backgroundColor: AMBER, color: '#000' }}
         >
           Editar ordem das plataformas
         </button>
-
-        <button
-          type="button"
-          onClick={resetPlatformFilter}
-          className="text-xs px-3 py-2 border rounded-md hover:bg-gray-100"
-        >
-          Limpar
-        </button>
       </div>
 
-      {/* chips de plataformas (finos, mesma linha) */}
-      <div className="flex flex-wrap gap-2 mb-3">
-        {platforms.map((p) => (
-          <button
-            key={p.id}
-            onClick={() => togglePlatformFilter(p.id)}
-            className={`px-3 py-[5px] text-xs rounded-full border transition ${
-              selectedPlatforms.includes(p.id)
-                ? 'bg-[#ffe082] border-[#ffc400] text-gray-900'
-                : 'bg-white hover:bg-gray-50'
-            }`}
-          >
-            {p.name}
-          </button>
-        ))}
-        {platforms.length > 0 && (
-          <button
-            onClick={resetPlatformFilter}
-            className="px-3 py-[5px] text-xs rounded-full bg-gray-200 hover:bg-gray-300"
-          >
-            Reset
-          </button>
-        )}
-      </div>
-
-      {/* container da tabela - SEM rolagem lateral do body */}
+      {/* TABELA */}
       <div className="bg-white border rounded-lg shadow-sm overflow-hidden">
-        {/* esse wrapper permite scroll só na vertical e mantém cabeçalho sticky */}
         <div
           className="max-h-[540px] overflow-y-auto overflow-x-hidden"
           style={{ scrollbarWidth: 'thin' }}
@@ -301,30 +335,19 @@ const OverviewBoard = () => {
                 <th className="px-4 py-3 text-left w-[90px] text-xs font-semibold text-gray-500 bg-gray-50">
                   Placa
                 </th>
-                {marketplacePlatforms.map((p) => {
-                  if (selectedPlatforms.length > 0 && !selectedPlatforms.includes(p.id)) return null;
-                  return (
-                    <th
-                      key={p.id}
-                      className="px-3 py-3 text-left text-xs font-semibold text-gray-500 bg-gray-50 whitespace-nowrap"
-                      style={{ minWidth: 80 }}
-                    >
-                      {p.name}
-                    </th>
-                  );
-                })}
-                {socialPlatforms.map((p) => {
-                  if (selectedPlatforms.length > 0 && !selectedPlatforms.includes(p.id)) return null;
-                  return (
-                    <th
-                      key={p.id}
-                      className="px-3 py-3 text-left text-xs font-semibold text-gray-500 bg-gray-50 whitespace-nowrap"
-                      style={{ minWidth: 80 }}
-                    >
-                      {p.name}
-                    </th>
-                  );
-                })}
+                {platforms.map((p) => (
+                  <th
+                    key={p.id}
+                    className="px-3 py-3 text-left text-xs font-semibold text-gray-600 whitespace-nowrap"
+                    style={{
+                      minWidth: 80,
+                      backgroundColor:
+                        p.platform_type === 'marketplace' ? 'rgba(245, 195, 1, 0.16)' : '#f9fafb',
+                    }}
+                  >
+                    {p.name}
+                  </th>
+                ))}
                 <th className="px-4 py-3 text-left w-[90px] text-xs font-semibold text-gray-500 bg-gray-50">
                   Ações
                 </th>
@@ -345,14 +368,7 @@ const OverviewBoard = () => {
                 </tr>
               ) : (
                 filteredCars.map((car, idx) => {
-                  // força a imagem aparecer
-                  const img =
-                    car.main_image_url ||
-                    car.image_url ||
-                    car.cover_url ||
-                    car.photo_url ||
-                    null;
-
+                  const img = getCarImage(car);
                   return (
                     <tr key={car.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}>
                       <td className="px-4 py-3">
@@ -375,10 +391,6 @@ const OverviewBoard = () => {
                                 <span className="text-gray-400 text-xs">({car.year})</span>
                               ) : null}
                             </div>
-                            <div className="text-xs text-gray-400 flex gap-2">
-                              <span>{car.status_text || 'Disponível'}</span>
-                              {car.plate ? <span>• {car.plate}</span> : null}
-                            </div>
                           </div>
                         </div>
                       </td>
@@ -398,33 +410,20 @@ const OverviewBoard = () => {
                         {car.plate || <span className="text-gray-400 text-xs">---</span>}
                       </td>
 
-                      {/* MARKETPLACES */}
-                      {marketplacePlatforms.map((p) => {
-                        if (selectedPlatforms.length > 0 && !selectedPlatforms.includes(p.id))
-                          return null;
+                      {/* todas as plataformas */}
+                      {platforms.map((p) => {
                         const pub = getCarPublicationOnPlatform(car.id, p.id);
                         return (
-                          <td key={p.id} className="px-3 py-3">
-                            {pub ? (
-                              <span className="inline-flex px-2 py-1 bg-green-100 text-green-700 rounded text-xs">
-                                SIM
-                              </span>
-                            ) : (
-                              <span className="inline-flex px-2 py-1 bg-red-100 text-red-700 rounded text-xs">
-                                NÃO
-                              </span>
-                            )}
-                          </td>
-                        );
-                      })}
-
-                      {/* SOCIAIS */}
-                      {socialPlatforms.map((p) => {
-                        if (selectedPlatforms.length > 0 && !selectedPlatforms.includes(p.id))
-                          return null;
-                        const pub = getCarPublicationOnPlatform(car.id, p.id);
-                        return (
-                          <td key={p.id} className="px-3 py-3">
+                          <td
+                            key={p.id}
+                            className="px-3 py-3"
+                            style={{
+                              backgroundColor:
+                                p.platform_type === 'marketplace'
+                                  ? 'rgba(245, 195, 1, 0.06)'
+                                  : 'transparent',
+                            }}
+                          >
                             {pub ? (
                               <span className="inline-flex px-2 py-1 bg-green-100 text-green-700 rounded text-xs">
                                 SIM
@@ -439,7 +438,12 @@ const OverviewBoard = () => {
                       })}
 
                       <td className="px-4 py-3">
-                        <button className="text-xs text-[#d3a301] hover:underline">Ver</button>
+                        <button
+                          onClick={() => openManage(car)}
+                          className="text-xs text-[#d3a301] hover:underline"
+                        >
+                          Gerenciar
+                        </button>
                       </td>
                     </tr>
                   );
@@ -450,61 +454,10 @@ const OverviewBoard = () => {
         </div>
       </div>
 
-      {/* modal de colunas */}
-      {showColumnsModal && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg w-full max-w-lg p-5 relative">
-            <button
-              onClick={() => setShowColumnsModal(false)}
-              className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
-            >
-              <X size={16} />
-            </button>
-            <h3 className="text-lg font-semibold mb-2 text-gray-900">Colunas visíveis</h3>
-            <p className="text-xs text-gray-500 mb-4">
-              Selecione quais plataformas quer enxergar na matriz.
-            </p>
-            <div className="flex flex-wrap gap-2 mb-5">
-              {platforms.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => togglePlatformFilter(p.id)}
-                  className={`px-3 py-1 rounded-full text-xs border ${
-                    selectedPlatforms.includes(p.id)
-                      ? 'bg-[#ffe082] border-[#ffc400]'
-                      : 'bg-gray-100 hover:bg-gray-200'
-                  }`}
-                >
-                  {p.name}
-                </button>
-              ))}
-            </div>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => {
-                  setSelectedPlatforms([]);
-                  setShowColumnsModal(false);
-                }}
-                className="px-4 py-2 text-sm rounded border"
-              >
-                Limpar
-              </button>
-              <button
-                onClick={() => setShowColumnsModal(false)}
-                className="px-4 py-2 text-sm rounded"
-                style={{ backgroundColor: amber }}
-              >
-                Fechar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* modal de ordem */}
+      {/* MODAL DE ORDEM */}
       {showOrderModal && (
         <div className="fixed inset-0 bg-black/25 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg w-full max-w-3xl p-5 relative">
+          <div className="bg-white rounded-lg shadow-lg w-full max-w-xl p-5 relative">
             <button
               onClick={() => setShowOrderModal(false)}
               className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
@@ -515,84 +468,38 @@ const OverviewBoard = () => {
               Editar ordem das plataformas
             </h3>
             <p className="text-xs text-gray-500 mb-4">
-              Arraste usando os botões de subir/descer e clique em &ldquo;Salvar ordem&rdquo; para
-              gravar no banco.
+              Suba ou desça os itens e clique em &ldquo;Salvar ordem&rdquo; para gravar no banco.
             </p>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-gray-50 border rounded-md">
-                <div className="px-3 py-2 border-b">
-                  <h4 className="text-sm font-semibold text-gray-800">Marketplaces</h4>
-                </div>
-                <div className="max-h-72 overflow-y-auto">
-                  {orderingMarketplace.length === 0 ? (
-                    <div className="text-xs text-gray-400 p-3">Nenhum marketplace cadastrado.</div>
-                  ) : (
-                    orderingMarketplace.map((p, idx) => (
-                      <div
-                        key={p.id}
-                        className="flex items-center justify-between px-3 py-2 border-b last:border-b-0 bg-white/70"
+            <div className="max-h-80 overflow-y-auto border rounded-md">
+              {orderingList.length === 0 ? (
+                <div className="p-3 text-xs text-gray-400">Nenhuma plataforma cadastrada.</div>
+              ) : (
+                orderingList.map((p, idx) => (
+                  <div
+                    key={p.id}
+                    className="flex items-center justify-between px-3 py-2 border-b last:border-b-0 bg-white/70"
+                  >
+                    <span className="text-sm text-gray-800 truncate">{p.name}</span>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => moveItem(idx, -1)}
+                        className="p-1 rounded bg-gray-100 hover:bg-gray-200"
+                        title="Subir"
                       >
-                        <span className="text-sm text-gray-800 truncate">{p.name}</span>
-                        <div className="flex gap-1">
-                          <button
-                            onClick={() => moveItem('marketplace', idx, -1)}
-                            className="p-1 rounded bg-gray-100 hover:bg-gray-200"
-                            title="Subir"
-                          >
-                            <ArrowUp size={14} />
-                          </button>
-                          <button
-                            onClick={() => moveItem('marketplace', idx, +1)}
-                            className="p-1 rounded bg-gray-100 hover:bg-gray-200"
-                            title="Descer"
-                          >
-                            <ArrowDown size={14} />
-                          </button>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              <div className="bg-gray-50 border rounded-md">
-                <div className="px-3 py-2 border-b">
-                  <h4 className="text-sm font-semibold text-gray-800">Redes sociais / outros</h4>
-                </div>
-                <div className="max-h-72 overflow-y-auto">
-                  {orderingSocial.length === 0 ? (
-                    <div className="text-xs text-gray-400 p-3">
-                      Nenhuma rede social / outro cadastrado.
+                        <ArrowUp size={14} />
+                      </button>
+                      <button
+                        onClick={() => moveItem(idx, +1)}
+                        className="p-1 rounded bg-gray-100 hover:bg-gray-200"
+                        title="Descer"
+                      >
+                        <ArrowDown size={14} />
+                      </button>
                     </div>
-                  ) : (
-                    orderingSocial.map((p, idx) => (
-                      <div
-                        key={p.id}
-                        className="flex items-center justify-between px-3 py-2 border-b last:border-b-0 bg-white/70"
-                      >
-                        <span className="text-sm text-gray-800 truncate">{p.name}</span>
-                        <div className="flex gap-1">
-                          <button
-                            onClick={() => moveItem('social', idx, -1)}
-                            className="p-1 rounded bg-gray-100 hover:bg-gray-200"
-                            title="Subir"
-                          >
-                            <ArrowUp size={14} />
-                          </button>
-                          <button
-                            onClick={() => moveItem('social', idx, +1)}
-                            className="p-1 rounded bg-gray-100 hover:bg-gray-200"
-                            title="Descer"
-                          >
-                            <ArrowDown size={14} />
-                          </button>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
+                  </div>
+                ))
+              )}
             </div>
 
             <div className="flex justify-end gap-2 mt-5">
@@ -606,10 +513,169 @@ const OverviewBoard = () => {
               <button
                 onClick={handleSaveOrder}
                 className="px-4 py-2 rounded text-sm"
-                style={{ backgroundColor: amber }}
+                style={{ backgroundColor: AMBER }}
                 disabled={savingOrder}
               >
                 {savingOrder ? 'Salvando...' : 'Salvar ordem'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL GERENCIAR */}
+      {showManageModal && manageCar && (
+        <div className="fixed inset-0 bg-black/35 flex items-center justify-center z-[60]">
+          <div className="bg-white rounded-lg shadow-lg w-full max-w-3xl p-5 relative">
+            <button
+              onClick={() => setShowManageModal(false)}
+              className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
+            >
+              <X size={16} />
+            </button>
+
+            <h3 className="text-lg font-semibold mb-1 text-gray-900">
+              Gestão – {manageCar.brand} {manageCar.model} {manageCar.year ? `(${manageCar.year})` : ''}
+            </h3>
+            <p className="text-xs text-gray-500 mb-4">
+              Cadastre anúncios e publicações desse veículo sem sair da matriz.
+            </p>
+
+            {/* abas */}
+            <div className="flex gap-2 mb-4">
+              <button
+                onClick={() => setManageTab('marketplace')}
+                className={`px-4 py-2 text-sm rounded ${
+                  manageTab === 'marketplace'
+                    ? 'bg-[#ffe082] text-gray-900'
+                    : 'bg-gray-100 text-gray-500'
+                }`}
+              >
+                Anúncios (Marketplaces)
+              </button>
+              <button
+                onClick={() => setManageTab('social')}
+                className={`px-4 py-2 text-sm rounded ${
+                  manageTab === 'social'
+                    ? 'bg-[#ffe082] text-gray-900'
+                    : 'bg-gray-100 text-gray-500'
+                }`}
+              >
+                Redes Sociais
+              </button>
+            </div>
+
+            {/* formulário */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs text-gray-600 mb-1 block">
+                  Plataforma ({manageTab === 'marketplace' ? 'Marketplaces' : 'Redes / Outros'})
+                </label>
+                <select
+                  value={selectedPlatformId}
+                  onChange={(e) => setSelectedPlatformId(e.target.value)}
+                  className="w-full border rounded px-3 py-2 text-sm"
+                >
+                  <option value="">Selecione</option>
+                  {platforms
+                    .filter((p) =>
+                      manageTab === 'marketplace'
+                        ? p.platform_type === 'marketplace'
+                        : p.platform_type !== 'marketplace'
+                    )
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                </select>
+
+                {/* gasto só mostra em marketplace */}
+                {manageTab === 'marketplace' && (
+                  <>
+                    <label className="text-xs text-gray-600 mt-3 mb-1 block">Gasto (R$)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={manageSpent}
+                      onChange={(e) => setManageSpent(e.target.value)}
+                      className="w-full border rounded px-3 py-2 text-sm"
+                      placeholder="0,00"
+                    />
+                  </>
+                )}
+
+                <label className="text-xs text-gray-600 mt-3 mb-1 block">
+                  Link do anúncio / publicação
+                </label>
+                <input
+                  value={manageLink}
+                  onChange={(e) => setManageLink(e.target.value)}
+                  className="w-full border rounded px-3 py-2 text-sm"
+                  placeholder="https://..."
+                />
+
+                <button
+                  onClick={handleSavePublication}
+                  className="mt-4 px-4 py-2 rounded text-sm"
+                  style={{ backgroundColor: AMBER }}
+                >
+                  Salvar {manageTab === 'marketplace' ? 'anúncio' : 'publicação'}
+                </button>
+              </div>
+
+              {/* lista do que já tem */}
+              <div>
+                <p className="text-xs text-gray-600 mb-2">
+                  Já cadastrados ({manageTab === 'marketplace' ? 'marketplaces' : 'redes/outras'}):
+                </p>
+                <div className="max-h-60 overflow-y-auto border rounded">
+                  {(publications || [])
+                    .filter(
+                      (pub) =>
+                        pub.car_id === manageCar.id &&
+                        (manageTab === 'marketplace'
+                          ? pub.platform_type === 'marketplace'
+                          : pub.platform_type !== 'marketplace')
+                    )
+                    .map((pub) => (
+                      <div
+                        key={pub.id}
+                        className="flex items-center justify-between px-3 py-2 border-b last:border-b-0"
+                      >
+                        <div>
+                          <div className="text-sm text-gray-900">{pub.platform_name || '---'}</div>
+                          <div className="text-xs text-gray-400">
+                            {pub.link ? pub.link : 'Sem link'}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleDeletePublication(pub.id)}
+                          className="text-xs text-red-500 hover:underline"
+                        >
+                          x
+                        </button>
+                      </div>
+                    ))}
+                  {(publications || []).filter(
+                    (pub) =>
+                      pub.car_id === manageCar.id &&
+                      (manageTab === 'marketplace'
+                        ? pub.platform_type === 'marketplace'
+                        : pub.platform_type !== 'marketplace')
+                  ).length === 0 && (
+                    <div className="p-3 text-xs text-gray-400">Nenhum registro.</div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end mt-5">
+              <button
+                onClick={() => setShowManageModal(false)}
+                className="px-4 py-2 border rounded text-sm"
+              >
+                Fechar
               </button>
             </div>
           </div>

@@ -53,16 +53,14 @@ export const getCarBySlug = async (slug) => {
 
 export const addCar = async (carData) => {
   const carName = `${carData.brand} ${carData.model}`;
-  const slug = `${(carData.brand || '').toLowerCase().replace(/ /g, '-')}-${(carData.model || '')
-    .toLowerCase()
-    .replace(/ /g, '-')}-${Date.now()}`;
+  const slug = `${(carData.brand || '').toLowerCase().replace(/ /g, '-')}-${(carData.model || '').toLowerCase().replace(/ /g, '-')}-${Date.now()}`;
   const payload = {
     ...carData,
     name: carName,
     slug,
     is_available: true,
     is_sold: false,
-    entered_at: carData.entered_at || new Date().toISOString(),
+    entered_at: carData.entered_at || new Date().toISOString()
   };
   const { data, error } = await supabase
     .from('cars')
@@ -85,17 +83,18 @@ export const updateCar = async (id, carData) => {
 };
 
 export const deleteCar = async (id) => {
-  const { data, error } = await supabase.from('cars').delete().eq('id', id);
+  const { data, error } = await supabase
+    .from('cars')
+    .delete()
+    .eq('id', id);
   if (error) console.error('Erro ao deletar carro:', error);
   return { data, error };
 };
 
-// marcar/editar data de entrada
 export const setCarEnteredAt = async (id, enteredAtISO) => {
   return updateCar(id, { entry_at: enteredAtISO });
 };
 
-// marcar como entregue (somente registra data/hora de entrega)
 export const setCarDeliveredAt = async (id, deliveredAtISO) => {
   return updateCar(id, { delivered_at: deliveredAtISO });
 };
@@ -126,7 +125,10 @@ export const addTestimonial = async (testimonialData) => {
 };
 
 export const deleteTestimonial = async (id) => {
-  const { data, error } = await supabase.from('testimonials').delete().eq('id', id);
+  const { data, error } = await supabase
+    .from('testimonials')
+    .delete()
+    .eq('id', id);
   if (error) console.error('Erro ao deletar depoimento:', error);
   return { data, error };
 };
@@ -138,11 +140,7 @@ export const deleteTestimonial = async (id) => {
 */
 
 export const addLead = async (leadData) => {
-  const { data, error } = await supabase
-    .from('leads')
-    .insert([leadData])
-    .select()
-    .single();
+  const { data, error } = await supabase.from('leads').insert([leadData]).select().single();
   if (error) console.error('Erro ao adicionar lead:', error);
   return { data, error };
 };
@@ -183,7 +181,10 @@ export const updateLead = async (id, leadData) => {
 };
 
 export const deleteLead = async (id) => {
-  const { data, error } = await supabase.from('leads').delete().eq('id', id);
+  const { data, error } = await supabase
+    .from('leads')
+    .delete()
+    .eq('id', id);
   if (error) console.error('Erro ao excluir lead:', error);
   return { data, error };
 };
@@ -194,16 +195,12 @@ export const deleteLead = async (id) => {
   -----------------------------
 */
 
-/**
- * Pega todas as plataformas.
- * IMPORTANTE: mantemos o select('*') pra vir name, platform_type e AGORA o order.
- */
 export const getPlatforms = async () => {
   const { data, error } = await supabase
     .from('platforms')
     .select('*')
-    // primeiro quem tem order, depois quem não tem
-    .order('order', { ascending: true, nullsFirst: false })
+    // agora vamos ordenar com prioridade para quem já tem platform_order
+    .order('platform_order', { ascending: true, nullsFirst: false })
     .order('name', { ascending: true });
   if (error) console.error('Erro ao buscar plataformas:', error);
   return data || [];
@@ -223,35 +220,20 @@ export const addPlatform = async (name) => {
   return data;
 };
 
-/**
- * Salva ordem das plataformas.
- * Espera um array assim:
- *  [{ id: 'uuid', order: 1 }, { id: 'uuid2', order: 2 }, ...]
- * NÃO atualiza name, NÃO atualiza platform_type -> isso evita o erro 23502 que você viu.
- */
-export const savePlatformsOrder = async (orderedList = []) => {
-  if (!Array.isArray(orderedList) || orderedList.length === 0) {
-    return { data: null, error: null };
+// NOVO: atualizar ordem da plataforma
+// chama isso quando o usuário arrastar / mover pra cima / pra baixo
+export const updatePlatformOrder = async (id, platform_order) => {
+  if (!id) return { error: 'id obrigatório' };
+  const { data, error } = await supabase
+    .from('platforms')
+    .update({ platform_order })
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) {
+    console.error('Erro ao atualizar ordem da plataforma:', error);
   }
-
-  // faz vários updates em paralelo
-  const updates = orderedList.map((item) => {
-    return supabase
-      .from('platforms')
-      .update({ order: item.order })
-      .eq('id', item.id);
-  });
-
-  const results = await Promise.all(updates);
-
-  // se alguma deu erro, avisa
-  const firstError = results.find((r) => r.error);
-  if (firstError && firstError.error) {
-    console.error('Erro em savePlatformsOrder:', firstError.error);
-    return { data: null, error: firstError.error };
-  }
-
-  return { data: true, error: null };
+  return { data, error };
 };
 
 /*
@@ -260,20 +242,14 @@ export const savePlatformsOrder = async (orderedList = []) => {
   -----------------------------
 */
 
-export const markCarAsSold = async ({
-  car_id,
-  platform_id = null,
-  sale_price = null,
-  sale_date = null,
-  notes = null,
-}) => {
+export const markCarAsSold = async ({ car_id, platform_id = null, sale_price = null, sale_date = null, notes = null }) => {
   try {
     const salePayload = {
       car_id,
       platform_id,
       sale_price,
       sale_date: sale_date || new Date().toISOString(),
-      notes,
+      notes
     };
 
     const { data: saleData, error: saleError } = await supabase
@@ -294,7 +270,7 @@ export const markCarAsSold = async ({
         is_available: false,
         sold_at: saleData.sale_date,
         sold_platform_id: platform_id || null,
-        sale_price: sale_price || null,
+        sale_price: sale_price || null
       })
       .eq('id', car_id)
       .select()
@@ -321,7 +297,7 @@ export const unmarkCarAsSold = async (carId, { deleteAllSales = true } = {}) => 
         is_available: true,
         sold_at: null,
         sold_platform_id: null,
-        sale_price: null,
+        sale_price: null
       })
       .eq('id', carId)
       .select()
@@ -333,7 +309,10 @@ export const unmarkCarAsSold = async (carId, { deleteAllSales = true } = {}) => 
     }
 
     if (deleteAllSales) {
-      const { error: delErr } = await supabase.from('sales').delete().eq('car_id', carId);
+      const { error: delErr } = await supabase
+        .from('sales')
+        .delete()
+        .eq('car_id', carId);
       if (delErr) {
         console.error('Erro ao remover todas sales:', delErr);
         return { error: delErr };
@@ -346,8 +325,17 @@ export const unmarkCarAsSold = async (carId, { deleteAllSales = true } = {}) => 
         .order('created_at', { ascending: false })
         .limit(1);
 
-      if (!lastErr && Array.isArray(lastSale) && lastSale.length > 0) {
-        await supabase.from('sales').delete().eq('id', lastSale[0].id);
+      if (lastErr) {
+        console.error('Erro ao buscar última sale:', lastErr);
+      } else if (Array.isArray(lastSale) && lastSale.length > 0) {
+        const { error: delErr } = await supabase
+          .from('sales')
+          .delete()
+          .eq('id', lastSale[0].id);
+        if (delErr) {
+          console.error('Erro ao remover last sale:', delErr);
+          return { error: delErr };
+        }
       }
     }
 
@@ -422,7 +410,7 @@ export const addPublication = async (pub) => {
     status: pub.status ?? 'draft',
     spent: pub.spent ?? null,
     published_at: pub.published_at ?? null,
-    notes: pub.notes ?? null,
+    notes: pub.notes ?? null
   };
 
   const { data, error } = await supabase
@@ -543,7 +531,7 @@ export const getFipeForCar = async (car) => {
     year,
     fuel,
     version: version || body_type || '',
-    vehicleType: 'carros',
+    vehicleType: 'carros'
   });
   return res?.value ?? null;
 };
@@ -559,7 +547,7 @@ export const saveChecklistTemplate = async (name = 'Padrão', items = []) => {
     const payload = {
       name: name,
       template: items,
-      created_at: new Date().toISOString(),
+      created_at: new Date().toISOString()
     };
     const { data, error } = await supabase
       .from('checklist_templates')

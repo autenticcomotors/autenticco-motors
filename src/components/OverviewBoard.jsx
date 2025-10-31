@@ -6,7 +6,6 @@ import {
   getPlatforms,
   getPublicationsForCars,
   updatePlatformOrder,
-  // para o modal interno:
   getPublicationsByCar,
   getExpensesByCar,
   addPublication,
@@ -63,7 +62,7 @@ const OverviewBoard = () => {
   const [orderModalOpen, setOrderModalOpen] = useState(false);
   const [orderingPlatforms, setOrderingPlatforms] = useState([]);
 
-  // modal de filtros
+  // filtros
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
   const [platformFilter, setPlatformFilter] = useState('');
@@ -194,9 +193,7 @@ const OverviewBoard = () => {
       base = base.filter((car) => {
         const carMap = pubsMap[car.id] || {};
         const key = `platform_${platformFilter}`;
-        if (carMap[key] && Array.isArray(carMap[key]) && carMap[key].length > 0) {
-          return true;
-        }
+        if (carMap[key] && Array.isArray(carMap[key]) && carMap[key].length > 0) return true;
         const plat = platforms.find((p) => String(p.id) === String(platformFilter));
         if (plat?.name) {
           const byName = carMap[plat.name.toLowerCase()];
@@ -261,11 +258,11 @@ const OverviewBoard = () => {
     return false;
   };
 
-  // larguras — agora só 2 colunas fixas à esquerda
+  // LARGURAS — apertadas
   const COL_IMG = 110;
-  const COL_VEHICLE = 260; // aumentei pra caber nome + preço + placa
+  const COL_VEHICLE = 215; // antes 260 -> 215
   const COL_ACTION = 88;
-  const COL_PLATFORM = 62; // dei uma apertada
+  const COL_PLATFORM = 56; // antes 62 -> 56
 
   const marketplacePlatforms = (platforms || []).filter(
     (p) => p.platform_type === 'marketplace'
@@ -548,7 +545,7 @@ const OverviewBoard = () => {
                     borderBottom: '1px solid #e5e7eb',
                   }}
                 />
-                {/* veículo (com preço e placa dentro) */}
+                {/* veículo */}
                 <th
                   style={{
                     position: 'sticky',
@@ -560,7 +557,7 @@ const OverviewBoard = () => {
                     zIndex: 50,
                     borderBottom: '1px solid #e5e7eb',
                     textAlign: 'left',
-                    fontSize: '0.7rem',
+                    fontSize: '0.67rem',
                     padding: '6px 8px',
                   }}
                 >
@@ -583,7 +580,7 @@ const OverviewBoard = () => {
                       zIndex: 25,
                     }}
                   >
-                    <div className="text-[9.5px] leading-tight text-slate-700 break-words whitespace-normal">
+                    <div className="text-[9px] leading-tight text-slate-700 break-words whitespace-normal">
                       {col.label}
                     </div>
                   </th>
@@ -627,7 +624,7 @@ const OverviewBoard = () => {
                     <tr
                       key={car.id}
                       className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}
-                      style={{ height: 78 }}
+                      style={{ height: 84 }} // linha um pouco mais alta
                     >
                       {/* foto */}
                       <td
@@ -665,23 +662,19 @@ const OverviewBoard = () => {
                           width: COL_VEHICLE,
                           minWidth: COL_VEHICLE,
                           zIndex: 40,
-                          padding: '6px 8px',
+                          padding: '6px 8px 4px 8px',
                         }}
                       >
-                        <div className="flex flex-col leading-tight gap-[2px]">
-                          <span className="font-medium text-[12.5px] text-slate-800 truncate">
+                        <div className="flex flex-col leading-tight gap-[3px]">
+                          <span className="font-medium text-[11.5px] text-slate-800 leading-snug line-clamp-2">
                             {car.brand} {car.model}{' '}
                             {car.year ? (
-                              <span className="text-xs text-slate-400">({car.year})</span>
+                              <span className="text-[10px] text-slate-400">({car.year})</span>
                             ) : null}
                           </span>
-                          <div className="flex items-center gap-3 text-[10.5px] text-slate-500">
-                            <span>
-                              {car.price ? Money(car.price) : '--'}
-                            </span>
-                            <span className="text-slate-400">
-                              {car.plate || '--'}
-                            </span>
+                          <div className="flex items-center gap-2 text-[9.5px] text-slate-600">
+                            <span>{car.price ? Money(car.price) : '--'}</span>
+                            <span className="text-slate-400">{car.plate || '--'}</span>
                           </div>
                         </div>
                       </td>
@@ -707,7 +700,7 @@ const OverviewBoard = () => {
                             }}
                           >
                             <span
-                              className={`inline-flex items-center justify-center rounded-full text-[9.5px] font-semibold w-[48px] h-[20px] ${
+                              className={`inline-flex items-center justify-center rounded-full text-[9px] font-semibold w-[42px] h-[18px] ${
                                 ok
                                   ? 'bg-emerald-100 text-emerald-700'
                                   : 'bg-rose-100 text-rose-700'

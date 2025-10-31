@@ -612,11 +612,11 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
 
           return (
             <div
-              key={car.id}
-              className={`bg-white rounded-2xl shadow border flex flex-col md:flex-row justify-between gap-4 p-4 ${
-                isSold ? 'opacity-90' : ''
-              }`}
-            >
+  key={car.id}
+  className={`relative bg-white rounded-2xl shadow border flex flex-col md:flex-row justify-between gap-4 p-4 ${
+    isSold ? 'opacity-90' : ''
+  }`}
+>
               <div className="flex gap-4 items-start">
                 <img
                   src={

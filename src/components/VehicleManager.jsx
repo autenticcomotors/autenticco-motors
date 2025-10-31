@@ -15,7 +15,9 @@ import {
   getExpensesForCars,
   updateCar,
   getFipeForCar,
-  setCarDeliveredAt, // 👈 ADICIONADO
+  setCarDeliveredAt, // 👈 já tinha
+  updatePublication, // 👈 NOVO
+  updateExpense, // 👈 NOVO
 } from '@/lib/car-api';
 import { X, Megaphone, Wallet, DollarSign, PenSquare } from 'lucide-react';
 
@@ -55,6 +57,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     published_at: '',
     notes: '',
   });
+  const [editingPubId, setEditingPubId] = useState(null); // 👈 NOVO
 
   const [expenseForm, setExpenseForm] = useState({
     category: '',
@@ -63,6 +66,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     incurred_at: '',
     description: '',
   });
+  const [editingExpenseId, setEditingExpenseId] = useState(null); // 👈 NOVO
 
   const [financeForm, setFinanceForm] = useState({
     fipe_value: '',
@@ -74,13 +78,11 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
   const [entryMiniOpenFor, setEntryMiniOpenFor] = useState(null);
   const [entryDate, setEntryDate] = useState('');
   const [entryTime, setEntryTime] = useState('');
-  
 
   // mini-modal entrega
   const [deliverMiniOpenFor, setDeliverMiniOpenFor] = useState(null);
   const [deliverDate, setDeliverDate] = useState('');
   const [deliverTime, setDeliverTime] = useState('');
-  
 
   const isoFromDateTime = (dateStr, timeStr) => {
     if (!dateStr) return null;
@@ -89,7 +91,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     return iso;
   };
 
-  // diferença em dias
   const diffInDays = (car) => {
     if (!car) return '-';
 
@@ -203,6 +204,8 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     setSelectedCar(car);
     setActiveTab('marketplaces');
     setOpen(true);
+    setEditingPubId(null);
+    setEditingExpenseId(null);
 
     try {
       const [pubs, exps] = await Promise.all([getPublicationsByCar(car.id), getExpensesByCar(car.id)]);
@@ -220,7 +223,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     }
   };
 
-  // salvar anúncio / publicação
+  // salvar / atualizar anúncio
   const handleSavePublication = async () => {
     if (!selectedCar) return;
     try {
@@ -233,8 +236,16 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
         published_at: pubForm.published_at || null,
         notes: pubForm.notes || '',
       };
-      await addPublication(payload);
-      toast({ title: 'Registro salvo' });
+
+      if (editingPubId) {
+        // atualizar
+        await updatePublication(editingPubId, payload);
+        toast({ title: 'Registro atualizado' });
+      } else {
+        // criar
+        await addPublication(payload);
+        toast({ title: 'Registro salvo' });
+      }
 
       const [pubs, exps] = await Promise.all([
         getPublicationsByCar(selectedCar.id),
@@ -243,6 +254,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
       setPublications(pubs || []);
       setExpenses(exps || []);
 
+      // limpa form e estado de edição
       setPubForm({
         platform_id: '',
         link: '',
@@ -251,6 +263,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
         published_at: '',
         notes: '',
       });
+      setEditingPubId(null);
 
       await dispatchGlobalUpdate();
     } catch (err) {
@@ -261,6 +274,26 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
         variant: 'destructive',
       });
     }
+  };
+
+  // clicar em EDITAR publicação
+  const handleEditPublicationClick = (pub) => {
+    setEditingPubId(pub.id);
+    setActiveTab(
+      (() => {
+        const pf = platforms.find((pl) => pl.id === pub.platform_id);
+        if (pf?.platform_type === 'marketplace') return 'marketplaces';
+        return 'social';
+      })()
+    );
+    setPubForm({
+      platform_id: pub.platform_id || '',
+      link: pub.link || '',
+      spent: pub.spent !== null && pub.spent !== undefined ? String(pub.spent) : '',
+      status: pub.status || 'active',
+      published_at: pub.published_at ? pub.published_at.slice(0, 10) : '',
+      notes: pub.notes || '',
+    });
   };
 
   // excluir anúncio
@@ -278,6 +311,19 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
         setExpenses(exps || []);
       }
 
+      // se eu estava editando esse, reseta
+      if (editingPubId === id) {
+        setEditingPubId(null);
+        setPubForm({
+          platform_id: '',
+          link: '',
+          spent: '',
+          status: 'active',
+          published_at: '',
+          notes: '',
+        });
+      }
+
       await dispatchGlobalUpdate();
     } catch (err) {
       console.error(err);
@@ -289,7 +335,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     }
   };
 
-  // salvar gasto/ganho
+  // salvar / atualizar gasto
   const handleSaveExpense = async () => {
     if (!selectedCar) return;
     try {
@@ -307,8 +353,13 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
         description: expenseForm.description || '',
       };
 
-      await addExpense(payload);
-      toast({ title: 'Gasto/Ganho salvo' });
+      if (editingExpenseId) {
+        await updateExpense(editingExpenseId, payload);
+        toast({ title: 'Gasto/Ganho atualizado' });
+      } else {
+        await addExpense(payload);
+        toast({ title: 'Gasto/Ganho salvo' });
+      }
 
       const [pubs, exps] = await Promise.all([
         getPublicationsByCar(selectedCar.id),
@@ -324,6 +375,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
         incurred_at: '',
         description: '',
       });
+      setEditingExpenseId(null);
 
       await dispatchGlobalUpdate();
     } catch (err) {
@@ -334,6 +386,22 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
         variant: 'destructive',
       });
     }
+  };
+
+  // clicar em EDITAR gasto
+  const handleEditExpenseClick = (expense) => {
+    setEditingExpenseId(expense.id);
+    setActiveTab('expenses');
+    setExpenseForm({
+      category: expense.category || '',
+      amount: expense.amount !== null && expense.amount !== undefined ? String(expense.amount) : '',
+      charged_value:
+        expense.charged_value !== null && expense.charged_value !== undefined
+          ? String(expense.charged_value)
+          : '',
+      incurred_at: expense.incurred_at ? String(expense.incurred_at).slice(0, 10) : '',
+      description: expense.description || '',
+    });
   };
 
   // excluir gasto
@@ -349,6 +417,17 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
         ]);
         setPublications(pubs || []);
         setExpenses(exps || []);
+      }
+
+      if (editingExpenseId === id) {
+        setEditingExpenseId(null);
+        setExpenseForm({
+          category: '',
+          amount: '',
+          charged_value: '',
+          incurred_at: '',
+          description: '',
+        });
       }
 
       await dispatchGlobalUpdate();
@@ -405,7 +484,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     }
   };
 
-  // buscar fipe dentro do modal
+  // buscar fipe
   const handleFetchFipe = async () => {
     if (!selectedCar) return;
     try {
@@ -426,7 +505,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     }
   };
 
-  // abrir mini-modal de ENTRADA dentro do próprio card
+  // abrir mini-modal de ENTRADA
   const openEntryMini = (car) => {
     const d = car.entry_at ? new Date(car.entry_at) : new Date();
     setEntryDate(d.toISOString().slice(0, 10));
@@ -453,7 +532,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     }
   };
 
-  // abrir mini-modal de ENTREGA dentro do próprio card
+  // abrir mini-modal de ENTREGA
   const openDeliverMini = (car) => {
     const d = car.delivered_at ? new Date(car.delivered_at) : new Date();
     setDeliverDate(d.toISOString().slice(0, 10));
@@ -466,7 +545,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     if (!deliverMiniOpenFor) return;
     try {
       const iso = isoFromDateTime(deliverDate, deliverTime);
-      // 👇 agora usa a função da API (car-api.js)
       await setCarDeliveredAt(deliverMiniOpenFor, iso);
       toast({ title: 'Entrega registrada' });
       setDeliverMiniOpenFor(null);
@@ -492,7 +570,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
 
   const [showOnlyAvailable, setShowOnlyAvailable] = useState(false);
 
-  // filtro + ordenação
+  // filtro
   const filteredCars = useMemo(() => {
     const term = (searchTerm || '').trim().toLowerCase();
     let list = (cars || []).filter((c) => {
@@ -622,7 +700,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
               : null;
 
           const isSold = !!car.is_sold;
-          const isDelivered = !!car.delivered_at; // 👈 novo
+          const isDelivered = !!car.delivered_at;
 
           return (
             <div
@@ -655,8 +733,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                         ENTREGUE
                       </span>
                     )}
-                    
-                    {/* mini-modal ENTRADA - colado no card */}
+
                     {entryMiniOpenFor === car.id && (
                       <div className="absolute top-10 left-10 md:left-40 z-[999] bg-white rounded-xl shadow-lg p-4 w-[280px] space-y-3 border border-gray-200">
                         <div className="flex justify-between items-center">
@@ -683,7 +760,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                       </div>
                     )}
 
-                    {/* mini-modal ENTREGA - colado no card */}
                     {deliverMiniOpenFor === car.id && (
                       <div className="absolute top-10 left-10 md:left-40 z-[999] bg-white rounded-xl shadow-lg p-4 w-[280px] space-y-3 border border-gray-200">
                         <div className="flex justify-between items-center">
@@ -711,7 +787,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                     )}
                   </div>
 
-                  {/* linha do preço + FIPE */}
                   <p className="text-sm text-gray-600 flex gap-2 items-center flex-wrap">
                     Preço:{' '}
                     <span className="font-semibold">{moneyBR(car.price)}</span>
@@ -736,7 +811,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                     ) : null}
                   </p>
 
-                  {/* linha do devolver embaixo */}
                   {car.return_to_seller ? (
                     <p className="mt-1">
                       <span className="text-xs bg-amber-50 text-amber-900 px-2 py-0.5 rounded">
@@ -764,7 +838,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                     >
                       <PenSquare className="w-3 h-3" /> editar
                     </button>
-                    
+
                     <span className="text-xs px-2 py-0.5 rounded bg-gray-200 text-black font-semibold">
                       {diffInDays(car)}
                     </span>
@@ -879,6 +953,24 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
           setOpen(isOpen);
           if (!isOpen) {
             await dispatchGlobalUpdate();
+            // limpa estados de edição ao fechar
+            setEditingPubId(null);
+            setEditingExpenseId(null);
+            setPubForm({
+              platform_id: '',
+              link: '',
+              spent: '',
+              status: 'active',
+              published_at: '',
+              notes: '',
+            });
+            setExpenseForm({
+              category: '',
+              amount: '',
+              charged_value: '',
+              incurred_at: '',
+              description: '',
+            });
           }
         }}
       >
@@ -892,7 +984,18 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
 
           <div className="flex gap-3 mb-4">
             <button
-              onClick={() => setActiveTab('marketplaces')}
+              onClick={() => {
+                setActiveTab('marketplaces');
+                setEditingPubId(null);
+                setPubForm({
+                  platform_id: '',
+                  link: '',
+                  spent: '',
+                  status: 'active',
+                  published_at: '',
+                  notes: '',
+                });
+              }}
               className={`px-3 py-1 rounded ${
                 activeTab === 'marketplaces' ? 'bg-yellow-400 text-black' : 'bg-gray-100'
               }`}
@@ -900,7 +1003,18 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
               Anúncios (Marketplaces)
             </button>
             <button
-              onClick={() => setActiveTab('social')}
+              onClick={() => {
+                setActiveTab('social');
+                setEditingPubId(null);
+                setPubForm({
+                  platform_id: '',
+                  link: '',
+                  spent: '',
+                  status: 'active',
+                  published_at: '',
+                  notes: '',
+                });
+              }}
               className={`px-3 py-1 rounded ${
                 activeTab === 'social' ? 'bg-yellow-400 text-black' : 'bg-gray-100'
               }`}
@@ -908,7 +1022,17 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
               Redes Sociais
             </button>
             <button
-              onClick={() => setActiveTab('expenses')}
+              onClick={() => {
+                setActiveTab('expenses');
+                setEditingExpenseId(null);
+                setExpenseForm({
+                  category: '',
+                  amount: '',
+                  charged_value: '',
+                  incurred_at: '',
+                  description: '',
+                });
+              }}
               className={`px-3 py-1 rounded ${
                 activeTab === 'expenses' ? 'bg-yellow-400 text-black' : 'bg-gray-100'
               }`}
@@ -955,7 +1079,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                   className="w-full border rounded px-2 py-2"
                 />
                 <Button onClick={handleSavePublication} className="bg-yellow-400 text-black w-full">
-                  Salvar anúncio
+                  {editingPubId ? 'Atualizar anúncio' : 'Salvar anúncio'}
                 </Button>
               </div>
 
@@ -970,17 +1094,27 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                     return (
                       <div
                         key={p.id}
-                        className="flex justify-between items-center border-b last:border-b-0 py-2"
+                        className="flex justify-between items-center border-b last:border-b-0 py-2 gap-2"
                       >
-                        <div>
-                          <p className="text-sm font-semibold">{pf ? pf.name : '---'}</p>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold truncate">
+                            {pf ? pf.name : '---'}
+                          </p>
                           <p className="text-xs text-gray-500">
                             Gasto: {moneyBR(p.spent)} | {p.status}
                           </p>
                         </div>
-                        <button onClick={() => handleDeletePublication(p.id)}>
-                          <X className="w-4 h-4 text-red-500" />
-                        </button>
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => handleEditPublicationClick(p)}
+                            className="text-xs text-blue-600 hover:underline"
+                          >
+                            Editar
+                          </button>
+                          <button onClick={() => handleDeletePublication(p.id)}>
+                            <X className="w-4 h-4 text-red-500" />
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
@@ -1011,7 +1145,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                   className="w-full border rounded px-2 py-2"
                 />
                 <Button onClick={handleSavePublication} className="bg-yellow-400 text-black w-full">
-                  Salvar publicação
+                  {editingPubId ? 'Atualizar publicação' : 'Salvar publicação'}
                 </Button>
               </div>
 
@@ -1026,15 +1160,25 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                     return (
                       <div
                         key={p.id}
-                        className="flex justify-between items-center border-b last:border-b-0 py-2"
+                        className="flex justify-between items-center border-b last:border-b-0 py-2 gap-2"
                       >
-                        <div>
-                          <p className="text-sm font-semibold">{pf ? pf.name : '---'}</p>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold truncate">
+                            {pf ? pf.name : '---'}
+                          </p>
                           <p className="text-xs text-gray-500">{p.link || 'Sem link'}</p>
                         </div>
-                        <button onClick={() => handleDeletePublication(p.id)}>
-                          <X className="w-4 h-4 text-red-500" />
-                        </button>
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => handleEditPublicationClick(p)}
+                            className="text-xs text-blue-600 hover:underline"
+                          >
+                            Editar
+                          </button>
+                          <button onClick={() => handleDeletePublication(p.id)}>
+                            <X className="w-4 h-4 text-red-500" />
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
@@ -1061,7 +1205,9 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                 />
                 <input
                   value={expenseForm.charged_value}
-                  onChange={(e) => setExpenseForm((p) => ({ ...p, charged_value: e.target.value }))}
+                  onChange={(e) =>
+                    setExpenseForm((p) => ({ ...p, charged_value: e.target.value }))
+                  }
                   placeholder="Valor cobrado (R$) - se houve"
                   type="number"
                   className="w-full border rounded px-2 py-2"
@@ -1079,7 +1225,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                   className="w-full border rounded px-2 py-2"
                 />
                 <Button onClick={handleSaveExpense} className="bg-yellow-400 text-black w-full">
-                  Salvar gasto/ganho
+                  {editingExpenseId ? 'Atualizar gasto/ganho' : 'Salvar gasto/ganho'}
                 </Button>
               </div>
 
@@ -1087,18 +1233,26 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                 {expenses.map((e) => (
                   <div
                     key={e.id}
-                    className="flex justify-between items-center border-b last:border-b-0 py-2"
+                    className="flex justify-between items-center border-b last:border-b-0 py-2 gap-2"
                   >
-                    <div>
-                      <p className="text-sm font-semibold">{e.category}</p>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold truncate">{e.category}</p>
                       <p className="text-xs text-gray-500">
                         Gasto: {moneyBR(e.amount)}{' '}
                         {e.charged_value ? `| Cobrado: ${moneyBR(e.charged_value)}` : ''}
                       </p>
                     </div>
-                    <button onClick={() => handleDeleteExpense(e.id)}>
-                      <X className="w-4 h-4 text-red-500" />
-                    </button>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => handleEditExpenseClick(e)}
+                        className="text-xs text-blue-600 hover:underline"
+                      >
+                        Editar
+                      </button>
+                      <button onClick={() => handleDeleteExpense(e.id)}>
+                        <X className="w-4 h-4 text-red-500" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1173,8 +1327,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
           )}
         </DialogContent>
       </Dialog>
-
-      
     </div>
   );
 };

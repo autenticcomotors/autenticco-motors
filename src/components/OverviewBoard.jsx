@@ -28,7 +28,6 @@ const Money = (v) =>
 
 const normalize = (s = '') => String(s || '').trim().toLowerCase();
 
-// pega foto igual usamos em outras telas
 const getCarImage = (car) => {
   return (
     car.main_photo_url ||
@@ -41,7 +40,6 @@ const getCarImage = (car) => {
   );
 };
 
-// detectar se é anúncio (pra pintar)
 const isAdPlatformName = (name = '') => {
   const n = name.toLowerCase();
   return (
@@ -65,7 +63,7 @@ const OverviewBoard = () => {
   const [orderModalOpen, setOrderModalOpen] = useState(false);
   const [orderingPlatforms, setOrderingPlatforms] = useState([]);
 
-  // 🔥 modal interno de GESTÃO
+  // modal interno de gestão
   const [gestaoOpen, setGestaoOpen] = useState(false);
   const [gestaoTab, setGestaoTab] = useState('marketplaces');
   const [gestaoCar, setGestaoCar] = useState(null);
@@ -92,7 +90,6 @@ const OverviewBoard = () => {
     description: '',
   });
 
-  // >>> CARREGAMENTO INICIAL
   useEffect(() => {
     const run = async () => {
       setLoading(true);
@@ -102,7 +99,6 @@ const OverviewBoard = () => {
         getPlatforms(),
       ]);
 
-      // ordena pelas ordens salvas
       const sortedPlatforms = (platformsRes || [])
         .map((p) => ({ ...p, order: p.order ?? 9999 }))
         .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
@@ -110,7 +106,6 @@ const OverviewBoard = () => {
       setCars(carsRes || []);
       setPlatforms(sortedPlatforms);
 
-      // carrega publicações
       const carIds = (carsRes || []).map((c) => c.id).filter(Boolean);
       if (carIds.length) {
         const pubs = await getPublicationsForCars(carIds);
@@ -120,21 +115,18 @@ const OverviewBoard = () => {
           const cid = p.car_id;
           if (!map[cid]) map[cid] = {};
 
-          // por id da plataforma
           if (p.platform_id) {
             const key = `platform_${p.platform_id}`;
             if (!map[cid][key]) map[cid][key] = [];
             map[cid][key].push(p);
           }
 
-          // por nome
           if (p.platform_name) {
             const n = p.platform_name.toLowerCase();
             if (!map[cid][n]) map[cid][n] = [];
             map[cid][n].push(p);
           }
 
-          // por link
           const link = (p.link || '').toLowerCase();
           if (link.includes('instagram'))
             (map[cid].instagram = map[cid].instagram || []).push(p);
@@ -158,7 +150,6 @@ const OverviewBoard = () => {
     run();
   }, []);
 
-  // montar colunas
   const allColumns = useMemo(() => {
     const list = [];
     (platforms || []).forEach((p) => {
@@ -175,7 +166,6 @@ const OverviewBoard = () => {
     return list;
   }, [platforms]);
 
-  // filtro
   const filteredCars = useMemo(() => {
     const term = search.trim().toLowerCase();
     if (!term) return cars;
@@ -185,7 +175,6 @@ const OverviewBoard = () => {
     });
   }, [cars, search]);
 
-  // modal ordem
   const openOrderModal = () => {
     const base = (platforms || [])
       .map((p) => ({ ...p }))
@@ -226,7 +215,6 @@ const OverviewBoard = () => {
     setOrderModalOpen(false);
   };
 
-  // verifica se carro tem pub naquela coluna
   const hasPub = (car, col) => {
     const map = pubsMap[car.id] || {};
     if (map[col.key] && Array.isArray(map[col.key]) && map[col.key].length > 0) return true;
@@ -235,13 +223,13 @@ const OverviewBoard = () => {
     return false;
   };
 
-  // larguras fixas (📸 aumentei)
-  const COL_IMG = 110; // era 80
-  const COL_VEHICLE = 230;
-  const COL_PRICE = 82;
-  const COL_PLATE = 74;
-  const COL_ACTION = 90;
-  const COL_PLATFORM = 80;
+  // 👇 apertamos tudo aqui
+  const COL_IMG = 110;
+  const COL_VEHICLE = 210;
+  const COL_PRICE = 78;
+  const COL_PLATE = 72;
+  const COL_ACTION = 88;
+  const COL_PLATFORM = 66; // antes 80
 
   // ====== FUNÇÕES DO MODAL DE GESTÃO ======
   const marketplacePlatforms = (platforms || []).filter(
@@ -289,7 +277,6 @@ const OverviewBoard = () => {
   };
 
   const reloadSingleCarData = async (carId) => {
-    // recarrega só os pubs/gastos e também a tabela grande
     const [carsRes, pubs] = await Promise.all([
       getCars({ includeSold: true }),
       getPublicationsForCars([carId]),
@@ -471,10 +458,10 @@ const OverviewBoard = () => {
 
       {/* tabela */}
       <div className="bg-white border rounded-md overflow-hidden">
-        {/* esse wrapper controla o scroll e permite o header colar */}
+        {/* 👇 só rolagem vertical, SEM horizontal */}
         <div
-          className="relative overflow-auto"
-          style={{ maxHeight: '70vh' }}
+          className="relative"
+          style={{ maxHeight: '72vh', overflowY: 'auto', overflowX: 'hidden' }}
         >
           <table
             className="text-sm"
@@ -562,13 +549,13 @@ const OverviewBoard = () => {
                       background: col.isAd ? '#fff5dd' : '#f7f7f8',
                       borderBottom: '1px solid #e5e7eb',
                       textAlign: 'center',
-                      padding: '4px 2px',
+                      padding: '3px 1px',
                       position: 'sticky',
                       top: 0,
                       zIndex: 25,
                     }}
                   >
-                    <div className="text-[10px] leading-tight text-slate-700 break-words whitespace-normal">
+                    <div className="text-[9.5px] leading-tight text-slate-700 break-words whitespace-normal">
                       {col.label}
                     </div>
                   </th>
@@ -612,7 +599,7 @@ const OverviewBoard = () => {
                     <tr
                       key={car.id}
                       className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}
-                      style={{ height: 78 }} // linha um pouco mais alta
+                      style={{ height: 78 }}
                     >
                       {/* foto */}
                       <td
@@ -714,11 +701,11 @@ const OverviewBoard = () => {
                                 : idx % 2 === 0
                                 ? '#fff'
                                 : '#f8fafc',
-                              padding: '4px 2px',
+                              padding: '3px 1px',
                             }}
                           >
                             <span
-                              className={`inline-flex items-center justify-center rounded-full text-[10px] font-semibold w-[50px] h-[20px] ${
+                              className={`inline-flex items-center justify-center rounded-full text-[9.5px] font-semibold w-[48px] h-[20px] ${
                                 ok
                                   ? 'bg-emerald-100 text-emerald-700'
                                   : 'bg-rose-100 text-rose-700'
@@ -744,7 +731,7 @@ const OverviewBoard = () => {
                       >
                         <button
                           onClick={() => openGestao(car)}
-                          className="px-3 py-1 rounded-md border text-[11px] font-medium hover:bg-slate-50"
+                          className="px-3 py-1 rounded-md border text-[10.5px] font-medium hover:bg-slate-50"
                         >
                           Gerenciar
                         </button>
@@ -840,7 +827,7 @@ const OverviewBoard = () => {
         </div>
       )}
 
-      {/* 🔥 MODAL INTERNO DE GESTÃO (só da Matriz) */}
+      {/* modal interno de gestão */}
       <Dialog open={gestaoOpen} onOpenChange={setGestaoOpen}>
         <DialogContent className="max-w-4xl bg-white text-gray-900">
           <DialogHeader>
@@ -889,7 +876,6 @@ const OverviewBoard = () => {
             </button>
           </div>
 
-          {/* Marketplaces */}
           {gestaoTab === 'marketplaces' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-3">
@@ -949,7 +935,6 @@ const OverviewBoard = () => {
             </div>
           )}
 
-          {/* Social */}
           {gestaoTab === 'social' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-3">
@@ -1000,7 +985,6 @@ const OverviewBoard = () => {
             </div>
           )}
 
-          {/* Gastos */}
           {gestaoTab === 'expenses' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-3">
@@ -1060,7 +1044,6 @@ const OverviewBoard = () => {
             </div>
           )}
 
-          {/* Financeiro */}
           {gestaoTab === 'finance' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-3">

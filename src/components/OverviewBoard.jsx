@@ -8,15 +8,17 @@ import {
   updatePlatformOrder,
 } from '@/lib/car-api';
 
-// nomes que não viram coluna (case-insensitive)
 const EXCLUDE_COL_NAMES = ['indicação', 'indicacao'];
 
 const Money = (v) =>
-  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v || 0));
+  new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(Number(v || 0));
 
 const normalize = (s = '') => String(s || '').trim().toLowerCase();
 
-// mesma ideia que usamos em outras telas: tenta vários campos antes de mostrar "sem foto"
+// tenta vários campos de foto (mesma ideia que você já usa)
 const getCarImage = (car) => {
   return (
     car.main_photo_url ||
@@ -29,7 +31,7 @@ const getCarImage = (car) => {
   );
 };
 
-// qual é anúncio? (pra pintar amarelo)
+// se for anúncio pinta amarelo
 const isAdPlatformName = (name = '') => {
   const n = name.toLowerCase();
   return (
@@ -49,14 +51,15 @@ const OverviewBoard = ({ onOpenGestaoForCar = () => {} }) => {
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
 
-  // modal ordem
+  // modal de ordem
   const [orderModalOpen, setOrderModalOpen] = useState(false);
   const [orderingPlatforms, setOrderingPlatforms] = useState([]);
 
-  // 1) carregar carros + plataformas
+  // carregar carros + plataformas
   useEffect(() => {
     const run = async () => {
       setLoading(true);
+
       const [carsRes, platformsRes] = await Promise.all([
         getCars({ includeSold: true }),
         getPlatforms(),
@@ -69,7 +72,7 @@ const OverviewBoard = ({ onOpenGestaoForCar = () => {} }) => {
       setCars(carsRes || []);
       setPlatforms(sortedPlatforms);
 
-      // 2) pegar publicações de todos os carros
+      // agora publicações
       const carIds = (carsRes || []).map((c) => c.id).filter(Boolean);
       if (carIds.length) {
         const pubs = await getPublicationsForCars(carIds);
@@ -80,21 +83,21 @@ const OverviewBoard = ({ onOpenGestaoForCar = () => {} }) => {
           const cid = p.car_id;
           if (!map[cid]) map[cid] = {};
 
-          // chave principal por id de plataforma
+          // por id de plataforma
           if (p.platform_id) {
             const key = `platform_${p.platform_id}`;
             if (!map[cid][key]) map[cid][key] = [];
             map[cid][key].push(p);
           }
 
-          // compat por nome
+          // por nome
           if (p.platform_name) {
             const n = p.platform_name.toLowerCase();
             if (!map[cid][n]) map[cid][n] = [];
             map[cid][n].push(p);
           }
 
-          // compat por link (instagram, youtube etc)
+          // por link
           const link = (p.link || '').toLowerCase();
           if (link.includes('instagram'))
             (map[cid].instagram = map[cid].instagram || []).push(p);
@@ -118,11 +121,9 @@ const OverviewBoard = ({ onOpenGestaoForCar = () => {} }) => {
     run();
   }, []);
 
-  // 3) montar lista de colunas
+  // colunas
   const allColumns = useMemo(() => {
     const list = [];
-
-    // plataformas do banco
     (platforms || []).forEach((p) => {
       const label = (p.name || '').trim();
       if (!label) return;
@@ -130,15 +131,14 @@ const OverviewBoard = ({ onOpenGestaoForCar = () => {} }) => {
       if (EXCLUDE_COL_NAMES.includes(nl)) return;
       list.push({
         key: `platform_${p.id}`,
-        label: label,
+        label,
         isAd: isAdPlatformName(label),
       });
     });
-
     return list;
   }, [platforms]);
 
-  // 4) aplicar busca
+  // filtro
   const filteredCars = useMemo(() => {
     const term = search.trim().toLowerCase();
     if (!term) return cars;
@@ -148,7 +148,7 @@ const OverviewBoard = ({ onOpenGestaoForCar = () => {} }) => {
     });
   }, [cars, search]);
 
-  // 5) abrir modal de ordem
+  // modal ordem
   const openOrderModal = () => {
     const base = (platforms || [])
       .map((p) => ({ ...p }))
@@ -182,7 +182,6 @@ const OverviewBoard = ({ onOpenGestaoForCar = () => {} }) => {
       alert('Não foi possível salvar a nova ordem no banco.');
       return;
     }
-    // refletir na tela principal
     const newPlatforms = orderingPlatforms
       .map((p) => ({ ...p }))
       .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
@@ -190,31 +189,32 @@ const OverviewBoard = ({ onOpenGestaoForCar = () => {} }) => {
     setOrderModalOpen(false);
   };
 
-  // 6) helpers de célula
+  // se tem publicação
   const hasPub = (car, col) => {
     const map = pubsMap[car.id] || {};
-    // por id
     if (map[col.key] && Array.isArray(map[col.key]) && map[col.key].length > 0) return true;
-    // por nome (compat)
     const byName = map[col.label?.toLowerCase()];
     if (byName && Array.isArray(byName) && byName.length > 0) return true;
     return false;
   };
 
-  // CONFIG DE LARGURA pra caber TUDO
-  const COL_IMG = 46; // bem pequeno
-  const COL_VEHICLE = 210;
-  const COL_PRICE = 78;
-  const COL_PLATE = 68;
+  // larguras
+  const COL_IMG = 54; // maiorzinho
+  const COL_VEHICLE = 220;
+  const COL_PRICE = 82;
+  const COL_PLATE = 74;
   const COL_ACTION = 90;
-  const COL_PLATFORM = 78; // todas as plataformas iguais
+  const COL_PLATFORM = 78;
 
   return (
     <div className="w-full space-y-4">
       {/* topo */}
       <div className="flex items-center gap-3">
         <div className="relative w-80 max-w-md">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search
+            size={15}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+          />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -231,285 +231,302 @@ const OverviewBoard = ({ onOpenGestaoForCar = () => {} }) => {
       </div>
 
       {/* tabela */}
-      <div
-        className="bg-white border rounded-md"
-        style={{
-          overflow: 'hidden',
-        }}
-      >
-        <table
-          className="text-sm"
-          style={{
-            width: '100%',
-            tableLayout: 'fixed', // força caber
-            borderCollapse: 'separate',
-          }}
-        >
-          <thead>
-            <tr>
-              {/* foto */}
-              <th
-                style={{
-                  position: 'sticky',
-                  top: 0,
-                  left: 0,
-                  width: COL_IMG,
-                  minWidth: COL_IMG,
-                  background: '#ffffff',
-                  zIndex: 30,
-                  borderBottom: '1px solid #e5e7eb',
-                }}
-              />
-              {/* veículo */}
-              <th
-                style={{
-                  position: 'sticky',
-                  top: 0,
-                  left: COL_IMG,
-                  width: COL_VEHICLE,
-                  minWidth: COL_VEHICLE,
-                  background: '#ffffff',
-                  zIndex: 30,
-                  borderBottom: '1px solid #e5e7eb',
-                  textAlign: 'left',
-                  fontSize: '0.7rem',
-                  padding: '6px 8px',
-                }}
-              >
-                Veículo
-              </th>
-              {/* preço */}
-              <th
-                style={{
-                  position: 'sticky',
-                  top: 0,
-                  left: COL_IMG + COL_VEHICLE,
-                  width: COL_PRICE,
-                  minWidth: COL_PRICE,
-                  background: '#ffffff',
-                  zIndex: 30,
-                  borderBottom: '1px solid #e5e7eb',
-                  textAlign: 'center',
-                  fontSize: '0.7rem',
-                }}
-              >
-                Preço
-              </th>
-              {/* placa */}
-              <th
-                style={{
-                  position: 'sticky',
-                  top: 0,
-                  left: COL_IMG + COL_VEHICLE + COL_PRICE,
-                  width: COL_PLATE,
-                  minWidth: COL_PLATE,
-                  background: '#ffffff',
-                  zIndex: 30,
-                  borderBottom: '1px solid #e5e7eb',
-                  textAlign: 'center',
-                  fontSize: '0.7rem',
-                }}
-              >
-                Placa
-              </th>
-
-              {/* plataformas */}
-              {allColumns.map((col) => (
+      <div className="bg-white border rounded-md overflow-hidden">
+        <div className="relative">
+          <table
+            className="text-sm"
+            style={{
+              width: '100%',
+              tableLayout: 'fixed',
+              borderCollapse: 'separate',
+            }}
+          >
+            <thead>
+              <tr>
+                {/* foto */}
                 <th
-                  key={col.key}
                   style={{
-                    width: COL_PLATFORM,
-                    minWidth: COL_PLATFORM,
-                    background: col.isAd ? '#fff5dd' : '#f7f7f8',
+                    position: 'sticky',
+                    top: 0,
+                    left: 0,
+                    width: COL_IMG,
+                    minWidth: COL_IMG,
+                    background: '#ffffff',
+                    zIndex: 40,
                     borderBottom: '1px solid #e5e7eb',
-                    textAlign: 'center',
-                    fontSize: '0.65rem',
-                    padding: '4px 2px',
-                    whiteSpace: 'nowrap',
+                  }}
+                />
+                {/* veículo */}
+                <th
+                  style={{
+                    position: 'sticky',
+                    top: 0,
+                    left: COL_IMG,
+                    width: COL_VEHICLE,
+                    minWidth: COL_VEHICLE,
+                    background: '#ffffff',
+                    zIndex: 40,
+                    borderBottom: '1px solid #e5e7eb',
+                    textAlign: 'left',
+                    fontSize: '0.7rem',
+                    padding: '6px 8px',
                   }}
                 >
-                  {col.label}
+                  Veículo
                 </th>
-              ))}
-
-              {/* ações */}
-              <th
-                style={{
-                  width: COL_ACTION,
-                  minWidth: COL_ACTION,
-                  background: '#ffffff',
-                  borderBottom: '1px solid #e5e7eb',
-                  textAlign: 'center',
-                  fontSize: '0.7rem',
-                }}
-              >
-                Ações
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && (
-              <tr>
-                <td
-                  colSpan={4 + allColumns.length + 1}
-                  className="py-6 text-center text-slate-400 text-sm"
+                {/* preço */}
+                <th
+                  style={{
+                    position: 'sticky',
+                    top: 0,
+                    left: COL_IMG + COL_VEHICLE,
+                    width: COL_PRICE,
+                    minWidth: COL_PRICE,
+                    background: '#ffffff',
+                    zIndex: 40,
+                    borderBottom: '1px solid #e5e7eb',
+                    textAlign: 'center',
+                    fontSize: '0.7rem',
+                  }}
                 >
-                  Carregando veículos e publicações...
-                </td>
+                  Preço
+                </th>
+                {/* placa */}
+                <th
+                  style={{
+                    position: 'sticky',
+                    top: 0,
+                    left: COL_IMG + COL_VEHICLE + COL_PRICE,
+                    width: COL_PLATE,
+                    minWidth: COL_PLATE,
+                    background: '#ffffff',
+                    zIndex: 40,
+                    borderBottom: '1px solid #e5e7eb',
+                    textAlign: 'center',
+                    fontSize: '0.7rem',
+                  }}
+                >
+                  Placa
+                </th>
+
+                {/* plataformas */}
+                {allColumns.map((col) => (
+                  <th
+                    key={col.key}
+                    style={{
+                      width: COL_PLATFORM,
+                      minWidth: COL_PLATFORM,
+                      background: col.isAd ? '#fff5dd' : '#f7f7f8',
+                      borderBottom: '1px solid #e5e7eb',
+                      textAlign: 'center',
+                      padding: '4px 2px',
+                    }}
+                  >
+                    <div className="text-[10px] leading-tight text-slate-700 break-words whitespace-normal">
+                      {col.label}
+                    </div>
+                  </th>
+                ))}
+
+                {/* ações */}
+                <th
+                  style={{
+                    position: 'sticky',
+                    top: 0,
+                    right: 0,
+                    width: COL_ACTION,
+                    minWidth: COL_ACTION,
+                    background: '#ffffff',
+                    borderBottom: '1px solid #e5e7eb',
+                    textAlign: 'center',
+                    fontSize: '0.7rem',
+                    zIndex: 40,
+                  }}
+                >
+                  Ações
+                </th>
               </tr>
-            )}
+            </thead>
+            <tbody>
+              {loading && (
+                <tr>
+                  <td
+                    colSpan={4 + allColumns.length + 1}
+                    className="py-6 text-center text-slate-400 text-sm"
+                  >
+                    Carregando veículos e publicações...
+                  </td>
+                </tr>
+              )}
 
-            {!loading &&
-              filteredCars.map((car) => {
-                const img = getCarImage(car);
-                return (
-                  <tr key={car.id} className="hover:bg-slate-50/60">
-                    {/* foto */}
-                    <td
-                      style={{
-                        position: 'sticky',
-                        left: 0,
-                        background: '#fff',
-                        width: COL_IMG,
-                        minWidth: COL_IMG,
-                        zIndex: 10,
-                        padding: 4,
-                      }}
+              {!loading &&
+                filteredCars.map((car, idx) => {
+                  const img = getCarImage(car);
+                  return (
+                    <tr
+                      key={car.id}
+                      className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}
+                      style={{ height: 56 }}
                     >
-                      <div className="w-[30px] h-[30px] rounded-sm bg-slate-200 overflow-hidden flex items-center justify-center">
-                        {img ? (
-                          <img src={img} alt={car.model} className="w-full h-full object-cover" />
-                        ) : (
-                          <span className="text-[8px] text-slate-500 text-center leading-tight">
-                            sem foto
+                      {/* foto */}
+                      <td
+                        style={{
+                          position: 'sticky',
+                          left: 0,
+                          background: idx % 2 === 0 ? '#fff' : '#f8fafc',
+                          width: COL_IMG,
+                          minWidth: COL_IMG,
+                          zIndex: 20,
+                          padding: 6,
+                        }}
+                      >
+                        <div className="w-9 h-9 rounded-md bg-slate-200 overflow-hidden flex items-center justify-center">
+                          {img ? (
+                            <img
+                              src={img}
+                              alt={car.model}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <span className="text-[8px] text-slate-500 text-center leading-tight px-1">
+                              sem foto
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* veículo */}
+                      <td
+                        style={{
+                          position: 'sticky',
+                          left: COL_IMG,
+                          background: idx % 2 === 0 ? '#fff' : '#f8fafc',
+                          width: COL_VEHICLE,
+                          minWidth: COL_VEHICLE,
+                          zIndex: 20,
+                          padding: '6px 8px',
+                        }}
+                      >
+                        <div className="flex flex-col leading-tight">
+                          <span className="font-medium text-[12.5px] text-slate-800 truncate">
+                            {car.brand} {car.model}{' '}
+                            {car.year ? (
+                              <span className="text-xs text-slate-400">({car.year})</span>
+                            ) : null}
                           </span>
-                        )}
-                      </div>
-                    </td>
+                        </div>
+                      </td>
 
-                    {/* veículo */}
-                    <td
-                      style={{
-                        position: 'sticky',
-                        left: COL_IMG,
-                        background: '#fff',
-                        width: COL_VEHICLE,
-                        minWidth: COL_VEHICLE,
-                        zIndex: 10,
-                        padding: '6px 8px',
-                      }}
-                    >
-                      <div className="flex flex-col leading-tight">
-                        <span className="font-medium text-[13px] text-slate-800 truncate">
-                          {car.brand} {car.model}{' '}
-                          {car.year ? (
-                            <span className="text-xs text-slate-400">({car.year})</span>
-                          ) : null}
-                        </span>
-                      </div>
-                    </td>
+                      {/* preço */}
+                      <td
+                        style={{
+                          position: 'sticky',
+                          left: COL_IMG + COL_VEHICLE,
+                          background: idx % 2 === 0 ? '#fff' : '#f8fafc',
+                          width: COL_PRICE,
+                          minWidth: COL_PRICE,
+                          zIndex: 20,
+                          textAlign: 'center',
+                          padding: '4px 2px',
+                        }}
+                        className="text-[11px] text-slate-700"
+                      >
+                        {car.price ? Money(car.price) : '--'}
+                      </td>
 
-                    {/* preço */}
-                    <td
-                      style={{
-                        position: 'sticky',
-                        left: COL_IMG + COL_VEHICLE,
-                        background: '#fff',
-                        width: COL_PRICE,
-                        minWidth: COL_PRICE,
-                        zIndex: 10,
-                        textAlign: 'center',
-                        padding: '4px 2px',
-                      }}
-                      className="text-[11px] text-slate-700"
-                    >
-                      {car.price ? Money(car.price) : '--'}
-                    </td>
+                      {/* placa */}
+                      <td
+                        style={{
+                          position: 'sticky',
+                          left: COL_IMG + COL_VEHICLE + COL_PRICE,
+                          background: idx % 2 === 0 ? '#fff' : '#f8fafc',
+                          width: COL_PLATE,
+                          minWidth: COL_PLATE,
+                          zIndex: 20,
+                          textAlign: 'center',
+                          padding: '4px 2px',
+                        }}
+                        className="text-[11px] text-slate-600"
+                      >
+                        {car.plate || '--'}
+                      </td>
 
-                    {/* placa */}
-                    <td
-                      style={{
-                        position: 'sticky',
-                        left: COL_IMG + COL_VEHICLE + COL_PRICE,
-                        background: '#fff',
-                        width: COL_PLATE,
-                        minWidth: COL_PLATE,
-                        zIndex: 10,
-                        textAlign: 'center',
-                        padding: '4px 2px',
-                      }}
-                      className="text-[11px] text-slate-600"
-                    >
-                      {car.plate || '--'}
-                    </td>
-
-                    {/* plataformas */}
-                    {allColumns.map((col) => {
-                      const ok = hasPub(car, col);
-                      return (
-                        <td
-                          key={col.key}
-                          style={{
-                            width: COL_PLATFORM,
-                            minWidth: COL_PLATFORM,
-                            textAlign: 'center',
-                            background: col.isAd ? '#fffaf0' : '#fff',
-                            padding: '3px 0',
-                          }}
-                        >
-                          <span
-                            className={`inline-flex items-center justify-center rounded-full text-[10px] font-semibold w-[54px] h-[20px] ${
-                              ok
-                                ? 'bg-emerald-100 text-emerald-700'
-                                : 'bg-rose-100 text-rose-700'
-                            }`}
+                      {/* plataformas */}
+                      {allColumns.map((col) => {
+                        const ok = hasPub(car, col);
+                        return (
+                          <td
+                            key={col.key}
+                            style={{
+                              width: COL_PLATFORM,
+                              minWidth: COL_PLATFORM,
+                              textAlign: 'center',
+                              background: col.isAd
+                                ? idx % 2 === 0
+                                  ? '#fffaf0'
+                                  : '#fff2df'
+                                : idx % 2 === 0
+                                ? '#fff'
+                                : '#f8fafc',
+                            }}
                           >
-                            {ok ? 'SIM' : 'NÃO'}
-                          </span>
-                        </td>
-                      );
-                    })}
+                            <span
+                              className={`inline-flex items-center justify-center rounded-full text-[10px] font-semibold w-[50px] h-[20px] ${
+                                ok
+                                  ? 'bg-emerald-100 text-emerald-700'
+                                  : 'bg-rose-100 text-rose-700'
+                              }`}
+                            >
+                              {ok ? 'SIM' : 'NÃO'}
+                            </span>
+                          </td>
+                        );
+                      })}
 
-                    {/* ações */}
-                    <td
-                      style={{
-                        width: COL_ACTION,
-                        minWidth: COL_ACTION,
-                        textAlign: 'center',
-                        background: '#fff',
-                      }}
-                    >
-                      <button
-                        onClick={() => onOpenGestaoForCar(car)}
-                        className="px-3 py-1 rounded-md border text-[11px] font-medium hover:bg-slate-50"
+                      {/* ações */}
+                      <td
+                        style={{
+                          position: 'sticky',
+                          right: 0,
+                          background: idx % 2 === 0 ? '#fff' : '#f8fafc',
+                          width: COL_ACTION,
+                          minWidth: COL_ACTION,
+                          textAlign: 'center',
+                          zIndex: 20,
+                        }}
                       >
-                        Gerenciar
-                      </button>
-                      <a
-                        href={`/carro/${car.slug || ''}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-1 inline-flex items-center gap-1 text-[10px] text-slate-400"
-                      >
-                        <ExternalLink size={10} /> Ver
-                      </a>
-                    </td>
-                  </tr>
-                );
-              })}
+                        <button
+                          onClick={() => onOpenGestaoForCar(car)}
+                          className="px-3 py-1 rounded-md border text-[11px] font-medium hover:bg-slate-50"
+                        >
+                          Gerenciar
+                        </button>
+                        <a
+                          href={`/carro/${car.slug || ''}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-1 inline-flex items-center gap-1 text-[10px] text-slate-400"
+                        >
+                          <ExternalLink size={10} /> Ver
+                        </a>
+                      </td>
+                    </tr>
+                  );
+                })}
 
-            {!loading && filteredCars.length === 0 && (
-              <tr>
-                <td
-                  colSpan={4 + allColumns.length + 1}
-                  className="py-6 text-center text-slate-400 text-sm"
-                >
-                  Nenhum veículo encontrado.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+              {!loading && filteredCars.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={4 + allColumns.length + 1}
+                    className="py-6 text-center text-slate-400 text-sm"
+                  >
+                    Nenhum veículo encontrado.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* modal de ordem */}
@@ -526,7 +543,8 @@ const OverviewBoard = ({ onOpenGestaoForCar = () => {} }) => {
               </button>
             </div>
             <p className="text-xs text-slate-500 mb-4">
-              Use ↑ e ↓ para mudar a posição. Ao salvar grava direto na tabela <code>platforms</code>.
+              Use ↑ e ↓ para mudar a posição. Ao salvar grava direto na tabela{' '}
+              <code>platforms</code>.
             </p>
 
             <div className="border rounded-md max-h-[380px] overflow-y-auto">

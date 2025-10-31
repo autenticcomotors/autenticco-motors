@@ -1,6 +1,6 @@
 // src/components/OverviewBoard.jsx
 import React, { useEffect, useMemo, useState } from 'react';
-import { Search, ExternalLink, ArrowUp, ArrowDown, X } from 'lucide-react';
+import { Search, ExternalLink, ArrowUp, ArrowDown, X, SlidersHorizontal } from 'lucide-react';
 import {
   getCars,
   getPlatforms,
@@ -62,6 +62,13 @@ const OverviewBoard = () => {
   // modal de ordem
   const [orderModalOpen, setOrderModalOpen] = useState(false);
   const [orderingPlatforms, setOrderingPlatforms] = useState([]);
+
+  // NOVO: modal de filtros
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  // statusFilter: 'all' | 'active' | 'sold'
+  const [statusFilter, setStatusFilter] = useState('all');
+  // platformFilter: '' (todas) ou id da plataforma
+  const [platformFilter, setPlatformFilter] = useState('');
 
   // modal interno de gestão
   const [gestaoOpen, setGestaoOpen] = useState(false);
@@ -166,14 +173,56 @@ const OverviewBoard = () => {
     return list;
   }, [platforms]);
 
+  // 👉 função auxiliar pra saber se o carro está vendido
+  const isCarSold = (car) => {
+    // cobrindo vários jeitos de vir do banco
+    return (
+      car?.sold === true ||
+      car?.is_sold === true ||
+      car?.status === 'sold' ||
+      car?.status === 'vendido' ||
+      !!car?.sold_at
+    );
+  };
+
   const filteredCars = useMemo(() => {
     const term = search.trim().toLowerCase();
-    if (!term) return cars;
-    return (cars || []).filter((c) => {
+
+    // 1) base
+    let base = cars || [];
+
+    // 2) filtro de status
+    if (statusFilter === 'active') {
+      base = base.filter((c) => !isCarSold(c));
+    } else if (statusFilter === 'sold') {
+      base = base.filter((c) => isCarSold(c));
+    }
+
+    // 3) filtro de plataforma
+    if (platformFilter) {
+      base = base.filter((car) => {
+        const carMap = pubsMap[car.id] || {};
+        const key = `platform_${platformFilter}`;
+        if (carMap[key] && Array.isArray(carMap[key]) && carMap[key].length > 0) {
+          return true;
+        }
+        // também tentar por nome, se tiver
+        const plat = platforms.find((p) => String(p.id) === String(platformFilter));
+        if (plat?.name) {
+          const byName = carMap[plat.name.toLowerCase()];
+          if (byName && byName.length > 0) return true;
+        }
+        return false;
+      });
+    }
+
+    // 4) busca de texto
+    if (!term) return base;
+    return base.filter((c) => {
       const hay = `${c.brand || ''} ${c.model || ''} ${c.year || ''} ${c.plate || ''}`.toLowerCase();
       return hay.includes(term);
     });
-  }, [cars, search]);
+  }, [cars, search, statusFilter, platformFilter, pubsMap, platforms]);
 
   const openOrderModal = () => {
     const base = (platforms || [])
@@ -223,7 +272,7 @@ const OverviewBoard = () => {
     return false;
   };
 
-  // 👇 apertamos tudo aqui
+  // 👇 apertamos tudo aqui (NÃO MEXI)
   const COL_IMG = 110;
   const COL_VEHICLE = 210;
   const COL_PRICE = 78;
@@ -432,6 +481,13 @@ const OverviewBoard = () => {
     }
   };
 
+  // botão de limpar filtros
+  const clearFilters = () => {
+    setStatusFilter('all');
+    setPlatformFilter('');
+    setFiltersOpen(false);
+  };
+
   return (
     <div className="w-full space-y-4">
       {/* topo */}
@@ -454,6 +510,29 @@ const OverviewBoard = () => {
         >
           Editar ordem das plataformas
         </button>
+        {/* NOVO: botão de filtros — mesmo estilo, não mexe em nada */}
+        <button
+          onClick={() => setFiltersOpen(true)}
+          className="bg-white border text-sm font-medium px-3 py-2 rounded-md flex items-center gap-2"
+        >
+          <SlidersHorizontal size={14} />
+          Filtros
+        </button>
+        {/* se tiver filtro ligado, mostra chip */}
+        {(statusFilter !== 'all' || platformFilter) && (
+          <span className="text-xs text-slate-500">
+            Filtros ativos:
+            {statusFilter === 'active' ? ' só em estoque' : ''}
+            {statusFilter === 'sold' ? ' só vendidos' : ''}
+            {platformFilter
+              ? ` • ${platforms.find((p) => String(p.id) === String(platformFilter))?.name || 'plataforma'}`
+              : ''}
+            {' '}
+            <button onClick={clearFilters} className="text-red-500 underline text-[11px]">
+              limpar
+            </button>
+          </span>
+        )}
       </div>
 
       {/* tabela */}
@@ -777,8 +856,7 @@ const OverviewBoard = () => {
               </button>
             </div>
             <p className="text-xs text-slate-500 mb-4">
-              Use ↑ e ↓ para mudar a posição. Ao salvar grava direto na tabela{' '}
-              <code>platforms</code>.
+              Use ↑ e ↓ para mudar a posição. Ao salvar grava direto na tabela <code>platforms</code>.
             </p>
 
             <div className="border rounded-md max-h-[380px] overflow-y-auto">
@@ -1098,6 +1176,86 @@ const OverviewBoard = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* NOVO: modal de filtros */}
+      {filtersOpen && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-[1000]">
+          <div className="bg-white rounded-md shadow-lg w-full max-w-md p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">Filtros da Matriz</h2>
+              <button
+                onClick={() => setFiltersOpen(false)}
+                className="p-1 rounded hover:bg-slate-100"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm font-medium mb-2">Status do veículo</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setStatusFilter('all')}
+                    className={`px-3 py-1 rounded border text-sm ${
+                      statusFilter === 'all' ? 'bg-yellow-300' : 'bg-white'
+                    }`}
+                  >
+                    Todos
+                  </button>
+                  <button
+                    onClick={() => setStatusFilter('active')}
+                    className={`px-3 py-1 rounded border text-sm ${
+                      statusFilter === 'active' ? 'bg-yellow-300' : 'bg-white'
+                    }`}
+                  >
+                    Só em estoque
+                  </button>
+                  <button
+                    onClick={() => setStatusFilter('sold')}
+                    className={`px-3 py-1 rounded border text-sm ${
+                      statusFilter === 'sold' ? 'bg-yellow-300' : 'bg-white'
+                    }`}
+                  >
+                    Só vendidos
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-sm font-medium mb-2">Plataforma</p>
+                <select
+                  value={platformFilter}
+                  onChange={(e) => setPlatformFilter(e.target.value)}
+                  className="w-full border rounded px-2 py-2 text-sm"
+                >
+                  <option value="">Todas</option>
+                  {(platforms || []).map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="flex justify-between mt-5">
+              <button
+                onClick={clearFilters}
+                className="text-sm text-red-500 underline"
+              >
+                Limpar tudo
+              </button>
+              <button
+                onClick={() => setFiltersOpen(false)}
+                className="px-4 py-2 bg-yellow-400 rounded-md text-sm font-medium"
+              >
+                Aplicar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -1280,72 +1280,69 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
           )}
 
           {/* FINANCEIRO */}
-          {activeTab === 'finance' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-3">
-                <div className="flex gap-2 items-center">
-                  <input
-                    value={financeForm.fipe_value}
-                    onChange={(e) => setFinanceForm((p) => ({ ...p, fipe_value: e.target.value }))}
-                    placeholder="Valor FIPE"
-                    type="number"
-                    className="w-full border rounded px-2 py-2"
-                  />
-                  <Button
-                    type="button"
-                    onClick={handleFetchFipe}
-                    className="bg-gray-100 text-gray-900 border border-gray-200"
-                  >
-                    Buscar FIPE
-                  </Button>
-                </div>
-                <p className="text-xs text-gray-500">
-                  FIPE: valor de referência do modelo. Pode ser diferente do valor real negociado.
-                </p>
+{activeTab === 'finance' && (
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div className="space-y-3">
+      <div className="flex gap-2 items-center">
+        <input
+          value={financeForm.fipe_value}
+          onChange={(e) => setFinanceForm((p) => ({ ...p, fipe_value: e.target.value }))}
+          placeholder="Valor FIPE"
+          type="number"
+          className="w-full border rounded px-2 py-2"
+        />
+        <Button
+          type="button"
+          onClick={handleFetchFipe}
+          className="bg-gray-100 text-gray-900 border border-gray-200"
+        >
+          Buscar FIPE
+        </Button>
+      </div>
+      <p className="text-xs text-gray-500">
+        FIPE: valor de referência do modelo. Pode ser diferente do valor real negociado.
+      </p>
 
-                <input
-                  value={financeForm.commission}
-                  onChange={(e) => setFinanceForm((p) => ({ ...p, commission: e.target.value }))}
-                  placeholder="Comissão (R$)"
-                  type="number"
-                  className="w-full border rounded px-2 py-2"
-                />
-                <p className="text-xs text-gray-500">
-                  Comissão: quanto a AutenTicco recebe pela operação (fixo ou % convertido).
-                </p>
+      <input
+        value={financeForm.commission}
+        onChange={(e) => setFinanceForm((p) => ({ ...p, commission: e.target.value }))}
+        placeholder="Comissão (R$)"
+        type="number"
+        className="w-full border rounded px-2 py-2"
+      />
+      <p className="text-xs text-gray-500">
+        Comissão: quanto a AutenTicco recebe pela operação (fixo ou % convertido).
+      </p>
 
-                {/* deixei o campo visível, mas ele será sobrescrito no salvar */}
-                <input
-                  value={financeForm.return_to_seller}
-                  onChange={(e) =>
-                    setFinanceForm((p) => ({ ...p, return_to_seller: e.target.value }))
-                  }
-                  placeholder="Devolver ao cliente (R$)"
-                  type="number"
-                  className="w-full border rounded px-2 py-2"
-                />
-                <p className="text-xs text-gray-500">
-                  Devolver: valor que volta pro dono do carro após a venda (preço - comissão).
-                </p>
+      {/* DEVOLVER apenas leitura */}
+      <div className="w-full border rounded px-3 py-2 bg-gray-50 text-gray-800">
+        <p className="text-sm font-semibold">
+          Devolver automaticamente: {moneyBR(Number(selectedCar?.price || 0) - Number(financeForm.commission || 0))}
+        </p>
+        <p className="text-xs text-gray-500">
+          Valor calculado automaticamente (preço - comissão).
+        </p>
+      </div>
 
-                <Button onClick={handleSaveFinance} className="bg-yellow-400 text-black w-full">
-                  Salvar financeiro
-                </Button>
-              </div>
-              <div className="bg-gray-50 rounded-lg p-4 text-sm">
-                <p className="font-semibold mb-2">Como calculamos o lucro estimado:</p>
-                <ul className="list-disc list-inside space-y-1 text-gray-600">
-                  <li>Lucro = Comissão</li>
-                  <li>+ todos os valores cobrados (gastos repassados)</li>
-                  <li>– todos os gastos extras</li>
-                  <li>– todos os anúncios (marketplaces)</li>
-                </ul>
-                <p className="mt-2 text-xs text-gray-400">
-                  Esse valor aparece na listagem principal de gestão.
-                </p>
-              </div>
-            </div>
-          )}
+      <Button onClick={handleSaveFinance} className="bg-yellow-400 text-black w-full">
+        Salvar financeiro
+      </Button>
+    </div>
+    <div className="bg-gray-50 rounded-lg p-4 text-sm">
+      <p className="font-semibold mb-2">Como calculamos o lucro estimado:</p>
+      <ul className="list-disc list-inside space-y-1 text-gray-600">
+        <li>Lucro = Comissão</li>
+        <li>+ todos os valores cobrados (gastos repassados)</li>
+        <li>– todos os gastos extras</li>
+        <li>– todos os anúncios (marketplaces)</li>
+      </ul>
+      <p className="mt-2 text-xs text-gray-400">
+        Esse valor aparece na listagem principal de gestão.
+      </p>
+    </div>
+  </div>
+)}
+
         </DialogContent>
       </Dialog>
     </div>

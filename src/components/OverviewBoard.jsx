@@ -6,6 +6,7 @@ import {
   getPlatforms,
   getPublicationsForCars,
   updatePlatformOrder,
+  // para o modal interno:
   getPublicationsByCar,
   getExpensesByCar,
   addPublication,
@@ -58,9 +59,11 @@ const OverviewBoard = () => {
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
 
+  // modal de ordem
   const [orderModalOpen, setOrderModalOpen] = useState(false);
   const [orderingPlatforms, setOrderingPlatforms] = useState([]);
 
+  // modal interno de gestão
   const [gestaoOpen, setGestaoOpen] = useState(false);
   const [gestaoTab, setGestaoTab] = useState('marketplaces');
   const [gestaoCar, setGestaoCar] = useState(null);
@@ -87,14 +90,15 @@ const OverviewBoard = () => {
     description: '',
   });
 
-  // filtros
+  // NOVO: filtros da matriz
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [stockFilter, setStockFilter] = useState('all'); // all | stock | sold
-  const [platformFilterId, setPlatformFilterId] = useState('');
+  const [platformFilterId, setPlatformFilterId] = useState(''); // id da plataforma p/ mostrar quem NÃO tem
 
   useEffect(() => {
     const run = async () => {
       setLoading(true);
+
       const [carsRes, platformsRes] = await Promise.all([
         getCars({ includeSold: true }),
         getPlatforms(),
@@ -151,6 +155,7 @@ const OverviewBoard = () => {
     run();
   }, []);
 
+  // monta colunas a partir das plataformas
   const allColumns = useMemo(() => {
     const list = [];
     (platforms || []).forEach((p) => {
@@ -168,15 +173,18 @@ const OverviewBoard = () => {
     return list;
   }, [platforms]);
 
+  // filtrar carros
   const filteredCars = useMemo(() => {
     let base = cars || [];
 
+    // 1) filtro de estoque/vendido
     if (stockFilter === 'stock') {
       base = base.filter((c) => !c.is_sold);
     } else if (stockFilter === 'sold') {
       base = base.filter((c) => !!c.is_sold);
     }
 
+    // 2) filtro por plataforma (mostrar só quem AINDA NÃO está nela)
     if (platformFilterId) {
       const col = allColumns.find((c) => String(c.id) === String(platformFilterId));
       if (col) {
@@ -192,6 +200,7 @@ const OverviewBoard = () => {
       }
     }
 
+    // 3) busca de texto
     const term = search.trim().toLowerCase();
     if (!term) return base;
     return base.filter((c) => {
@@ -248,19 +257,21 @@ const OverviewBoard = () => {
     return false;
   };
 
-  // LARGURAS (aumentadas)
-  const COL_IMG = 130;
-  const COL_VEHICLE = 220;
-  const COL_PRICE = 88;
-  const COL_PLATE = 78;
-  const COL_ACTION = 96;
-  const COL_PLATFORM = 78;
+  // LARGURAS
+  const COL_IMG = 120; // ↑ foto maior
+  const COL_VEHICLE = 210;
+  const COL_PRICE = 78;
+  const COL_PLATE = 72;
+  const COL_ACTION = 90;
+  const COL_PLATFORM = 66;
 
+  // plataformas separadas p/ modal
   const marketplacePlatforms = (platforms || []).filter(
     (p) => p.platform_type === 'marketplace'
   );
   const socialPlatforms = (platforms || []).filter((p) => p.platform_type === 'social');
 
+  // abrir modal de gestão
   const openGestao = async (car) => {
     setGestaoCar(car);
     setGestaoTab('marketplaces');
@@ -508,13 +519,14 @@ const OverviewBoard = () => {
 
       {/* tabela */}
       <div className="bg-white border rounded-md overflow-hidden">
+        {/* 👇 rolagem só vertical; padding-right p/ caber a coluna sticky da direita */}
         <div
           className="relative"
           style={{
             maxHeight: '72vh',
             overflowY: 'auto',
             overflowX: 'hidden',
-            paddingRight: `${COL_ACTION + 16}px`,
+            paddingRight: `${COL_ACTION + 12}px`, // 👈 garante que a última coluna não seja cortada
           }}
         >
           <table
@@ -550,9 +562,8 @@ const OverviewBoard = () => {
                     zIndex: 50,
                     borderBottom: '1px solid #e5e7eb',
                     textAlign: 'left',
-                    fontSize: '0.8rem',
-                    fontWeight: 600,
-                    padding: '8px 10px',
+                    fontSize: '0.7rem',
+                    padding: '6px 8px',
                   }}
                 >
                   Veículo
@@ -568,8 +579,7 @@ const OverviewBoard = () => {
                     zIndex: 50,
                     borderBottom: '1px solid #e5e7eb',
                     textAlign: 'center',
-                    fontSize: '0.75rem',
-                    fontWeight: 500,
+                    fontSize: '0.7rem',
                   }}
                 >
                   Preço
@@ -585,8 +595,7 @@ const OverviewBoard = () => {
                     zIndex: 50,
                     borderBottom: '1px solid #e5e7eb',
                     textAlign: 'center',
-                    fontSize: '0.75rem',
-                    fontWeight: 500,
+                    fontSize: '0.7rem',
                   }}
                 >
                   Placa
@@ -601,13 +610,13 @@ const OverviewBoard = () => {
                       background: col.isAd ? '#fff5dd' : '#f7f7f8',
                       borderBottom: '1px solid #e5e7eb',
                       textAlign: 'center',
-                      padding: '4px 3px',
+                      padding: '3px 1px',
                       position: 'sticky',
                       top: 0,
                       zIndex: 25,
                     }}
                   >
-                    <div className="text-[11px] leading-tight text-slate-700 break-words whitespace-normal">
+                    <div className="text-[9.5px] leading-tight text-slate-700 break-words whitespace-normal">
                       {col.label}
                     </div>
                   </th>
@@ -623,7 +632,7 @@ const OverviewBoard = () => {
                     background: '#ffffff',
                     borderBottom: '1px solid #e5e7eb',
                     textAlign: 'center',
-                    fontSize: '0.75rem',
+                    fontSize: '0.7rem',
                     zIndex: 60,
                   }}
                 >
@@ -650,7 +659,7 @@ const OverviewBoard = () => {
                     <tr
                       key={car.id}
                       className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}
-                      style={{ height: 80 }}
+                      style={{ height: 78 }}
                     >
                       <td
                         style={{
@@ -660,10 +669,10 @@ const OverviewBoard = () => {
                           width: COL_IMG,
                           minWidth: COL_IMG,
                           zIndex: 40,
-                          padding: '6px 6px',
+                          padding: '6px 4px',
                         }}
                       >
-                        <div className="w-[116px] h-[78px] rounded-md bg-slate-200 overflow-hidden flex items-center justify-center">
+                        <div className="w-[108px] h-[74px] rounded-md bg-slate-200 overflow-hidden flex items-center justify-center">
                           {img ? (
                             <img
                               src={img}
@@ -671,7 +680,7 @@ const OverviewBoard = () => {
                               className="w-full h-full object-cover"
                             />
                           ) : (
-                            <span className="text-[9px] text-slate-500 text-center leading-tight px-1">
+                            <span className="text-[8px] text-slate-500 text-center leading-tight px-1">
                               sem foto
                             </span>
                           )}
@@ -686,18 +695,18 @@ const OverviewBoard = () => {
                           width: COL_VEHICLE,
                           minWidth: COL_VEHICLE,
                           zIndex: 40,
-                          padding: '7px 10px',
+                          padding: '6px 8px',
                         }}
                       >
                         <div className="flex flex-col leading-tight">
-                          <span className="font-medium text-[13px] text-slate-800 truncate">
+                          <span className="font-medium text-[12.5px] text-slate-800 truncate">
                             {car.brand} {car.model}{' '}
                             {car.year ? (
                               <span className="text-xs text-slate-400">({car.year})</span>
                             ) : null}
                           </span>
                           {car.is_sold ? (
-                            <span className="text-[10.5px] text-red-500 font-semibold mt-0.5">
+                            <span className="text-[10px] text-red-500 font-semibold mt-0.5">
                               VENDIDO
                             </span>
                           ) : null}
@@ -715,7 +724,7 @@ const OverviewBoard = () => {
                           textAlign: 'center',
                           padding: '4px 2px',
                         }}
-                        className="text-[11.5px] text-slate-700"
+                        className="text-[11px] text-slate-700"
                       >
                         {car.price ? Money(car.price) : '--'}
                       </td>
@@ -731,7 +740,7 @@ const OverviewBoard = () => {
                           textAlign: 'center',
                           padding: '4px 2px',
                         }}
-                        className="text-[11.5px] text-slate-600"
+                        className="text-[11px] text-slate-600"
                       >
                         {car.plate || '--'}
                       </td>
@@ -752,11 +761,11 @@ const OverviewBoard = () => {
                                 : idx % 2 === 0
                                 ? '#fff'
                                 : '#f8fafc',
-                              padding: '5px 3px',
+                              padding: '3px 1px',
                             }}
                           >
                             <span
-                              className={`inline-flex items-center justify-center rounded-full text-[11px] font-semibold w-[54px] h-[22px] ${
+                              className={`inline-flex items-center justify-center rounded-full text-[9.5px] font-semibold w-[48px] h-[20px] ${
                                 ok
                                   ? 'bg-emerald-100 text-emerald-700'
                                   : 'bg-rose-100 text-rose-700'
@@ -781,7 +790,7 @@ const OverviewBoard = () => {
                       >
                         <button
                           onClick={() => openGestao(car)}
-                          className="px-3 py-1 rounded-md border text-[11px] font-medium hover:bg-slate-50"
+                          className="px-3 py-1 rounded-md border text-[10.5px] font-medium hover:bg-slate-50"
                         >
                           Gerenciar
                         </button>
@@ -789,7 +798,7 @@ const OverviewBoard = () => {
                           href={`/carro/${car.slug || ''}`}
                           target="_blank"
                           rel="noreferrer"
-                          className="mt-1 inline-flex items-center gap-1 text-[10.5px] text-slate-400"
+                          className="mt-1 inline-flex items-center gap-1 text-[10px] text-slate-400"
                         >
                           <ExternalLink size={10} /> Ver
                         </a>
@@ -877,7 +886,7 @@ const OverviewBoard = () => {
         </div>
       )}
 
-      {/* modal interno de gestão */}
+      {/* modal interno de gestão (o mesmo que já estava) */}
       <Dialog open={gestaoOpen} onOpenChange={setGestaoOpen}>
         <DialogContent className="max-w-4xl bg-white text-gray-900">
           <DialogHeader>

@@ -541,7 +541,8 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     }
 
     return list;
-  }, [cars, searchTerm, brandFilter, sortBy, summaryMap]);
+  }, [cars, searchTerm, brandFilter, sortBy, summaryMap, showOnlyAvailable]);
+
 
   const marketplacePlatforms = (platforms || []).filter((p) => p.platform_type === 'marketplace');
   const socialPlatforms = (platforms || []).filter((p) => p.platform_type === 'social');

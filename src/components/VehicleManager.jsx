@@ -425,7 +425,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     }
   };
 
-  // abrir mini-modal de entrada (com posição melhor)
+ // abrir mini-modal de entrada (colado no botão)
   const openEntryMini = (car, e) => {
     const d = car.entry_at ? new Date(car.entry_at) : new Date();
     setEntryDate(d.toISOString().slice(0, 10));
@@ -435,22 +435,20 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     const scrollY = window.scrollY || document.documentElement.scrollTop;
     const scrollX = window.scrollX || document.documentElement.scrollLeft;
     const modalWidth = 280;
-    const modalHeight = 190; // aproximado
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
 
-    // nasce logo abaixo do botão
-    let top = rect.bottom + scrollY + 8;
+    // tenta abrir na MESMA linha do botão
+    let top = rect.top + scrollY - 4;
     let left = rect.left + scrollX;
 
-    // se não couber pra direita, cola na direita visível
-    if (left + modalWidth + 8 > viewportWidth + scrollX) {
-      left = viewportWidth + scrollX - modalWidth - 8;
+    // se estourar pra direita, joga pra esquerda
+    const maxLeft = scrollX + window.innerWidth - modalWidth - 8;
+    if (left > maxLeft) {
+      left = maxLeft;
     }
 
-    // se estiver muito pra baixo (quase fora), sobe pra cima do botão
-    if (top + modalHeight > viewportHeight + scrollY) {
-      top = rect.top + scrollY - modalHeight - 8;
+    // se por algum motivo ficar negativo
+    if (left < scrollX + 8) {
+      left = scrollX + 8;
     }
 
     setEntryPos({ top, left });
@@ -475,7 +473,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     }
   };
 
-  // abrir mini-modal de entrega (com posição melhor)
+  // abrir mini-modal de entrega (colado no botão)
   const openDeliverMini = (car, e) => {
     const d = car.delivered_at ? new Date(car.delivered_at) : new Date();
     setDeliverDate(d.toISOString().slice(0, 10));
@@ -485,19 +483,16 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     const scrollY = window.scrollY || document.documentElement.scrollTop;
     const scrollX = window.scrollX || document.documentElement.scrollLeft;
     const modalWidth = 280;
-    const modalHeight = 190;
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
 
-    let top = rect.bottom + scrollY + 8;
+    let top = rect.top + scrollY - 4;
     let left = rect.left + scrollX;
 
-    if (left + modalWidth + 8 > viewportWidth + scrollX) {
-      left = viewportWidth + scrollX - modalWidth - 8;
+    const maxLeft = scrollX + window.innerWidth - modalWidth - 8;
+    if (left > maxLeft) {
+      left = maxLeft;
     }
-
-    if (top + modalHeight > viewportHeight + scrollY) {
-      top = rect.top + scrollY - modalHeight - 8;
+    if (left < scrollX + 8) {
+      left = scrollX + 8;
     }
 
     setDeliverPos({ top, left });

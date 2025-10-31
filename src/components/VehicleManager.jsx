@@ -703,7 +703,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
   <span className="font-semibold">{moneyBR(car.price)}</span>
 
   {car.fipe_value ? (
-    <span className="text-xs bg-yellow-200 text-black px-2 py-0.5 rounded flex items-center gap-1">
+    <span className="text-xs text-black px-2 py-0.5 rounded flex items-center gap-1">
       FIPE: {moneyBR(car.fipe_value)}
       {fipeDiff !== null && (
         <span

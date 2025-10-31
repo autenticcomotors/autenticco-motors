@@ -425,31 +425,21 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     }
   };
 
- // abrir mini-modal de entrada (colado no botão)
+ // abrir mini-modal de entrada (usa posição do clique, não do scroll)
   const openEntryMini = (car, e) => {
     const d = car.entry_at ? new Date(car.entry_at) : new Date();
     setEntryDate(d.toISOString().slice(0, 10));
     setEntryTime(d.toTimeString().slice(0, 5));
 
-    const rect = e.currentTarget.getBoundingClientRect();
-    const scrollY = window.scrollY || document.documentElement.scrollTop;
-    const scrollX = window.scrollX || document.documentElement.scrollLeft;
     const modalWidth = 280;
+    // posição bruta do clique na tela
+    let top = e.clientY + 6;
+    let left = e.clientX;
 
-    // tenta abrir na MESMA linha do botão
-    let top = rect.top + scrollY - 4;
-    let left = rect.left + scrollX;
-
-    // se estourar pra direita, joga pra esquerda
-    const maxLeft = scrollX + window.innerWidth - modalWidth - 8;
-    if (left > maxLeft) {
-      left = maxLeft;
-    }
-
-    // se por algum motivo ficar negativo
-    if (left < scrollX + 8) {
-      left = scrollX + 8;
-    }
+    // limite na direita
+    const maxLeft = window.innerWidth - modalWidth - 12;
+    if (left > maxLeft) left = maxLeft;
+    if (left < 8) left = 8;
 
     setEntryPos({ top, left });
     setEntryMiniOpenFor(car.id);
@@ -473,27 +463,19 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     }
   };
 
-  // abrir mini-modal de entrega (colado no botão)
+  // abrir mini-modal de entrega (mesma lógica)
   const openDeliverMini = (car, e) => {
     const d = car.delivered_at ? new Date(car.delivered_at) : new Date();
     setDeliverDate(d.toISOString().slice(0, 10));
     setDeliverTime(d.toTimeString().slice(0, 5));
 
-    const rect = e.currentTarget.getBoundingClientRect();
-    const scrollY = window.scrollY || document.documentElement.scrollTop;
-    const scrollX = window.scrollX || document.documentElement.scrollLeft;
     const modalWidth = 280;
+    let top = e.clientY + 6;
+    let left = e.clientX;
 
-    let top = rect.top + scrollY - 4;
-    let left = rect.left + scrollX;
-
-    const maxLeft = scrollX + window.innerWidth - modalWidth - 8;
-    if (left > maxLeft) {
-      left = maxLeft;
-    }
-    if (left < scrollX + 8) {
-      left = scrollX + 8;
-    }
+    const maxLeft = window.innerWidth - modalWidth - 12;
+    if (left > maxLeft) left = maxLeft;
+    if (left < 8) left = 8;
 
     setDeliverPos({ top, left });
     setDeliverMiniOpenFor(car.id);

@@ -730,51 +730,65 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                     >
                       <PenSquare className="w-3 h-3" /> editar
                     </button>
+                    
                     <span
-                      className={`text-xs px-2 py-0.5 rounded ${
-                        isSold ? 'bg-gray-100 text-gray-700' : 'bg-green-50 text-green-700'
-                      }`}
-                    >
-                      {diffInDays(car)}
-                    </span>
-                    {!isSold && (
-                      <button
-                        onClick={() => openDeliverMini(car)}
-                        className="text-xs text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded flex items-center gap-1"
-                      >
-                        Marcar como Entregue
-                      </button>
-                    )}
-                    {isSold && (
-                      <p className="text-xs text-red-600">
-                        {(() => {
-                          const raw = car.sold_at;
-                          if (!raw) return 'Vendido';
-                          const clean = String(raw).replace('T', ' ').trim();
-                          const y = clean.slice(0, 4);
-                          const m = clean.slice(5, 7);
-                          const d = clean.slice(8, 10);
-                          if (!y || !m || !d) {
-                            return `Vendido em ${raw} — ${
-                              car.sale_price
-                                ? new Intl.NumberFormat('pt-BR', {
-                                    style: 'currency',
-                                    currency: 'BRL',
-                                  }).format(car.sale_price)
-                                : ''
-                            }`;
-                          }
-                          const dataBR = `${d}/${m}/${y}`;
-                          const preco = car.sale_price
-                            ? new Intl.NumberFormat('pt-BR', {
-                                style: 'currency',
-                                currency: 'BRL',
-                              }).format(car.sale_price)
-                            : '';
-                          return `Vendido em ${dataBR}${preco ? ` — ${preco}` : ''}`;
-                        })()}
-                      </p>
-                    )}
+  className={`text-xs px-2 py-0.5 rounded ${
+    isSold ? 'bg-gray-100 text-gray-700' : 'bg-green-50 text-green-700'
+  }`}
+>
+  {diffInDays(car)}
+</span>
+
+{isSold && (
+  <>
+    <p className="text-xs text-red-600">
+      {(() => {
+        const raw = car.sold_at;
+        if (!raw) return 'Vendido';
+
+        const clean = String(raw).replace('T', ' ').trim();
+        const y = clean.slice(0, 4);
+        const m = clean.slice(5, 7);
+        const d = clean.slice(8, 10);
+
+        if (!y || !m || !d) {
+          return `Vendido em ${raw} — ${
+            car.sale_price
+              ? new Intl.NumberFormat('pt-BR', {
+                  style: 'currency',
+                  currency: 'BRL',
+                }).format(car.sale_price)
+              : ''
+          }`;
+        }
+
+        const dataBR = `${d}/${m}/${y}`;
+        const preco = car.sale_price
+          ? new Intl.NumberFormat('pt-BR', {
+              style: 'currency',
+              currency: 'BRL',
+            }).format(car.sale_price)
+          : '';
+
+        return `Vendido em ${dataBR}${preco ? ` — ${preco}` : ''}`;
+      })()}
+    </p>
+
+    <button
+      onClick={() => openDeliverMini(car)}
+      className="text-xs text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded flex items-center gap-1"
+    >
+      Marcar como Entregue
+    </button>
+  </>
+)}
+
+{!isSold && (
+  <p className="text-xs text-gray-400">Ainda não vendido</p>
+)}
+
+                    
+                    
                   </div>
                 </div>
               </div>

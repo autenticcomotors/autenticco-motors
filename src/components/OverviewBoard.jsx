@@ -58,9 +58,12 @@ const OverviewBoard = () => {
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
 
+  // modais
   const [orderModalOpen, setOrderModalOpen] = useState(false);
   const [orderingPlatforms, setOrderingPlatforms] = useState([]);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
+  // gestão
   const [gestaoOpen, setGestaoOpen] = useState(false);
   const [gestaoTab, setGestaoTab] = useState('marketplaces');
   const [gestaoCar, setGestaoCar] = useState(null);
@@ -87,8 +90,7 @@ const OverviewBoard = () => {
     description: '',
   });
 
-  // filtros
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  // filtros de negócio
   const [stockFilter, setStockFilter] = useState('all'); // all | stock | sold
   const [platformFilterId, setPlatformFilterId] = useState('');
 
@@ -171,12 +173,14 @@ const OverviewBoard = () => {
   const filteredCars = useMemo(() => {
     let base = cars || [];
 
+    // estoque / vendidos
     if (stockFilter === 'stock') {
       base = base.filter((c) => !c.is_sold);
     } else if (stockFilter === 'sold') {
       base = base.filter((c) => !!c.is_sold);
     }
 
+    // por plataforma que ainda não tem
     if (platformFilterId) {
       const col = allColumns.find((c) => String(c.id) === String(platformFilterId));
       if (col) {
@@ -192,6 +196,7 @@ const OverviewBoard = () => {
       }
     }
 
+    // busca texto
     const term = search.trim().toLowerCase();
     if (!term) return base;
     return base.filter((c) => {
@@ -248,7 +253,7 @@ const OverviewBoard = () => {
     return false;
   };
 
-  // LARGURAS (aumentadas)
+  // LARGURAS (ajustadas)
   const COL_IMG = 130;
   const COL_VEHICLE = 220;
   const COL_PRICE = 88;
@@ -436,26 +441,6 @@ const OverviewBoard = () => {
     }
   };
 
-  const handleFetchFipe = async () => {
-    if (!gestaoCar) return;
-    try {
-      const val = await getFipeForCar(gestaoCar);
-      if (!val) {
-        toast({ title: 'FIPE não encontrada' });
-        return;
-      }
-      setGestaoFinance((prev) => ({ ...prev, fipe_value: val }));
-      toast({ title: 'FIPE carregada' });
-    } catch (err) {
-      console.error(err);
-      toast({
-        title: 'Erro ao buscar FIPE',
-        description: err.message || String(err),
-        variant: 'destructive',
-      });
-    }
-  };
-
   return (
     <div className="w-full space-y-4">
       {/* topo */}
@@ -527,6 +512,7 @@ const OverviewBoard = () => {
           >
             <thead>
               <tr>
+                {/* foto */}
                 <th
                   style={{
                     position: 'sticky',
@@ -539,6 +525,7 @@ const OverviewBoard = () => {
                     borderBottom: '1px solid #e5e7eb',
                   }}
                 />
+                {/* veículo */}
                 <th
                   style={{
                     position: 'sticky',
@@ -557,6 +544,7 @@ const OverviewBoard = () => {
                 >
                   Veículo
                 </th>
+                {/* preço */}
                 <th
                   style={{
                     position: 'sticky',
@@ -574,6 +562,7 @@ const OverviewBoard = () => {
                 >
                   Preço
                 </th>
+                {/* placa */}
                 <th
                   style={{
                     position: 'sticky',
@@ -592,6 +581,7 @@ const OverviewBoard = () => {
                   Placa
                 </th>
 
+                {/* plataformas */}
                 {allColumns.map((col) => (
                   <th
                     key={col.key}
@@ -613,6 +603,17 @@ const OverviewBoard = () => {
                   </th>
                 ))}
 
+                {/* espaço fantasma pra não ficar por baixo do sticky */}
+                <th
+                  style={{
+                    width: COL_ACTION,
+                    minWidth: COL_ACTION,
+                    background: '#ffffff',
+                    borderBottom: '1px solid #e5e7eb',
+                  }}
+                />
+
+                {/* ações */}
                 <th
                   style={{
                     position: 'sticky',
@@ -635,7 +636,7 @@ const OverviewBoard = () => {
               {loading && (
                 <tr>
                   <td
-                    colSpan={4 + allColumns.length + 1}
+                    colSpan={5 + allColumns.length + 1}
                     className="py-6 text-center text-slate-400 text-sm"
                   >
                     Carregando veículos e publicações...
@@ -652,6 +653,7 @@ const OverviewBoard = () => {
                       className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}
                       style={{ height: 80 }}
                     >
+                      {/* foto */}
                       <td
                         style={{
                           position: 'sticky',
@@ -678,6 +680,7 @@ const OverviewBoard = () => {
                         </div>
                       </td>
 
+                      {/* veículo */}
                       <td
                         style={{
                           position: 'sticky',
@@ -704,6 +707,7 @@ const OverviewBoard = () => {
                         </div>
                       </td>
 
+                      {/* preço */}
                       <td
                         style={{
                           position: 'sticky',
@@ -720,6 +724,7 @@ const OverviewBoard = () => {
                         {car.price ? Money(car.price) : '--'}
                       </td>
 
+                      {/* placa */}
                       <td
                         style={{
                           position: 'sticky',
@@ -736,6 +741,7 @@ const OverviewBoard = () => {
                         {car.plate || '--'}
                       </td>
 
+                      {/* plataformas */}
                       {allColumns.map((col) => {
                         const ok = hasPub(car, col);
                         return (
@@ -768,6 +774,16 @@ const OverviewBoard = () => {
                         );
                       })}
 
+                      {/* célula fantasma pra reservar espaço do sticky */}
+                      <td
+                        style={{
+                          width: COL_ACTION,
+                          minWidth: COL_ACTION,
+                          background: idx % 2 === 0 ? '#fff' : '#f8fafc',
+                        }}
+                      />
+
+                      {/* ações */}
                       <td
                         style={{
                           position: 'sticky',
@@ -801,7 +817,7 @@ const OverviewBoard = () => {
               {!loading && filteredCars.length === 0 && (
                 <tr>
                   <td
-                    colSpan={4 + allColumns.length + 1}
+                    colSpan={5 + allColumns.length + 1}
                     className="py-6 text-center text-slate-400 text-sm"
                   >
                     Nenhum veículo encontrado.

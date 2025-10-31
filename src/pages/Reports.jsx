@@ -1,645 +1,407 @@
 // src/pages/Reports.jsx
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  getCars,
-  getPlatforms,
-  getSales,
-  getPublicationsForCars,
-  getExpensesForCars,
-} from '@/lib/car-api';
+import { Helmet } from 'react-helmet';
+import { motion } from 'framer-motion';
+import { Calendar, DollarSign, BarChart2, PieChart, Layers } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import {
-  Calendar,
-  RefreshCw,
-  PieChart as PieIcon,
-  BarChart3,
-  LineChart as LineIcon,
-  Wallet,
-  ArrowDownRight,
-  ArrowUpRight,
-} from 'lucide-react';
-import {
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-  Legend,
-} from 'recharts';
+import BackgroundShape from '@/components/BackgroundShape';
+import { format, startOfWeek, startOfMonth, startOfYear } from 'date-fns';
+import { getCars, getPublicationsForCars, getExpensesForCars, getSales } from '@/lib/car-api';
 
-const MONTHS_PT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-const CHART_COLORS = ['#FACC15', '#0F172A', '#6366F1', '#F97316', '#22C55E', '#EC4899', '#0EA5E9', '#F43F5E'];
+const Money = ({ value }) => {
+  const v = Number(value || 0);
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
+};
 
-const moneyBR = (n) =>
-  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(n || 0));
+const Card = ({ children, className = '' }) => (
+  <motion.div initial={{ y: 6, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 0.28 }} className={`bg-white rounded-2xl shadow-sm p-6 ${className}`}>
+    {children}
+  </motion.div>
+);
 
-const getCarEntryDate = (car) => car.entry_at || car.stock_entry_at || car.created_at;
+// tiny sparkline (svg) — lightweight
+const Sparkline = ({ values = [] }) => {
+  const width = 160, height = 44, padding = 6;
+  const max = Math.max(...values, 1);
+  const pts = values.map((v, i) => {
+    const x = padding + (i / Math.max(1, values.length - 1)) * (width - padding * 2);
+    const y = height - padding - (v / max) * (height - padding * 2);
+    return `${x},${y}`;
+  }).join(' ');
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+      <polyline fill="none" stroke="#f59e0b" strokeWidth="2" points={pts} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+};
 
 const Reports = () => {
   const [loading, setLoading] = useState(true);
   const [cars, setCars] = useState([]);
-  const [platforms, setPlatforms] = useState([]);
-  const [sales, setSales] = useState([]);
   const [publications, setPublications] = useState([]);
   const [expenses, setExpenses] = useState([]);
+  const [sales, setSales] = useState([]);
 
-  // filtros
-  const today = new Date();
-  const firstDayMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
-  const todayIso = today.toISOString().slice(0, 10);
+  // Inicial: últimos 3 meses
+  const initialEnd = new Date();
+  const initialStart = new Date();
+  initialStart.setMonth(initialStart.getMonth() - 3);
 
-  const [startDate, setStartDate] = useState(firstDayMonth);
-  const [endDate, setEndDate] = useState(todayIso);
-  const [selectedYear, setSelectedYear] = useState(today.getFullYear());
+  const [startDate, setStartDate] = useState(initialStart.toISOString().slice(0, 10));
+  const [endDate, setEndDate] = useState(initialEnd.toISOString().slice(0, 10));
 
-  // carregar tudo
   useEffect(() => {
-    const load = async () => {
+    let mounted = true;
+    const loadCars = async () => {
       setLoading(true);
       try {
-        const [carsData, platformsData, salesData] = await Promise.all([
-          getCars(), // traz todos
-          getPlatforms(),
-          getSales(), // já traz sales com platforms(name)
-        ]);
-
-        setCars(carsData || []);
-        setPlatforms(platformsData || []);
-        setSales(salesData || []);
-
-        const carIds = (carsData || []).map((c) => c.id).filter(Boolean);
-        if (carIds.length) {
-          const [pubs, exps] = await Promise.all([
-            getPublicationsForCars(carIds),
-            getExpensesForCars(carIds),
-          ]);
-          setPublications(pubs || []);
-          setExpenses(exps || []);
-        } else {
-          setPublications([]);
-          setExpenses([]);
-        }
+        const cs = await getCars();
+        if (!mounted) return;
+        setCars(Array.isArray(cs) ? cs : []);
       } catch (err) {
-        console.error('Erro carregando dados para relatórios:', err);
+        console.error('Erro ao buscar carros:', err);
         setCars([]);
-        setPlatforms([]);
-        setSales([]);
-        setPublications([]);
-        setExpenses([]);
       } finally {
-        setLoading(false);
+        if (mounted) setLoading(false);
       }
     };
-    load();
+    loadCars();
+    return () => { mounted = false; };
   }, []);
 
-  // anos disponíveis (de vendas e entradas)
-  const availableYears = useMemo(() => {
-    const yearSet = new Set();
-    (sales || []).forEach((s) => {
-      if (s.sale_date) {
-        yearSet.add(new Date(s.sale_date).getFullYear());
+  // quando listagem de carros estiver pronta ou datas mudarem, buscar publicações, gastos e vendas
+  useEffect(() => {
+    if (!cars.length) return;
+    let mounted = true;
+    const loadRangeData = async () => {
+      setLoading(true);
+      try {
+        const carIds = cars.map(c => c.id).filter(Boolean);
+        const [pubs, exps] = await Promise.all([
+          getPublicationsForCars(carIds),
+          getExpensesForCars(carIds)
+        ]);
+        const salesData = await getSales({ startDate, endDate });
+
+        if (!mounted) return;
+        setPublications(Array.isArray(pubs) ? pubs : []);
+        setExpenses(Array.isArray(exps) ? exps : []);
+        setSales(Array.isArray(salesData) ? salesData : []);
+      } catch (err) {
+        console.error('Erro fetch range:', err);
+        if (mounted) {
+          setPublications([]);
+          setExpenses([]);
+          setSales([]);
+        }
+      } finally {
+        if (mounted) setLoading(false);
       }
+    };
+    loadRangeData();
+    return () => { mounted = false; };
+  }, [cars, startDate, endDate]);
+
+  // maps para lookup rápido por car_id
+  const pubMap = useMemo(() => {
+    return (publications || []).reduce((acc, p) => {
+      if (!p.car_id) return acc;
+      acc[p.car_id] = acc[p.car_id] || { spent: 0, count: 0 };
+      acc[p.car_id].spent += Number(p.spent ?? p.amount ?? 0);
+      acc[p.car_id].count += 1;
+      return acc;
+    }, {});
+  }, [publications]);
+
+  const expMap = useMemo(() => {
+    return (expenses || []).reduce((acc, e) => {
+      if (!e.car_id) return acc;
+      acc[e.car_id] = (acc[e.car_id] || 0) + Number(e.amount ?? e.value ?? 0);
+      return acc;
+    }, {});
+  }, [expenses]);
+
+  // vendas por carro (no período pesquisado)
+  const salesPerCar = useMemo(() => {
+    const map = {};
+    (sales || []).forEach(s => {
+      if (!s.car_id) return;
+      map[s.car_id] = map[s.car_id] || [];
+      map[s.car_id].push(s);
     });
-    (cars || []).forEach((c) => {
-      const d = getCarEntryDate(c);
-      if (d) yearSet.add(new Date(d).getFullYear());
-    });
-    const arr = Array.from(yearSet);
-    if (!arr.includes(today.getFullYear())) arr.push(today.getFullYear());
-    return arr.sort((a, b) => b - a);
-  }, [sales, cars, today]);
+    return map;
+  }, [sales]);
 
-  // aplicar ano direto
-  const handleSelectYear = (year) => {
-    setSelectedYear(year);
-    const start = new Date(year, 0, 1).toISOString().slice(0, 10);
-    const end = new Date(year, 11, 31).toISOString().slice(0, 10);
-    setStartDate(start);
-    setEndDate(end);
-  };
+  // totais: estoque independente do período, lucro real calculado só com vendas do período
+  const totals = useMemo(() => {
+    let totalInStock = 0;
+    let totalSold = 0;
+    let totalRealProfit = 0;
+    let totalEstimatedProfit = 0;
+    let totalAdSpend = 0;
+    let totalExtra = 0;
+    let totalCommission = 0;
+    let totalSalesValue = 0;
 
-  // dados filtrados por período
-  const {
-    estoqueAtual,
-    entradasPeriodo,
-    vendidosPeriodo,
-    faturamentoPeriodo,
-    lucroPeriodo,
-    anunciosTotal,
-    gastosExtrasTotal,
-    ganhosExtrasTotal,
-    resultadoExtra,
-    lucroEstimadoEstoque,
-    vendasPorMes,
-    vendasPorPlataforma,
-    gastosPorPlataforma,
-    gastosPorCategoria,
-  } = useMemo(() => {
-    if (!cars.length) {
-      return {
-        estoqueAtual: 0,
-        entradasPeriodo: 0,
-        vendidosPeriodo: 0,
-        faturamentoPeriodo: 0,
-        lucroPeriodo: 0,
-        anunciosTotal: 0,
-        gastosExtrasTotal: 0,
-        ganhosExtrasTotal: 0,
-        resultadoExtra: 0,
-        lucroEstimadoEstoque: 0,
-        vendasPorMes: [],
-        vendasPorPlataforma: [],
-        gastosPorPlataforma: [],
-        gastosPorCategoria: [],
-      };
-    }
+    cars.forEach(car => {
+      const ad = pubMap[car.id] ? pubMap[car.id].spent : 0;
+      const extra = expMap[car.id] || 0;
+      const commission = Number(car.commission ?? 0);
+      totalAdSpend += ad;
+      totalExtra += extra;
+      totalCommission += commission;
 
-    const start = new Date(startDate + 'T00:00:00');
-    const end = new Date(endDate + 'T23:59:59');
-
-    // estoque atual (não vendidos)
-    const estoqueAtualCars = cars.filter((c) => !c.is_sold && c.is_available !== false);
-    const estoqueAtual = estoqueAtualCars.length;
-
-    // entradas no período
-    const entradasPeriodo = cars.filter((c) => {
-      const d = getCarEntryDate(c);
-      if (!d) return false;
-      const dt = new Date(d);
-      return dt >= start && dt <= end;
-    }).length;
-
-    // vendas no período
-    const vendasPeriodo = (sales || []).filter((s) => {
-      if (!s.sale_date) return false;
-      const dt = new Date(s.sale_date);
-      return dt >= start && dt <= end;
-    });
-
-    const vendidosPeriodo = vendasPeriodo.length;
-    const faturamentoPeriodo = vendasPeriodo.reduce(
-      (acc, s) => acc + Number(s.sale_price || 0),
-      0
-    );
-
-    // lucro baseado no que vc já salva no carro (commission + extras - gastos - anuncios)
-    // mas pro período vamos pegar só as vendas do período e somar comissão/impostos do carro vendido
-    // simplificado: lucroPeriodo = soma das commissions dos carros vendidos no período
-    const vendasCarIds = new Set(vendasPeriodo.map((s) => s.car_id));
-    const lucroPeriodo = cars
-      .filter((c) => vendasCarIds.has(c.id))
-      .reduce((acc, c) => acc + Number(c.commission || 0), 0);
-
-    // anúncios do período (marketplace)
-    const pfById = {};
-    (platforms || []).forEach((p) => {
-      pfById[String(p.id)] = p;
-    });
-
-    const anunciosPeriodo = (publications || []).filter((p) => {
-      const baseDate = p.published_at || p.created_at;
-      if (!baseDate) return false;
-      const dt = new Date(baseDate);
-      return dt >= start && dt <= end;
-    });
-
-    const anunciosTotal = anunciosPeriodo.reduce((acc, p) => acc + Number(p.spent || 0), 0);
-
-    // gastos/ganhos extras do período
-    const expensesPeriodo = (expenses || []).filter((e) => {
-      const baseDate = e.incurred_at || e.created_at;
-      if (!baseDate) return false;
-      const dt = new Date(baseDate);
-      return dt >= start && dt <= end;
-    });
-
-    const gastosExtrasTotal = expensesPeriodo.reduce((acc, e) => acc + Number(e.amount || 0), 0);
-    const ganhosExtrasTotal = expensesPeriodo.reduce(
-      (acc, e) => acc + Number(e.charged_value || 0),
-      0
-    );
-    const resultadoExtra = ganhosExtrasTotal - gastosExtrasTotal - anunciosTotal;
-
-    // lucro estimado do estoque (igual VehicleManager)
-    // pra isso precisamos montar mapa por carro
-    const byCar = {};
-    cars.forEach((c) => {
-      byCar[c.id] = {
-        adSpend: 0,
-        extraExpenses: 0,
-        extraCharged: 0,
-      };
-    });
-
-    (publications || []).forEach((p) => {
-      const carId = p.car_id;
-      if (!byCar[carId]) return;
-      const pf = pfById[String(p.platform_id)];
-      const type = pf?.platform_type || 'social';
-      if (type === 'marketplace') {
-        byCar[carId].adSpend += Number(p.spent || 0);
+      // estoque atual (independente do filtro de data)
+      const soldFlag = Boolean(car.is_sold || car.is_available === false);
+      if (soldFlag) {
+        totalSold += 1;
+      } else {
+        totalInStock += 1;
+        // estimated profit for unsold car (current)
+        totalEstimatedProfit += (commission - (ad + extra));
       }
     });
 
-    (expenses || []).forEach((e) => {
-      const carId = e.car_id;
-      if (!byCar[carId]) return;
-      byCar[carId].extraExpenses += Number(e.amount || 0);
-      byCar[carId].extraCharged += Number(e.charged_value || 0);
-    });
-
-    const lucroEstimadoEstoque = estoqueAtualCars.reduce((acc, c) => {
-      const entry = byCar[c.id] || { adSpend: 0, extraExpenses: 0, extraCharged: 0 };
-      const lucro =
-        Number(c.commission || 0) +
-        Number(entry.extraCharged || 0) -
-        Number(entry.extraExpenses || 0) -
-        Number(entry.adSpend || 0);
-      return acc + lucro;
-    }, 0);
-
-    // vendas por mês (do ano selecionado)
-    const vendasPorMes = Array.from({ length: 12 }).map((_, idx) => ({
-      mes: MONTHS_PT[idx],
-      vendas: 0,
-      valor: 0,
-    }));
-
-    (sales || []).forEach((s) => {
-      if (!s.sale_date) return;
-      const d = new Date(s.sale_date);
-      if (d.getFullYear() !== selectedYear) return;
-      const m = d.getMonth();
-      vendasPorMes[m].vendas += 1;
-      vendasPorMes[m].valor += Number(s.sale_price || 0);
-    });
-
-    // vendas por plataforma (pizza)
-    const vendasPorPlataformaMap = {};
-    vendasPeriodo.forEach((s) => {
-      const name = s.platforms?.name || 'Outras';
-      if (!vendasPorPlataformaMap[name]) {
-        vendasPorPlataformaMap[name] = { name, vendas: 0, valor: 0 };
+    // Real profit: sumarizar vendas retornadas no período (sales)
+    (sales || []).forEach(s => {
+      const recordedProfit = Number(s.profit ?? 0);
+      if (recordedProfit && recordedProfit !== 0) {
+        totalRealProfit += recordedProfit;
+      } else {
+        // fallback: sale_price - (ad + extra)
+        const ad = pubMap[s.car_id] ? pubMap[s.car_id].spent : 0;
+        const extra = expMap[s.car_id] || 0;
+        const salePrice = Number(s.sale_price ?? 0);
+        // If sale has commission field, prefer it: profit = commission - (ad+extra)
+        const commissionFromSale = Number(s.commission ?? 0);
+        if (commissionFromSale) {
+          totalRealProfit += (commissionFromSale - (ad + extra));
+        } else {
+          totalRealProfit += (salePrice - (ad + extra));
+        }
       }
-      vendasPorPlataformaMap[name].vendas += 1;
-      vendasPorPlataformaMap[name].valor += Number(s.sale_price || 0);
+      totalSalesValue += Number(s.sale_price ?? 0);
     });
-    const vendasPorPlataforma = Object.values(vendasPorPlataformaMap).sort(
-      (a, b) => b.vendas - a.vendas
-    );
-
-    // gastos por plataforma (anúncios) - período
-    const gastosPorPlataformaMap = {};
-    anunciosPeriodo.forEach((p) => {
-      const pf = pfById[String(p.platform_id)];
-      const name = pf?.name || 'Outras';
-      if (!gastosPorPlataformaMap[name]) {
-        gastosPorPlataformaMap[name] = { name, gasto: 0 };
-      }
-      gastosPorPlataformaMap[name].gasto += Number(p.spent || 0);
-    });
-    const gastosPorPlataforma = Object.values(gastosPorPlataformaMap).sort(
-      (a, b) => b.gasto - a.gasto
-    );
-
-    // gastos por categoria (veículo)
-    const gastosPorCategoriaMap = {};
-    expensesPeriodo.forEach((e) => {
-      const cat = e.category || 'Outros';
-      if (!gastosPorCategoriaMap[cat]) {
-        gastosPorCategoriaMap[cat] = { name: cat, gasto: 0 };
-      }
-      gastosPorCategoriaMap[cat].gasto += Number(e.amount || 0);
-    });
-    const gastosPorCategoria = Object.values(gastosPorCategoriaMap).sort(
-      (a, b) => b.gasto - a.gasto
-    );
 
     return {
-      estoqueAtual,
-      entradasPeriodo,
-      vendidosPeriodo,
-      faturamentoPeriodo,
-      lucroPeriodo,
-      anunciosTotal,
-      gastosExtrasTotal,
-      ganhosExtrasTotal,
-      resultadoExtra,
-      lucroEstimadoEstoque,
-      vendasPorMes,
-      vendasPorPlataforma,
-      gastosPorPlataforma,
-      gastosPorCategoria,
+      totalInStock,
+      totalSold,
+      totalRealProfit,
+      totalEstimatedProfit,
+      totalAdSpend,
+      totalExtra,
+      totalCommission,
+      totalSalesValue
     };
-  }, [
-    cars,
-    platforms,
-    sales,
-    publications,
-    expenses,
-    startDate,
-    endDate,
-    selectedYear,
-  ]);
+  }, [cars, pubMap, expMap, sales]);
+
+  // vendas por mês (para sparkline / barras)
+  const salesSeries = useMemo(() => {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const months = [];
+    const pointer = new Date(start.getFullYear(), start.getMonth(), 1);
+    while (pointer <= end) {
+      months.push({ key: `${pointer.getFullYear()}-${pointer.getMonth()+1}`, date: new Date(pointer), count: 0, revenue: 0 });
+      pointer.setMonth(pointer.getMonth() + 1);
+    }
+    (sales || []).forEach(s => {
+      const d = new Date(s.sale_date ?? s.created_at ?? Date.now());
+      const key = `${d.getFullYear()}-${d.getMonth()+1}`;
+      const slot = months.find(m => m.key === key);
+      if (slot) {
+        slot.count += 1;
+        slot.revenue += Number(s.sale_price ?? 0);
+      }
+    });
+    return months;
+  }, [sales, startDate, endDate]);
+
+  // atalhos de período
+  const setShortcut = (type) => {
+    const now = new Date();
+    if (type === 'week') {
+      const s = startOfWeek(now, { weekStartsOn: 1 }); // segunda
+      setStartDate(s.toISOString().slice(0,10));
+      setEndDate(now.toISOString().slice(0,10));
+    } else if (type === 'month') {
+      const s = startOfMonth(now);
+      setStartDate(s.toISOString().slice(0,10));
+      setEndDate(now.toISOString().slice(0,10));
+    } else if (type === '3months') {
+      const s = new Date(); s.setMonth(s.getMonth() - 3);
+      setStartDate(s.toISOString().slice(0,10));
+      setEndDate(now.toISOString().slice(0,10));
+    } else if (type === 'year') {
+      const s = startOfYear(now);
+      setStartDate(s.toISOString().slice(0,10));
+      setEndDate(now.toISOString().slice(0,10));
+    }
+  };
 
   if (loading) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center text-yellow-500 text-lg font-semibold">
-        Carregando painel de relatórios...
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-yellow-500 font-semibold animate-pulse">Carregando relatórios...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-[62vh] w-full space-y-6">
-      {/* filtros */}
-      <div className="bg-white/90 backdrop-blur rounded-2xl border border-slate-200/70 p-4 flex flex-wrap gap-3 items-center justify-between shadow-sm">
-        <div className="flex gap-3 items-center flex-wrap">
-          <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200">
-            <Calendar className="w-4 h-4 text-slate-500" />
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="bg-transparent text-sm outline-none"
-            />
-            <span className="text-slate-400 text-xs">até</span>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="bg-transparent text-sm outline-none"
-            />
-          </div>
+    <div className="relative isolate min-h-screen bg-gray-50 text-gray-800 pt-28 pb-12">
+      <Helmet><title>Relatórios - AutenTicco Motors</title></Helmet>
+      <BackgroundShape />
+      <div className="relative z-10 max-w-7xl mx-auto px-6 lg:px-8">
+        <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.28 }}>
+          <h1 className="text-4xl font-extrabold text-gray-900 mb-1">Relatórios</h1>
+          <p className="text-gray-600 mb-6">Visão limpa dos números. Use os filtros de data ou atalhos rápidos.</p>
+        </motion.div>
 
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              className="rounded-xl border-slate-200 text-slate-700 hover:bg-yellow-50"
-              onClick={() => {
-                const fm = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
-                const td = new Date().toISOString().slice(0, 10);
-                setStartDate(fm);
-                setEndDate(td);
-                setSelectedYear(today.getFullYear());
-              }}
-            >
-              Mês atual
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="rounded-xl border-slate-200 text-slate-700 hover:bg-yellow-50"
-              onClick={() => handleSelectYear(today.getFullYear())}
-            >
-              Ano atual
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="rounded-xl border-slate-200 text-slate-700 hover:bg-yellow-50"
-              onClick={() => {
-                const d30 = new Date();
-                d30.setDate(d30.getDate() - 30);
-                setStartDate(d30.toISOString().slice(0, 10));
-                setEndDate(new Date().toISOString().slice(0, 10));
-              }}
-            >
-              Últimos 30d
-            </Button>
-          </div>
-
+        {/* filtros: somente data + atalhos */}
+        <div className="flex flex-col md:flex-row items-center gap-3 mb-6">
           <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-500">Ano:</span>
-            <select
-              value={selectedYear}
-              onChange={(e) => handleSelectYear(Number(e.target.value))}
-              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm"
-            >
-              {availableYears.map((y) => (
-                <option key={y} value={y}>
-                  {y}
-                </option>
-              ))}
-            </select>
+            <label className="text-sm text-gray-600">Período:</label>
+            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="p-2 border rounded" />
+            <span className="text-gray-400">até</span>
+            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="p-2 border rounded" />
+          </div>
+
+          <div className="flex items-center gap-2 ml-auto">
+            <Button variant="ghost" onClick={() => setShortcut('week')}>Esta semana</Button>
+            <Button variant="ghost" onClick={() => setShortcut('month')}>Este mês</Button>
+            <Button variant="ghost" onClick={() => setShortcut('3months')}>Últimos 3 meses</Button>
+            <Button variant="ghost" onClick={() => setShortcut('year')}>Este ano</Button>
           </div>
         </div>
 
-        <Button
-          size="sm"
-          className="bg-yellow-400 hover:bg-yellow-500 text-slate-900 rounded-xl gap-2"
-          onClick={() => {
-            // só refaz os cálculos, já tá tudo em memória
-            setStartDate((s) => s);
-          }}
-        >
-          <RefreshCw className="w-4 h-4" /> Aplicar
-        </Button>
-      </div>
+        {/* topo resumido: 3 cards limpos */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
+          <Card className="flex flex-col justify-between">
+            <div className="text-sm text-gray-500">Veículos em Estoque</div>
+            <div className="flex items-center justify-between mt-4">
+              <div>
+                <div className="text-2xl font-bold text-gray-900">{totals.totalInStock}</div>
+                <div className="text-sm text-gray-500 mt-1">Ativos (não vendidos)</div>
+              </div>
+              <div className="text-sm text-gray-400">Atual</div>
+            </div>
+          </Card>
 
-      {/* cards principais */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-4 text-white shadow-lg relative overflow-hidden">
-          <p className="text-sm text-slate-200/90">Estoque atual</p>
-          <h2 className="text-4xl font-bold mt-2">{estoqueAtual}</h2>
-          <p className="text-xs text-slate-200/60 mt-2">
-            veículos disponíveis
-          </p>
-          <LineIcon className="w-12 h-12 text-slate-200/20 absolute -right-4 -bottom-2" />
-        </div>
-        <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm">
-          <p className="text-sm text-slate-500">Entradas no período</p>
-          <div className="flex items-center gap-2 mt-2">
-            <h2 className="text-3xl font-bold text-slate-900">{entradasPeriodo}</h2>
-            <span className="text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded-full text-xs flex items-center gap-1">
-              <ArrowUpRight className="w-3 h-3" /> +{entradasPeriodo}
-            </span>
-          </div>
-          <p className="text-xs text-slate-400 mt-2">carros que entraram em {startDate} — {endDate}</p>
-        </div>
-        <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm">
-          <p className="text-sm text-slate-500">Vendidos no período</p>
-          <div className="flex items-center gap-2 mt-2">
-            <h2 className="text-3xl font-bold text-slate-900">{vendidosPeriodo}</h2>
-            <span className="text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded-full text-xs flex items-center gap-1">
-              <ArrowUpRight className="w-3 h-3" /> {vendidosPeriodo}
-            </span>
-          </div>
-          <p className="text-xs text-slate-400 mt-2">veículos entregues/vendidos</p>
-        </div>
-        <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm">
-          <p className="text-sm text-slate-500">Faturamento no período</p>
-          <h2 className="text-3xl font-bold text-slate-900 mt-2">{moneyBR(faturamentoPeriodo)}</h2>
-          <p className="text-xs text-slate-400 mt-2">
-            Lucro (comissão): <span className="text-slate-900 font-semibold">{moneyBR(lucroPeriodo)}</span>
-          </p>
-        </div>
-      </div>
+          <Card className="flex flex-col justify-between">
+            <div className="text-sm text-gray-500">Veículos Vendidos (período)</div>
+            <div className="flex items-center justify-between mt-4">
+              <div>
+                <div className="text-2xl font-bold text-gray-900">{sales.length}</div>
+                <div className="text-sm text-gray-500 mt-1">Vendas registradas no período</div>
+              </div>
+              <div className="text-sm text-gray-400">Período</div>
+            </div>
+          </Card>
 
-      {/* linha de cards secundários */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm">
-          <p className="text-sm text-slate-500 flex items-center gap-2">
-            <PieIcon className="w-4 h-4 text-slate-400" /> Anúncios (marketplaces)
-          </p>
-          <h2 className="text-2xl font-bold text-slate-900 mt-2">{moneyBR(anunciosTotal)}</h2>
-          <p className="text-xs text-slate-400 mt-1">investidos no período</p>
-        </div>
-        <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm">
-          <p className="text-sm text-slate-500">Gastos extras</p>
-          <h2 className="text-2xl font-bold text-red-600 mt-2">{moneyBR(gastosExtrasTotal)}</h2>
-          <p className="text-xs text-slate-400 mt-1">lançados em veículos</p>
-        </div>
-        <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm">
-          <p className="text-sm text-slate-500">Ganhos extras (repasses)</p>
-          <h2 className="text-2xl font-bold text-emerald-600 mt-2">{moneyBR(ganhosExtrasTotal)}</h2>
-          <p className="text-xs text-slate-400 mt-1">que você cobrou</p>
-        </div>
-        <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm">
-          <p className="text-sm text-slate-500 flex items-center gap-1">
-            <Wallet className="w-4 h-4 text-slate-400" /> Resultado extra
-          </p>
-          <h2
-            className={`text-2xl font-bold mt-2 ${
-              resultadoExtra >= 0 ? 'text-emerald-600' : 'text-red-600'
-            }`}
-          >
-            {moneyBR(resultadoExtra)}
-          </h2>
-          <p className="text-xs text-slate-400 mt-1">
-            base = ganhos + comissão - gastos - anúncios
-          </p>
-        </div>
-      </div>
+          <Card className="flex flex-col justify-between">
+            <div className="text-sm text-gray-500">Lucro</div>
+            <div className="mt-4">
+              <div className="text-3xl font-extrabold text-gray-900">
+                <Money value={totals.totalRealProfit} />
+              </div>
+              <div className="text-sm text-gray-500 mt-1">Lucro real (vendas no período)</div>
 
-      {/* bloco com gráfico de vendas por mês + pizza de vendas por plataforma */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        <div className="col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-              <LineIcon className="w-4 h-4 text-yellow-400" /> Vendas por mês — {selectedYear}
-            </h3>
-            <span className="text-xs text-slate-400">
-              {vendasPorMes.reduce((acc, m) => acc + m.vendas, 0)} venda(s) no ano
-            </span>
-          </div>
-          <div className="h-56">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={vendasPorMes}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
-                <XAxis dataKey="mes" stroke="#94A3B8" />
-                <YAxis stroke="#94A3B8" />
-                <Tooltip formatter={(value, name) => (name === 'valor' ? moneyBR(value) : value)} />
-                <Line
-                  type="monotone"
-                  dataKey="vendas"
-                  stroke="#FACC15"
-                  strokeWidth={3}
-                  dot={{ r: 3, strokeWidth: 1, stroke: '#0F172A', fill: '#FACC15' }}
-                />
-                <Line type="monotone" dataKey="valor" stroke="#0F172A" strokeWidth={2} yAxisId={1} />
-                <YAxis yAxisId={1} orientation="right" stroke="#94A3B8" hide />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+              <div className="mt-3 text-sm text-gray-600">
+                <div><strong className="text-gray-800">Lucro estimado:</strong> <span className="ml-2"><Money value={totals.totalEstimatedProfit} /></span></div>
+                <div className="mt-1 text-xs text-gray-400">Estimado para veículos não vendidos (comissão - anúncios - extras)</div>
+              </div>
+            </div>
+          </Card>
         </div>
 
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
-          <h3 className="text-sm font-semibold text-slate-800 mb-4 flex items-center gap-2">
-            <PieIcon className="w-4 h-4 text-yellow-400" /> Vendas por plataforma
-          </h3>
-          <div className="h-56">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={vendasPorPlataforma.length ? vendasPorPlataforma : [{ name: 'Sem vendas', vendas: 1 }]}
-                  dataKey="vendas"
-                  nameKey="name"
-                  innerRadius={45}
-                  outerRadius={80}
-                  paddingAngle={4}
-                >
-                  {(vendasPorPlataforma.length ? vendasPorPlataforma : [{ name: 'Sem vendas', vendas: 1 }]).map(
-                    (entry, index) => (
-                      <Cell key={entry.name} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                    )
-                  )}
-                </Pie>
-                <Legend layout="vertical" align="right" verticalAlign="middle" />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </div>
+        {/* gráficos / despesas */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+          <Card className="lg:col-span-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2"><BarChart2 className="h-5 w-5 text-yellow-500" /><h3 className="font-semibold">Vendas por mês</h3></div>
+              <div className="text-sm text-gray-500">Período selecionado</div>
+            </div>
 
-      {/* bloco com gastos por plataforma e gastos por categoria */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-              <BarChart3 className="w-4 h-4 text-yellow-400" /> Gastos por plataforma (anúncios)
-            </h3>
-            <span className="text-xs text-slate-400">{moneyBR(anunciosTotal)} no período</span>
-          </div>
-          <div className="h-52">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={gastosPorPlataforma}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
-                <XAxis dataKey="name" stroke="#94A3B8" />
-                <YAxis stroke="#94A3B8" />
-                <Tooltip formatter={(value) => moneyBR(value)} />
-                <Bar dataKey="gasto" radius={[8, 8, 0, 0]} fill="#FACC15" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+            <div className="mt-6 h-40 flex items-end gap-4">
+              {salesSeries.map((m, idx) => {
+                const maxCount = Math.max(...salesSeries.map(x => x.count), 1);
+                const h = (m.count / maxCount) * 100;
+                return (
+                  <div key={m.key} className="flex-1 flex flex-col items-center">
+                    <div className="w-full bg-yellow-200 rounded-t" style={{ height: `${Math.max(6, h)}%` }} />
+                    <div className="text-xs text-gray-500 mt-2">{format(m.date, 'MMM/yy')}</div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-3 text-sm text-gray-600">Total de vendas no período: <strong>{sales.length}</strong></div>
+          </Card>
+
+          <Card>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2"><Layers className="h-5 w-5 text-green-500" /><h3 className="font-semibold">Despesas</h3></div>
+              <div className="text-sm text-gray-500">Resumo</div>
+            </div>
+
+            <div className="mt-3 space-y-3 text-sm">
+              <div className="flex justify-between"><div>Gasto com anúncios</div><div className="font-semibold"><Money value={totals.totalAdSpend} /></div></div>
+              <div className="flex justify-between"><div>Gastos extras</div><div className="font-semibold"><Money value={totals.totalExtra} /></div></div>
+              <div className="flex justify-between"><div>Comissões</div><div className="font-semibold"><Money value={totals.totalCommission} /></div></div>
+            </div>
+
+            <div className="mt-4">
+              <Sparkline values={salesSeries.map(s => s.revenue)} />
+            </div>
+          </Card>
         </div>
 
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-              <BarChart3 className="w-4 h-4 text-yellow-400" /> Gastos por tipo (veículo)
-            </h3>
-            <span className="text-xs text-slate-400">{moneyBR(gastosExtrasTotal)} no período</span>
-          </div>
-          <div className="h-52">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={gastosPorCategoria}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
-                <XAxis dataKey="name" stroke="#94A3B8" />
-                <YAxis stroke="#94A3B8" />
-                <Tooltip formatter={(value) => moneyBR(value)} />
-                <Bar dataKey="gasto" radius={[8, 8, 0, 0]} fill="#0F172A" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </div>
+        {/* plataformas e resumo rápido */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <Card className="lg:col-span-2">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2"><PieChart className="h-5 w-5 text-pink-500" /><h3 className="font-semibold">Plataformas (vendas)</h3></div>
+              <div className="text-sm text-gray-500">Período: {format(new Date(startDate), 'dd/MM/yyyy')} — {format(new Date(endDate), 'dd/MM/yyyy')}</div>
+            </div>
 
-      {/* bloco final - lucro estimado do estoque */}
-      <div className="bg-gradient-to-r from-yellow-400 to-yellow-300 rounded-2xl p-5 flex items-center justify-between shadow-lg">
-        <div>
-          <p className="text-sm text-slate-800/80">Lucro estimado do estoque (todos os carros disponíveis)</p>
-          <h2 className="text-3xl font-extrabold text-slate-900 mt-2">{moneyBR(lucroEstimadoEstoque)}</h2>
-          <p className="text-xs text-slate-800/80 mt-2">
-            baseado em: comissão + repasses - gastos - anúncios (por veículo)
-          </p>
-        </div>
-        <div className="hidden md:flex gap-2">
-          <div className="bg-white/25 backdrop-blur rounded-xl px-4 py-2 text-sm text-slate-900 flex items-center gap-2">
-            <ArrowUpRight className="w-4 h-4" /> {estoqueAtual} veículos
-          </div>
-          <div className="bg-white/25 backdrop-blur rounded-xl px-4 py-2 text-sm text-slate-900 flex items-center gap-2">
-            <ArrowDownRight className="w-4 h-4" /> anúncios: {moneyBR(anunciosTotal)}
-          </div>
+            <div className="text-sm text-gray-600">
+              {sales.length === 0 ? <div>Sem vendas no período selecionado.</div> : (
+                (() => {
+                  const counts = {};
+                  sales.forEach(s => {
+                    const name = (s.platforms && s.platforms.name) ? s.platforms.name : 'Outro/Indicação';
+                    counts[name] = (counts[name] || 0) + 1;
+                  });
+                  const items = Object.entries(counts).sort((a,b) => b[1]-a[1]);
+                  return items.map(([name, count]) => (
+                    <div key={name} className="flex items-center justify-between py-2 border-b last:border-b-0">
+                      <div className="text-sm">{name}</div>
+                      <div className="font-semibold">{count}</div>
+                    </div>
+                  ));
+                })()
+              )}
+            </div>
+          </Card>
+
+          <Card>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2"><Calendar className="h-5 w-5 text-gray-600" /><h3 className="font-semibold">Resumo Rápido</h3></div>
+              <div className="text-sm text-gray-500">Totais</div>
+            </div>
+
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between"><div>Total em estoque:</div><div className="font-semibold">{totals.totalInStock}</div></div>
+              <div className="flex justify-between"><div>Total vendidos (período):</div><div className="font-semibold">{sales.length}</div></div>
+              <div className="flex justify-between"><div>Receita (vendas):</div><div className="font-semibold"><Money value={totals.totalSalesValue} /></div></div>
+              <div className="flex justify-between"><div>Total anúncios:</div><div className="font-semibold"><Money value={totals.totalAdSpend} /></div></div>
+              <div className="flex justify-between"><div>Total gastos extras:</div><div className="font-semibold"><Money value={totals.totalExtra} /></div></div>
+              <div className="flex justify-between"><div>Total comissões:</div><div className="font-semibold"><Money value={totals.totalCommission} /></div></div>
+              <hr />
+              <div className="flex justify-between"><div>Lucro real (período):</div><div className="font-bold"><Money value={totals.totalRealProfit} /></div></div>
+              <div className="flex justify-between"><div>Lucro estimado (não vendidos):</div><div className="font-bold"><Money value={totals.totalEstimatedProfit} /></div></div>
+            </div>
+          </Card>
         </div>
       </div>
     </div>

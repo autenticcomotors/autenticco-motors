@@ -58,12 +58,13 @@ const OverviewBoard = () => {
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
 
-  // modais
   const [orderModalOpen, setOrderModalOpen] = useState(false);
   const [orderingPlatforms, setOrderingPlatforms] = useState([]);
-  const [filtersOpen, setFiltersOpen] = useState(false);
 
-  // gestão
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [stockFilter, setStockFilter] = useState('all'); // all | stock | sold
+  const [platformFilterId, setPlatformFilterId] = useState('');
+
   const [gestaoOpen, setGestaoOpen] = useState(false);
   const [gestaoTab, setGestaoTab] = useState('marketplaces');
   const [gestaoCar, setGestaoCar] = useState(null);
@@ -74,6 +75,7 @@ const OverviewBoard = () => {
     commission: '',
     return_to_seller: '',
   });
+
   const [pubForm, setPubForm] = useState({
     platform_id: '',
     link: '',
@@ -90,10 +92,6 @@ const OverviewBoard = () => {
     description: '',
   });
 
-  // filtros de negócio
-  const [stockFilter, setStockFilter] = useState('all'); // all | stock | sold
-  const [platformFilterId, setPlatformFilterId] = useState('');
-
   useEffect(() => {
     const run = async () => {
       setLoading(true);
@@ -109,6 +107,7 @@ const OverviewBoard = () => {
       setCars(carsRes || []);
       setPlatforms(sortedPlatforms);
 
+      // mapa de publicações
       const carIds = (carsRes || []).map((c) => c.id).filter(Boolean);
       if (carIds.length) {
         const pubs = await getPublicationsForCars(carIds);
@@ -180,7 +179,7 @@ const OverviewBoard = () => {
       base = base.filter((c) => !!c.is_sold);
     }
 
-    // por plataforma que ainda não tem
+    // por plataforma
     if (platformFilterId) {
       const col = allColumns.find((c) => String(c.id) === String(platformFilterId));
       if (col) {
@@ -253,14 +252,16 @@ const OverviewBoard = () => {
     return false;
   };
 
-  // LARGURAS (ajustadas)
+  // LARGURAS
   const COL_IMG = 130;
   const COL_VEHICLE = 220;
   const COL_PRICE = 88;
   const COL_PLATE = 78;
   const COL_ACTION = 96;
+  const COL_GHOST = 24; // coluninha pra empurrar
   const COL_PLATFORM = 78;
 
+  // ====== gestão ======
   const marketplacePlatforms = (platforms || []).filter(
     (p) => p.platform_type === 'marketplace'
   );
@@ -499,7 +500,6 @@ const OverviewBoard = () => {
             maxHeight: '72vh',
             overflowY: 'auto',
             overflowX: 'hidden',
-            paddingRight: `${COL_ACTION + 16}px`,
           }}
         >
           <table
@@ -603,11 +603,19 @@ const OverviewBoard = () => {
                   </th>
                 ))}
 
-                {/* espaço fantasma pra não ficar por baixo do sticky */}
+                {/* 2 colunas fantasmas pra dar espaço pro sticky da direita */}
                 <th
                   style={{
-                    width: COL_ACTION,
-                    minWidth: COL_ACTION,
+                    width: COL_GHOST,
+                    minWidth: COL_GHOST,
+                    background: '#ffffff',
+                    borderBottom: '1px solid #e5e7eb',
+                  }}
+                />
+                <th
+                  style={{
+                    width: COL_GHOST,
+                    minWidth: COL_GHOST,
                     background: '#ffffff',
                     borderBottom: '1px solid #e5e7eb',
                   }}
@@ -636,7 +644,7 @@ const OverviewBoard = () => {
               {loading && (
                 <tr>
                   <td
-                    colSpan={5 + allColumns.length + 1}
+                    colSpan={5 + allColumns.length + 3}
                     className="py-6 text-center text-slate-400 text-sm"
                   >
                     Carregando veículos e publicações...
@@ -774,11 +782,18 @@ const OverviewBoard = () => {
                         );
                       })}
 
-                      {/* célula fantasma pra reservar espaço do sticky */}
+                      {/* 2 células fantasmas */}
                       <td
                         style={{
-                          width: COL_ACTION,
-                          minWidth: COL_ACTION,
+                          width: COL_GHOST,
+                          minWidth: COL_GHOST,
+                          background: idx % 2 === 0 ? '#fff' : '#f8fafc',
+                        }}
+                      />
+                      <td
+                        style={{
+                          width: COL_GHOST,
+                          minWidth: COL_GHOST,
                           background: idx % 2 === 0 ? '#fff' : '#f8fafc',
                         }}
                       />
@@ -817,7 +832,7 @@ const OverviewBoard = () => {
               {!loading && filteredCars.length === 0 && (
                 <tr>
                   <td
-                    colSpan={5 + allColumns.length + 1}
+                    colSpan={5 + allColumns.length + 3}
                     className="py-6 text-center text-slate-400 text-sm"
                   >
                     Nenhum veículo encontrado.
@@ -829,7 +844,7 @@ const OverviewBoard = () => {
         </div>
       </div>
 
-      {/* modal de ordem */}
+      {/* modal ordem */}
       {orderModalOpen && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-[999]">
           <div className="bg-white rounded-md shadow-lg w-full max-w-3xl max-h-[90vh] overflow-y-auto p-6">
@@ -893,279 +908,7 @@ const OverviewBoard = () => {
         </div>
       )}
 
-      {/* modal interno de gestão */}
-      <Dialog open={gestaoOpen} onOpenChange={setGestaoOpen}>
-        <DialogContent className="max-w-4xl bg-white text-gray-900">
-          <DialogHeader>
-            <DialogTitle>
-              Gestão —{' '}
-              {gestaoCar
-                ? `${gestaoCar.brand} ${gestaoCar.model} ${gestaoCar.year || ''}`
-                : ''}
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="flex gap-2 mb-4">
-            <button
-              onClick={() => setGestaoTab('marketplaces')}
-              className={`px-3 py-1 rounded ${
-                gestaoTab === 'marketplaces'
-                  ? 'bg-yellow-400 text-black'
-                  : 'bg-gray-100'
-              }`}
-            >
-              Anúncios (Marketplaces)
-            </button>
-            <button
-              onClick={() => setGestaoTab('social')}
-              className={`px-3 py-1 rounded ${
-                gestaoTab === 'social' ? 'bg-yellow-400 text-black' : 'bg-gray-100'
-              }`}
-            >
-              Redes Sociais
-            </button>
-            <button
-              onClick={() => setGestaoTab('expenses')}
-              className={`px-3 py-1 rounded ${
-                gestaoTab === 'expenses' ? 'bg-yellow-400 text-black' : 'bg-gray-100'
-              }`}
-            >
-              Gastos/Ganhos
-            </button>
-            <button
-              onClick={() => setGestaoTab('finance')}
-              className={`px-3 py-1 rounded ${
-                gestaoTab === 'finance' ? 'bg-yellow-400 text-black' : 'bg-gray-100'
-              }`}
-            >
-              Financeiro
-            </button>
-          </div>
-
-          {gestaoTab === 'marketplaces' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-3">
-                <select
-                  value={pubForm.platform_id}
-                  onChange={(e) => setPubForm((p) => ({ ...p, platform_id: e.target.value }))}
-                  className="w-full border rounded px-2 py-2"
-                >
-                  <option value="">Plataforma (Marketplaces)</option>
-                  {marketplacePlatforms.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  value={pubForm.spent}
-                  onChange={(e) => setPubForm((p) => ({ ...p, spent: e.target.value }))}
-                  placeholder="Gasto (R$)"
-                  type="number"
-                  className="w-full border rounded px-2 py-2"
-                />
-                <input
-                  value={pubForm.link}
-                  onChange={(e) => setPubForm((p) => ({ ...p, link: e.target.value }))}
-                  placeholder="Link do anúncio"
-                  className="w-full border rounded px-2 py-2"
-                />
-                <Button onClick={handleSavePub} className="bg-yellow-400 text-black w-full">
-                  Salvar anúncio
-                </Button>
-              </div>
-
-              <div className="border rounded-lg p-2 max-h-64 overflow-y-auto">
-                {(gestaoPubs || [])
-                  .filter((p) => {
-                    const pf = platforms.find((pl) => pl.id === p.platform_id);
-                    return pf?.platform_type === 'marketplace';
-                  })
-                  .map((p) => {
-                    const pf = platforms.find((pl) => pl.id === p.platform_id);
-                    return (
-                      <div
-                        key={p.id}
-                        className="flex justify-between items-center border-b last:border-b-0 py-2"
-                      >
-                        <div>
-                          <p className="text-sm font-semibold">{pf ? pf.name : '---'}</p>
-                          <p className="text-xs text-gray-500">
-                            Gasto: {Money(p.spent)} | {p.status}
-                          </p>
-                        </div>
-                      </div>
-                    );
-                  })}
-              </div>
-            </div>
-          )}
-
-          {gestaoTab === 'social' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-3">
-                <select
-                  value={pubForm.platform_id}
-                  onChange={(e) => setPubForm((p) => ({ ...p, platform_id: e.target.value }))}
-                  className="w-full border rounded px-2 py-2"
-                >
-                  <option value="">Plataforma (Redes Sociais)</option>
-                  {socialPlatforms.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  value={pubForm.link}
-                  onChange={(e) => setPubForm((p) => ({ ...p, link: e.target.value }))}
-                  placeholder="Link da publicação"
-                  className="w-full border rounded px-2 py-2"
-                />
-                <Button onClick={handleSavePub} className="bg-yellow-400 text-black w-full">
-                  Salvar publicação
-                </Button>
-              </div>
-
-              <div className="border rounded-lg p-2 max-h-64 overflow-y-auto">
-                {(gestaoPubs || [])
-                  .filter((p) => {
-                    const pf = platforms.find((pl) => pl.id === p.platform_id);
-                    return pf?.platform_type !== 'marketplace';
-                  })
-                  .map((p) => {
-                    const pf = platforms.find((pl) => pl.id === p.platform_id);
-                    return (
-                      <div
-                        key={p.id}
-                        className="flex justify-between items-center border-b last:border-b-0 py-2"
-                      >
-                        <div>
-                          <p className="text-sm font-semibold">{pf ? pf.name : '---'}</p>
-                          <p className="text-xs text-gray-500">{p.link || 'Sem link'}</p>
-                        </div>
-                      </div>
-                    );
-                  })}
-              </div>
-            </div>
-          )}
-
-          {gestaoTab === 'expenses' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-3">
-                <input
-                  value={expForm.category}
-                  onChange={(e) => setExpForm((p) => ({ ...p, category: e.target.value }))}
-                  placeholder="Categoria"
-                  className="w-full border rounded px-2 py-2"
-                />
-                <input
-                  value={expForm.amount}
-                  onChange={(e) => setExpForm((p) => ({ ...p, amount: e.target.value }))}
-                  placeholder="Gasto (R$)"
-                  type="number"
-                  className="w-full border rounded px-2 py-2"
-                />
-                <input
-                  value={expForm.charged_value}
-                  onChange={(e) => setExpForm((p) => ({ ...p, charged_value: e.target.value }))}
-                  placeholder="Valor cobrado (R$)"
-                  type="number"
-                  className="w-full border rounded px-2 py-2"
-                />
-                <input
-                  value={expForm.incurred_at}
-                  onChange={(e) => setExpForm((p) => ({ ...p, incurred_at: e.target.value }))}
-                  type="date"
-                  className="w-full border rounded px-2 py-2"
-                />
-                <input
-                  value={expForm.description}
-                  onChange={(e) => setExpForm((p) => ({ ...p, description: e.target.value }))}
-                  placeholder="Descrição"
-                  className="w-full border rounded px-2 py-2"
-                />
-                <Button onClick={handleSaveExp} className="bg-yellow-400 text-black w-full">
-                  Salvar gasto/ganho
-                </Button>
-              </div>
-
-              <div className="border rounded-lg p-2 max-h-64 overflow-y-auto">
-                {(gestaoExps || []).map((e) => (
-                  <div
-                    key={e.id}
-                    className="flex justify-between items-center border-b last:border-b-0 py-2"
-                  >
-                    <div>
-                      <p className="text-sm font-semibold">{e.category}</p>
-                      <p className="text-xs text-gray-500">
-                        Gasto: {Money(e.amount)}{' '}
-                        {e.charged_value ? `| Cobrado: ${Money(e.charged_value)}` : ''}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {gestaoTab === 'finance' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-3">
-                <div className="flex gap-2 items-center">
-                  <input
-                    value={gestaoFinance.fipe_value}
-                    onChange={(e) =>
-                      setGestaoFinance((p) => ({ ...p, fipe_value: e.target.value }))
-                    }
-                    placeholder="Valor FIPE"
-                    type="number"
-                    className="w-full border rounded px-2 py-2"
-                  />
-                  <Button
-                    type="button"
-                    onClick={handleFetchFipe}
-                    className="bg-gray-100 text-gray-900 border border-gray-200"
-                  >
-                    Buscar FIPE
-                  </Button>
-                </div>
-                <input
-                  value={gestaoFinance.commission}
-                  onChange={(e) =>
-                    setGestaoFinance((p) => ({ ...p, commission: e.target.value }))
-                  }
-                  placeholder="Comissão (R$)"
-                  type="number"
-                  className="w-full border rounded px-2 py-2"
-                />
-                <input
-                  value={gestaoFinance.return_to_seller}
-                  onChange={(e) =>
-                    setGestaoFinance((p) => ({ ...p, return_to_seller: e.target.value }))
-                  }
-                  placeholder="Devolver ao cliente (R$)"
-                  type="number"
-                  className="w-full border rounded px-2 py-2"
-                />
-                <Button onClick={handleSaveFinance} className="bg-yellow-400 text-black w-full">
-                  Salvar financeiro
-                </Button>
-              </div>
-              <div className="bg-gray-50 rounded-lg p-4 text-sm">
-                <p className="font-semibold mb-2">Observação:</p>
-                <p className="text-gray-600">
-                  Esses dados ficam salvos direto no veículo. Ao fechar o modal a tabela da Matriz
-                  já reflete essas mudanças.
-                </p>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* modal de filtros */}
+      {/* modal filtros */}
       {filtersOpen && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-[999]">
           <div className="bg-white rounded-md shadow-lg w-full max-w-md p-6">

@@ -15,7 +15,6 @@ import {
   getExpensesForCars,
   updateCar,
   getFipeForCar,
-  setCarDeliveredAt, // 👈 ADICIONADO
 } from '@/lib/car-api';
 import { X, Megaphone, Wallet, DollarSign, PenSquare } from 'lucide-react';
 
@@ -426,7 +425,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     }
   };
 
-  // abrir mini-modal de ENTRADA dentro do próprio card
+ // abrir mini-modal de ENTRADA dentro do próprio card
   const openEntryMini = (car) => {
     const d = car.entry_at ? new Date(car.entry_at) : new Date();
     setEntryDate(d.toISOString().slice(0, 10));
@@ -466,8 +465,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     if (!deliverMiniOpenFor) return;
     try {
       const iso = isoFromDateTime(deliverDate, deliverTime);
-      // 👇 agora usa a função da API (car-api.js)
-      await setCarDeliveredAt(deliverMiniOpenFor, iso);
+      await updateCar(deliverMiniOpenFor, { delivered_at: iso });
       toast({ title: 'Entrega registrada' });
       setDeliverMiniOpenFor(null);
       await dispatchGlobalUpdate();
@@ -490,7 +488,8 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     return Array.from(setB).sort((a, b) => a.localeCompare(b, 'pt-BR'));
   }, [cars]);
 
-  const [showOnlyAvailable, setShowOnlyAvailable] = useState(false);
+   const [showOnlyAvailable, setShowOnlyAvailable] = useState(false);
+
 
   // filtro + ordenação
   const filteredCars = useMemo(() => {
@@ -544,6 +543,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     return list;
   }, [cars, searchTerm, brandFilter, sortBy, summaryMap, showOnlyAvailable]);
 
+
   const marketplacePlatforms = (platforms || []).filter((p) => p.platform_type === 'marketplace');
   const socialPlatforms = (platforms || []).filter((p) => p.platform_type === 'social');
 
@@ -569,14 +569,14 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
           ))}
         </select>
         <label className="flex items-center gap-2 text-sm text-gray-700">
-          <input
-            type="checkbox"
-            checked={showOnlyAvailable}
-            onChange={(e) => setShowOnlyAvailable(e.target.checked)}
-            className="w-4 h-4 accent-yellow-400"
-          />
-          Mostrar somente não vendidos
-        </label>
+    <input
+      type="checkbox"
+      checked={showOnlyAvailable}
+      onChange={(e) => setShowOnlyAvailable(e.target.checked)}
+      className="w-4 h-4 accent-yellow-400"
+    />
+    Mostrar somente não vendidos
+  </label>
         <select
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value)}
@@ -622,15 +622,14 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
               : null;
 
           const isSold = !!car.is_sold;
-          const isDelivered = !!car.delivered_at; // 👈 novo
 
           return (
             <div
-              key={car.id}
-              className={`relative rounded-2xl border flex flex-col md:flex-row justify-between gap-4 p-4 ${
-                isDelivered ? 'bg-gray-100/80 opacity-90' : 'bg-white shadow'
-              } ${isSold && !isDelivered ? 'opacity-90' : ''}`}
-            >
+  key={car.id}
+  className={`relative bg-white rounded-2xl shadow border flex flex-col md:flex-row justify-between gap-4 p-4 ${
+    isSold ? 'opacity-90' : ''
+  }`}
+>
               <div className="flex gap-4 items-start">
                 <img
                   src={
@@ -650,100 +649,100 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                         VENDIDO
                       </span>
                     )}
-                    {isDelivered && (
-                      <span className="text-xs px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 font-semibold">
-                        ENTREGUE
-                      </span>
-                    )}
                     
-                    {/* mini-modal ENTRADA - colado no card */}
-                    {entryMiniOpenFor === car.id && (
-                      <div className="absolute top-10 left-10 md:left-40 z-[999] bg-white rounded-xl shadow-lg p-4 w-[280px] space-y-3 border border-gray-200">
-                        <div className="flex justify-between items-center">
-                          <h3 className="text-sm font-semibold">Data de entrada</h3>
-                          <button onClick={() => setEntryMiniOpenFor(null)}>
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                        <input
-                          type="date"
-                          value={entryDate}
-                          onChange={(e) => setEntryDate(e.target.value)}
-                          className="w-full border rounded px-2 py-1"
-                        />
-                        <input
-                          type="time"
-                          value={entryTime}
-                          onChange={(e) => setEntryTime(e.target.value)}
-                          className="w-full border rounded px-2 py-1"
-                        />
-                        <Button onClick={handleSaveEntry} className="w-full bg-yellow-400 text-black">
-                          Salvar
-                        </Button>
-                      </div>
-                    )}
-
-                    {/* mini-modal ENTREGA - colado no card */}
-                    {deliverMiniOpenFor === car.id && (
-                      <div className="absolute top-10 left-10 md:left-40 z-[999] bg-white rounded-xl shadow-lg p-4 w-[280px] space-y-3 border border-gray-200">
-                        <div className="flex justify-between items-center">
-                          <h3 className="text-sm font-semibold">Registrar entrega</h3>
-                          <button onClick={() => setDeliverMiniOpenFor(null)}>
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                        <input
-                          type="date"
-                          value={deliverDate}
-                          onChange={(e) => setDeliverDate(e.target.value)}
-                          className="w-full border rounded px-2 py-1"
-                        />
-                        <input
-                          type="time"
-                          value={deliverTime}
-                          onChange={(e) => setDeliverTime(e.target.value)}
-                          className="w-full border rounded px-2 py-1"
-                        />
-                        <Button onClick={handleSaveDeliver} className="w-full bg-yellow-400 text-black">
-                          Salvar
-                        </Button>
-                      </div>
-                    )}
+                    
+                    
+                                  {/* mini-modal ENTRADA - colado no card */}
+              {entryMiniOpenFor === car.id && (
+                <div className="absolute top-10 left-10 md:left-40 z-[999] bg-white rounded-xl shadow-lg p-4 w-[280px] space-y-3 border border-gray-200">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-sm font-semibold">Data de entrada</h3>
+                    <button onClick={() => setEntryMiniOpenFor(null)}>
+                      <X className="w-4 h-4" />
+                    </button>
                   </div>
+                  <input
+                    type="date"
+                    value={entryDate}
+                    onChange={(e) => setEntryDate(e.target.value)}
+                    className="w-full border rounded px-2 py-1"
+                  />
+                  <input
+                    type="time"
+                    value={entryTime}
+                    onChange={(e) => setEntryTime(e.target.value)}
+                    className="w-full border rounded px-2 py-1"
+                  />
+                  <Button onClick={handleSaveEntry} className="w-full bg-yellow-400 text-black">
+                    Salvar
+                  </Button>
+                </div>
+              )}
 
+              {/* mini-modal ENTREGA - colado no card */}
+              {deliverMiniOpenFor === car.id && (
+                <div className="absolute top-10 left-10 md:left-40 z-[999] bg-white rounded-xl shadow-lg p-4 w-[280px] space-y-3 border border-gray-200">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-sm font-semibold">Registrar entrega</h3>
+                    <button onClick={() => setDeliverMiniOpenFor(null)}>
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <input
+                    type="date"
+                    value={deliverDate}
+                    onChange={(e) => setDeliverDate(e.target.value)}
+                    className="w-full border rounded px-2 py-1"
+                  />
+                  <input
+                    type="time"
+                    value={deliverTime}
+                    onChange={(e) => setDeliverTime(e.target.value)}
+                    className="w-full border rounded px-2 py-1"
+                  />
+                  <Button onClick={handleSaveDeliver} className="w-full bg-yellow-400 text-black">
+                    Salvar
+                  </Button>
+                </div>
+              )}
+
+                    
+                    
+                    
+                  </div>
                   {/* linha do preço + FIPE */}
-                  <p className="text-sm text-gray-600 flex gap-2 items-center flex-wrap">
-                    Preço:{' '}
-                    <span className="font-semibold">{moneyBR(car.price)}</span>
+<p className="text-sm text-gray-600 flex gap-2 items-center flex-wrap">
+  Preço:{' '}
+  <span className="font-semibold">{moneyBR(car.price)}</span>
 
-                    {car.fipe_value ? (
-                      <span className="text-xs bg-yellow-200 text-black px-2 py-0.5 rounded flex items-center gap-1">
-                        FIPE: {moneyBR(car.fipe_value)}
-                        {fipeDiff !== null && (
-                          <span
-                            className={
-                              Number(fipeDiff) > 0
-                                ? 'text-green-700 font-semibold'
-                                : Number(fipeDiff) < 0
-                                ? 'text-red-600 font-semibold'
-                                : 'text-gray-600 font-semibold'
-                            }
-                          >
-                            ({fipeDiff}%)
-                          </span>
-                        )}
-                      </span>
-                    ) : null}
-                  </p>
+  {car.fipe_value ? (
+    <span className="text-xs bg-yellow-200 text-black px-2 py-0.5 rounded flex items-center gap-1">
+      FIPE: {moneyBR(car.fipe_value)}
+      {fipeDiff !== null && (
+        <span
+          className={
+            Number(fipeDiff) > 0
+              ? 'text-green-700 font-semibold'
+              : Number(fipeDiff) < 0
+              ? 'text-red-600 font-semibold'
+              : 'text-gray-600 font-semibold'
+          }
+        >
+          ({fipeDiff}%)
+        </span>
+      )}
+    </span>
+  ) : null}
+</p>
 
-                  {/* linha do devolver embaixo */}
-                  {car.return_to_seller ? (
-                    <p className="mt-1">
-                      <span className="text-xs bg-amber-50 text-amber-900 px-2 py-0.5 rounded">
-                        Devolver: {moneyBR(car.return_to_seller)}
-                      </span>
-                    </p>
-                  ) : null}
+{/* linha do devolver embaixo */}
+{car.return_to_seller ? (
+  <p className="mt-1">
+    <span className="text-xs bg-amber-50 text-amber-900 px-2 py-0.5 rounded">
+      Devolver: {moneyBR(car.return_to_seller)}
+    </span>
+  </p>
+) : null}
 
                   <p className="text-sm text-gray-600">
                     Placa: <span className="font-semibold">{car.plate || '-'}</span>
@@ -766,62 +765,60 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                     </button>
                     
                     <span className="text-xs px-2 py-0.5 rounded bg-gray-200 text-black font-semibold">
-                      {diffInDays(car)}
-                    </span>
+  {diffInDays(car)}
+</span>
 
-                    {isSold && (
-                      <>
-                        <p className="text-xs text-red-600">
-                          {(() => {
-                            const raw = car.sold_at;
-                            if (!raw) return 'Vendido';
 
-                            const clean = String(raw).replace('T', ' ').trim();
-                            const y = clean.slice(0, 4);
-                            const m = clean.slice(5, 7);
-                            const d = clean.slice(8, 10);
+{isSold && (
+  <>
+    <p className="text-xs text-red-600">
+      {(() => {
+        const raw = car.sold_at;
+        if (!raw) return 'Vendido';
 
-                            if (!y || !m || !d) {
-                              return `Vendido em ${raw} — ${
-                                car.sale_price
-                                  ? new Intl.NumberFormat('pt-BR', {
-                                      style: 'currency',
-                                      currency: 'BRL',
-                                    }).format(car.sale_price)
-                                  : ''
-                              }`;
-                            }
+        const clean = String(raw).replace('T', ' ').trim();
+        const y = clean.slice(0, 4);
+        const m = clean.slice(5, 7);
+        const d = clean.slice(8, 10);
 
-                            const dataBR = `${d}/${m}/${y}`;
-                            const preco = car.sale_price
-                              ? new Intl.NumberFormat('pt-BR', {
-                                  style: 'currency',
-                                  currency: 'BRL',
-                                }).format(car.sale_price)
-                              : '';
+        if (!y || !m || !d) {
+          return `Vendido em ${raw} — ${
+            car.sale_price
+              ? new Intl.NumberFormat('pt-BR', {
+                  style: 'currency',
+                  currency: 'BRL',
+                }).format(car.sale_price)
+              : ''
+          }`;
+        }
 
-                            return `Vendido em ${dataBR}${preco ? ` — ${preco}` : ''}`;
-                          })()}
-                        </p>
+        const dataBR = `${d}/${m}/${y}`;
+        const preco = car.sale_price
+          ? new Intl.NumberFormat('pt-BR', {
+              style: 'currency',
+              currency: 'BRL',
+            }).format(car.sale_price)
+          : '';
 
-                        {!car.delivered_at ? (
-                          <button
-                            onClick={() => openDeliverMini(car)}
-                            className="text-xs text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded flex items-center gap-1"
-                          >
-                            Marcar como Entregue
-                          </button>
-                        ) : (
-                          <span className="text-xs bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded">
-                            Entregue em {fmtDateTimeBR(car.delivered_at)}
-                          </span>
-                        )}
-                      </>
-                    )}
+        return `Vendido em ${dataBR}${preco ? ` — ${preco}` : ''}`;
+      })()}
+    </p>
 
-                    {!isSold && (
-                      <p className="text-xs text-gray-400">Ainda não vendido</p>
-                    )}
+    <button
+      onClick={() => openDeliverMini(car)}
+      className="text-xs text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded flex items-center gap-1"
+    >
+      Marcar como Entregue
+    </button>
+  </>
+)}
+
+{!isSold && (
+  <p className="text-xs text-gray-400">Ainda não vendido</p>
+)}
+
+                    
+                    
                   </div>
                 </div>
               </div>

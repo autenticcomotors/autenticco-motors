@@ -697,20 +697,40 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                     
                     
                   </div>
-                  <p className="text-sm text-gray-600 flex gap-2 items-center">
-                    Preço:{' '}
-                    <span className="font-semibold">{moneyBR(car.price)}</span>
-                    {car.fipe_value ? (
-                      <span className="text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded">
-                        FIPE: {moneyBR(car.fipe_value)} ({fipeDiff}%)
-                      </span>
-                    ) : null}
-                    {car.return_to_seller ? (
-                      <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
-                        Devolver: {moneyBR(car.return_to_seller)}
-                      </span>
-                    ) : null}
-                  </p>
+                  {/* linha do preço + FIPE */}
+<p className="text-sm text-gray-600 flex gap-2 items-center flex-wrap">
+  Preço:{' '}
+  <span className="font-semibold">{moneyBR(car.price)}</span>
+
+  {car.fipe_value ? (
+    <span className="text-xs bg-yellow-200 text-black px-2 py-0.5 rounded flex items-center gap-1">
+      FIPE: {moneyBR(car.fipe_value)}
+      {fipeDiff !== null && (
+        <span
+          className={
+            Number(fipeDiff) > 0
+              ? 'text-green-700 font-semibold'
+              : Number(fipeDiff) < 0
+              ? 'text-red-600 font-semibold'
+              : 'text-gray-600 font-semibold'
+          }
+        >
+          ({fipeDiff}%)
+        </span>
+      )}
+    </span>
+  ) : null}
+</p>
+
+{/* linha do devolver embaixo */}
+{car.return_to_seller ? (
+  <p className="mt-1">
+    <span className="text-xs bg-amber-50 text-amber-900 px-2 py-0.5 rounded">
+      Devolver: {moneyBR(car.return_to_seller)}
+    </span>
+  </p>
+) : null}
+
                   <p className="text-sm text-gray-600">
                     Placa: <span className="font-semibold">{car.plate || '-'}</span>
                   </p>
@@ -731,13 +751,10 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                       <PenSquare className="w-3 h-3" /> editar
                     </button>
                     
-                    <span
-  className={`text-xs px-2 py-0.5 rounded ${
-    isSold ? 'bg-gray-100 text-gray-700' : 'bg-green-50 text-green-700'
-  }`}
->
+                    <span className="text-xs px-2 py-0.5 rounded bg-gray-200 text-black font-semibold">
   {diffInDays(car)}
 </span>
+
 
 {isSold && (
   <>

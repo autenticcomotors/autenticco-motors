@@ -43,7 +43,7 @@ import {
   getPlatforms,
   markCarAsSold,
   unmarkCarAsSold,
-  // NOVOS
+  // pedidos / oferecidos
   getClientRequests,
   addClientRequest,
   updateClientRequest,
@@ -230,7 +230,7 @@ const AdminDashboard = () => {
     car_sold: '',
   });
 
-  // inclui plate no estado do novo carro
+  // carro novo (inclui placa)
   const [newCar, setNewCar] = useState({
     brand: '',
     model: '',
@@ -265,20 +265,25 @@ const AdminDashboard = () => {
   const fileInputRef = useRef(null);
   const navigate = useNavigate();
 
-  // filtros (VEÍCULOS)
+  // filtros de veículos
   const [carSearch, setCarSearch] = useState('');
   const [brandFilter, setBrandFilter] = useState('');
 
-  // --- MATRIZ / GESTÃO CONTROL ---
+  // matriz / gestão
   const [selectedCar, setSelectedCar] = useState(null);
   const [isGestaoOpen, setIsGestaoOpen] = useState(false);
 
-  // NOVO: pedidos / oferecidos
+  // pedidos / oferecidos
   const [clientRequests, setClientRequests] = useState([]);
   const [isReqDialogOpen, setIsReqDialogOpen] = useState(false);
   const [editingRequest, setEditingRequest] = useState(null);
 
-  // NOVO: popup de match
+  // filtros da lista de pedidos/oferecidos
+  const [reqFilterType, setReqFilterType] = useState('all'); // all | pedido | oferecido
+  const [reqSearch, setReqSearch] = useState('');
+  const [reqSort, setReqSort] = useState('desc'); // desc = mais novos primeiro
+
+  // popup de match
   const [matchModalOpen, setMatchModalOpen] = useState(false);
   const [matchModalPayload, setMatchModalPayload] = useState(null);
 
@@ -317,7 +322,6 @@ const AdminDashboard = () => {
     });
   };
 
-  // helper: normaliza texto
   const norm = (v) =>
     String(v || '')
       .normalize('NFD')
@@ -325,12 +329,11 @@ const AdminDashboard = () => {
       .trim()
       .toLowerCase();
 
-  // regra de match pedido x carro
+  // regra de match
   const doesRequestMatchCar = (req, car) => {
     if (!req || !car) return false;
     if (car.is_sold) return false;
 
-    // marca/modelo
     if (req.brand && norm(req.brand) !== norm(car.brand)) return false;
     if (req.model) {
       const rm = norm(req.model);
@@ -338,11 +341,8 @@ const AdminDashboard = () => {
       if (!(cm === rm || cm.includes(rm) || rm.includes(cm))) return false;
     }
 
-    // carroceria
     if (req.body_type && norm(req.body_type) !== norm(car.body_type)) return false;
-    // combustível
     if (req.fuel && norm(req.fuel) !== norm(car.fuel)) return false;
-    // câmbio
     if (req.transmission && norm(req.transmission) !== norm(car.transmission))
       return false;
 
@@ -434,7 +434,6 @@ const AdminDashboard = () => {
     navigate('/admin');
   };
 
-  // input genérico (suporta checkbox)
   const handleInputChange = (e, setStateFunc) => {
     const { name, type, checked, value } = e.target;
     const finalValue = type === 'checkbox' ? checked : value;
@@ -498,7 +497,7 @@ const AdminDashboard = () => {
     }
   };
 
-  // CADASTRA CARRO
+  // adicionar veículo
   const handleAddCar = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -538,10 +537,8 @@ const AdminDashboard = () => {
           variant: 'destructive',
         });
       } else {
-        // atualizar lista local
         const newList = sortCarsActiveFirst([...(cars || []), addedCar]);
         setCars(newList);
-        // limpar form
         setNewCar({
           brand: '',
           model: '',
@@ -563,7 +560,7 @@ const AdminDashboard = () => {
         if (fileInputRef.current) fileInputRef.current.value = '';
         toast({ title: 'Veículo adicionado!' });
 
-        // --- MATCH COM PEDIDOS ---
+        // MATCH com pedidos
         const pendingReqs = (clientRequests || []).filter(
           (r) => !r.matched_car_id && r.type === 'pedido'
         );
@@ -572,18 +569,15 @@ const AdminDashboard = () => {
         );
 
         if (matchedNow.length > 0) {
-          // grava no banco
           for (const m of matchedNow) {
             await updateClientRequest(m.id, { matched_car_id: addedCar.id });
           }
-          // mostra popup
           setMatchModalPayload({
             mode: 'car',
             car: addedCar,
             requests: matchedNow,
           });
           setMatchModalOpen(true);
-          // refaz lista
           const ref = await getClientRequests();
           setClientRequests(ref || []);
         }
@@ -718,7 +712,7 @@ const AdminDashboard = () => {
     }
   };
 
-  // --- VENDAS: abrir modal
+  // venda
   const openSaleDialog = (car) => {
     setCarToSell(car);
     setSaleForm({
@@ -737,7 +731,7 @@ const AdminDashboard = () => {
     setSaleForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  // --- FILTROS (Admin - VEÍCULOS) — inclui PLACA
+  // filtros de veículos
   const brandOptions = useMemo(() => {
     const brands = Array.from(
       new Set(
@@ -774,8 +768,7 @@ const AdminDashboard = () => {
     });
   }, [cars, carSearch, brandFilter]);
 
-  // ====== PEDIDOS / OFERECIDOS ======
-
+  // pedidos / oferecidos — modelo em branco
   const blankRequest = {
     type: 'pedido',
     client_name: '',
@@ -810,7 +803,6 @@ const AdminDashboard = () => {
 
   const saveRequest = async () => {
     if (!editingRequest) return;
-    // trata numéricos
     const payload = {
       ...editingRequest,
       price_min: editingRequest.price_min
@@ -826,7 +818,6 @@ const AdminDashboard = () => {
         : null,
     };
 
-    // novo
     if (!editingRequest.id) {
       const { data, error } = await addClientRequest(payload);
       if (error) {
@@ -836,7 +827,7 @@ const AdminDashboard = () => {
           variant: 'destructive',
         });
       } else {
-        // match imediato com carros atuais
+        // match imediato
         const stock = cars || [];
         const matchedCar = stock.find((c) => doesRequestMatchCar(data, c));
         if (matchedCar) {
@@ -878,7 +869,43 @@ const AdminDashboard = () => {
     toast({ title: 'Registro removido.' });
   };
 
-  // =========== RENDER =============
+  // aplica os filtros da aba de pedidos
+  const filteredRequests = useMemo(() => {
+    let list = [...(clientRequests || [])];
+
+    if (reqFilterType === 'pedido') {
+      list = list.filter((r) => r.type === 'pedido');
+    } else if (reqFilterType === 'oferecido') {
+      list = list.filter((r) => r.type === 'oferecido');
+    }
+
+    const term = norm(reqSearch);
+    if (term) {
+      list = list.filter((r) => {
+        const txt = [
+          r.client_name,
+          r.client_contact,
+          r.brand,
+          r.model,
+          r.lead_source,
+          r.notes,
+        ]
+          .map((x) => norm(x))
+          .join(' ');
+        return txt.includes(term);
+      });
+    }
+
+    list.sort((a, b) => {
+      const da = a.lead_date ? new Date(a.lead_date).getTime() : 0;
+      const db = b.lead_date ? new Date(b.lead_date).getTime() : 0;
+      return reqSort === 'desc' ? db - da : da - db;
+    });
+
+    return list;
+  }, [clientRequests, reqFilterType, reqSearch, reqSort]);
+
+  // =========== RENDER ===========
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex justify-center items-center">
@@ -889,7 +916,6 @@ const AdminDashboard = () => {
     );
   }
 
-  // contagens
   const estoqueAtualCount = (cars || []).filter(
     (c) => c.is_sold !== true && c.is_available !== false
   ).length;
@@ -921,6 +947,7 @@ const AdminDashboard = () => {
             </Button>
           </div>
 
+          {/* abas */}
           <div className="flex space-x-4 mb-8 border-b overflow-x-auto">
             <button
               className={`px-4 py-2 font-semibold ${
@@ -1209,7 +1236,7 @@ const AdminDashboard = () => {
                 </form>
               </div>
 
-              {/* NOVO BLOCO: Estoque / Vendidos */}
+              {/* estoque */}
               <div className="flex justify-between items-center mb-6">
                 <div>
                   <h2 className="text-2xl font-semibold flex items-center">
@@ -1235,7 +1262,7 @@ const AdminDashboard = () => {
                 </Button>
               </div>
 
-              {/* CONTROLES DE FILTRO — inclui PLACA */}
+              {/* filtros veículos */}
               <div className="flex flex-col md:flex-row gap-3 items-center mb-4">
                 <input
                   placeholder="Pesquisar marca, modelo ou PLACA..."
@@ -1596,6 +1623,7 @@ const AdminDashboard = () => {
                 </Button>
               </div>
 
+              {/* cards de total */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                 <div className="border rounded-xl p-4 bg-white">
                   <p className="text-xs text-gray-500">TOTAL</p>
@@ -1615,6 +1643,35 @@ const AdminDashboard = () => {
                   <p className="text-xs text-gray-500">COM MATCH</p>
                   <p className="text-2xl font-bold text-green-600">{matchCount}</p>
                 </div>
+              </div>
+
+              {/* filtros da lista */}
+              <div className="flex flex-col lg:flex-row gap-3 mb-4 items-center lg:items-end justify-between">
+                <div className="flex gap-2 w-full lg:w-auto">
+                  <select
+                    value={reqFilterType}
+                    onChange={(e) => setReqFilterType(e.target.value)}
+                    className="border rounded px-3 py-2 text-sm"
+                  >
+                    <option value="all">Todos</option>
+                    <option value="pedido">Só pedidos</option>
+                    <option value="oferecido">Só oferecidos</option>
+                  </select>
+                  <button
+                    onClick={() =>
+                      setReqSort((prev) => (prev === 'desc' ? 'asc' : 'desc'))
+                    }
+                    className="border rounded px-3 py-2 text-sm bg-gray-50 hover:bg-gray-100"
+                  >
+                    {reqSort === 'desc' ? 'Mais recentes' : 'Mais antigos'}
+                  </button>
+                </div>
+                <input
+                  value={reqSearch}
+                  onChange={(e) => setReqSearch(e.target.value)}
+                  placeholder="Buscar por nome, contato, modelo, origem..."
+                  className="w-full lg:w-1/2 border rounded px-3 py-2 text-sm"
+                />
               </div>
 
               <div className="overflow-x-auto rounded-xl border bg-white">
@@ -1648,7 +1705,7 @@ const AdminDashboard = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {clientRequests.map((req) => (
+                    {filteredRequests.map((req) => (
                       <tr
                         key={req.id}
                         className={
@@ -1715,13 +1772,13 @@ const AdminDashboard = () => {
                       </tr>
                     ))}
 
-                    {clientRequests.length === 0 && (
+                    {filteredRequests.length === 0 && (
                       <tr>
                         <td
                           colSpan={8}
                           className="px-4 py-6 text-center text-gray-400 text-sm"
                         >
-                          Nenhum pedido ou carro oferecido ainda.
+                          Nenhum pedido ou carro oferecido encontrado com esse filtro.
                         </td>
                       </tr>
                     )}
@@ -1733,7 +1790,7 @@ const AdminDashboard = () => {
         </motion.div>
       </div>
 
-      {/* EDIT DIALOG (usa FormFields com PLACA) */}
+      {/* EDIT CAR DIALOG */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="bg-white text-gray-900">
           <DialogHeader>

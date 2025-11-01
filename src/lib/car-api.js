@@ -57,9 +57,7 @@ export const getCarBySlug = async (slug) => {
 
 export const addCar = async (carData) => {
   const carName = `${carData.brand} ${carData.model}`;
-  const slug = `${(carData.brand || '')
-    .toLowerCase()
-    .replace(/ /g, '-')}-${(carData.model || '')
+  const slug = `${(carData.brand || '').toLowerCase().replace(/ /g, '-')}-${(carData.model || '')
     .toLowerCase()
     .replace(/ /g, '-')}-${Date.now()}`;
 
@@ -99,12 +97,10 @@ export const deleteCar = async (id) => {
   return { data, error };
 };
 
-// marcar/editar data de entrada
 export const setCarEnteredAt = async (id, enteredAtISO) => {
   return updateCar(id, { entry_at: enteredAtISO });
 };
 
-// marcar como entregue (somente registra data/hora de entrega)
 export const setCarDeliveredAt = async (id, deliveredAtISO) => {
   return updateCar(id, { delivered_at: deliveredAtISO });
 };
@@ -206,12 +202,6 @@ export const deleteLead = async (id) => {
   =========================================================
 */
 
-/**
- * IMPORTANTE: voltamos ao formato ANTIGO
- * - pega todas as plataformas
- * - ordena por NOME (não por order)
- * - porque VehicleManager e o modal de gestão dependem disso
- */
 export const getPlatforms = async () => {
   const { data, error } = await supabase
     .from('platforms')
@@ -232,16 +222,12 @@ export const addPlatform = async (name) => {
     .select()
     .single();
   if (error) {
-    console.error('Erro ao criar plataforma', error);
+    console.error('Erro ao criar plataforma:', error);
     return null;
   }
   return data;
 };
 
-/**
- * NOVA: usada só pela MATRIZ para gravar a ordem no banco.
- * Recebe array de plataformas (já na nova ordem) e atualiza um por um.
- */
 export const updatePlatformOrder = async (orderedPlatforms = []) => {
   try {
     for (const item of orderedPlatforms) {
@@ -519,7 +505,7 @@ export const deleteExpense = async (id) => {
 
 /*
   =========================================================
-  B U L K   H E L P E R S
+  B U L K
   =========================================================
 */
 
@@ -565,7 +551,7 @@ export const getFipeForCar = async (car) => {
 
 /*
   =========================================================
-  C H E C K L I S T   (L E G A D O)
+  C H E C K L I S T  (LEGADO + NOVO)
   =========================================================
 */
 
@@ -614,12 +600,9 @@ export const addChecklistItem = async () => {
   return { data: null, error: null };
 };
 
-/*
-  =========================================================
-  C H E C K L I S T   N O V O   P O R   V E Í C U L O
-  =========================================================
-*/
-
+/**
+ * Lista todos os checklists de um carro
+ */
 export const getVehicleChecklists = async (carId) => {
   if (!carId) return [];
   const { data, error } = await supabase
@@ -635,17 +618,9 @@ export const getVehicleChecklists = async (carId) => {
 };
 
 export const addVehicleChecklist = async (payload) => {
-  const finalPayload = {
-    car_id: payload.car_id,
-    filled_at: payload.filled_at || new Date().toISOString(),
-    inspector_name: payload.inspector_name || null,
-    location: payload.location || null,
-    // AQUI é o pulo do gato: nunca deixa data = null
-    data: payload.data && Object.keys(payload.data).length > 0 ? payload.data : {},
-  };
   const { data, error } = await supabase
     .from('vehicle_checklists')
-    .insert([finalPayload])
+    .insert([payload])
     .select()
     .single();
   if (error) console.error('Erro ao criar vehicle_checklist:', error);
@@ -653,15 +628,9 @@ export const addVehicleChecklist = async (payload) => {
 };
 
 export const updateVehicleChecklist = async (id, patch) => {
-  const finalPatch = {
-    ...patch,
-  };
-  if (finalPatch.data == null) {
-    finalPatch.data = {};
-  }
   const { data, error } = await supabase
     .from('vehicle_checklists')
-    .update(finalPatch)
+    .update(patch)
     .eq('id', id)
     .select()
     .single();
@@ -680,30 +649,15 @@ export const deleteVehicleChecklist = async (id) => {
 
 /*
   =========================================================
-  P E D I D O S   /   O F E R E C I D O S   (novo)
+  C L I E N T   R E Q U E S T S  (Pedidos / Oferecidos)
   =========================================================
 */
 
-export const getClientRequests = async (filters = {}) => {
-  let query = supabase
+export const getClientRequests = async () => {
+  const { data, error } = await supabase
     .from('client_requests')
     .select('*')
     .order('created_at', { ascending: false });
-
-  if (filters.type) {
-    query = query.eq('type', filters.type);
-  }
-  if (filters.has_match === true) {
-    query = query.not('matched_car_id', 'is', null);
-  }
-  if (filters.has_match === false) {
-    query = query.is('matched_car_id', null);
-  }
-  if (filters.brand) {
-    query = query.ilike('brand', filters.brand);
-  }
-
-  const { data, error } = await query;
   if (error) {
     console.error('Erro ao buscar client_requests:', error);
     return [];
@@ -712,16 +666,59 @@ export const getClientRequests = async (filters = {}) => {
 };
 
 export const addClientRequest = async (payload) => {
+  const finalPayload = {
+    type: payload.type || 'pedido',
+    client_name: payload.client_name || '',
+    client_contact: payload.client_contact || '',
+    brand: payload.brand || '',
+    model: payload.model || '',
+    price_min: payload.price_min ?? null,
+    price_max: payload.price_max ?? null,
+    lead_date: payload.lead_date || new Date().toISOString(),
+    lead_source: payload.lead_source || '',
+    notes: payload.notes || '',
+    matched_car_id: payload.matched_car_id || null,
+    // NOVOS CAMPOS
+    body_type: payload.body_type || null,
+    fuel: payload.fuel || null,
+    transmission: payload.transmission || null,
+    year_min: payload.year_min ? Number(payload.year_min) : null,
+    year_max: payload.year_max ? Number(payload.year_max) : null,
+    year_exact: payload.year_exact ? Number(payload.year_exact) : null,
+  };
+
   const { data, error } = await supabase
     .from('client_requests')
-    .insert([payload])
+    .insert([finalPayload])
     .select()
     .single();
-  if (error) console.error('Erro ao adicionar client_request:', error);
+  if (error) console.error('Erro ao criar client_request:', error);
   return { data, error };
 };
 
-export const updateClientRequest = async (id, patch) => {
+export const updateClientRequest = async (id, payload) => {
+  const patch = {
+    ...(payload.type ? { type: payload.type } : {}),
+    client_name: payload.client_name ?? null,
+    client_contact: payload.client_contact ?? null,
+    brand: payload.brand ?? null,
+    model: payload.model ?? null,
+    price_min: payload.price_min !== undefined ? payload.price_min : null,
+    price_max: payload.price_max !== undefined ? payload.price_max : null,
+    lead_date: payload.lead_date ?? null,
+    lead_source: payload.lead_source ?? null,
+    notes: payload.notes ?? null,
+    matched_car_id:
+      payload.matched_car_id !== undefined ? payload.matched_car_id : null,
+    // novos
+    body_type: payload.body_type ?? null,
+    fuel: payload.fuel ?? null,
+    transmission: payload.transmission ?? null,
+    year_min: payload.year_min !== undefined ? payload.year_min : null,
+    year_max: payload.year_max !== undefined ? payload.year_max : null,
+    year_exact: payload.year_exact !== undefined ? payload.year_exact : null,
+  };
+
   const { data, error } = await supabase
     .from('client_requests')
     .update(patch)

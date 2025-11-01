@@ -1,5 +1,11 @@
 // src/pages/AdminDashboard.jsx
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+} from 'react';
 import { Helmet } from 'react-helmet';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -12,13 +18,10 @@ import {
   Download,
   MessageSquare,
   FileText,
+  Check,
   Star,
   BarChart2,
   ClipboardList,
-  Image as ImageIcon,
-  Check,
-  Users,
-  RefreshCw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
@@ -66,7 +69,7 @@ import VehicleManager from '@/components/VehicleManager';
 import Reports from '@/pages/Reports';
 import OverviewBoard from '@/components/OverviewBoard';
 
-// ---------- FORM FIELDS (inclui PLACA) ----------
+// ---------- COMPONENTE DE CAMPOS DO FORM DE VEÍCULO ----------
 const FormFields = React.memo(({ carData, onChange, carOptions }) => (
   <>
     <input
@@ -198,7 +201,10 @@ const FormFields = React.memo(({ carData, onChange, carOptions }) => (
         onChange={onChange}
         className="h-4 w-4"
       />
-      <label htmlFor="is_blindado" className="text-sm font-medium text-gray-700">
+      <label
+        htmlFor="is_blindado"
+        className="text-sm font-medium text-gray-700"
+      >
         Blindado
       </label>
     </div>
@@ -207,12 +213,13 @@ const FormFields = React.memo(({ carData, onChange, carOptions }) => (
 
 const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('leads');
+
   const [cars, setCars] = useState([]);
   const [leads, setLeads] = useState([]);
   const [testimonials, setTestimonials] = useState([]);
   const [platforms, setPlatforms] = useState([]);
   const [clientRequests, setClientRequests] = useState([]);
-  const clientRequestsRef = useRef([]);
+
   const [loading, setLoading] = useState(true);
   const [leadFilters, setLeadFilters] = useState({
     status: '',
@@ -226,9 +233,27 @@ const AdminDashboard = () => {
     car_sold: '',
   });
 
-  // NOVO: modal de pedido/oferecido
+  // NOVO: modal de pedido / oferecido
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
   const [editingRequest, setEditingRequest] = useState(null);
+  const [requestForm, setRequestForm] = useState({
+    type: 'pedido',
+    client_name: '',
+    client_contact: '',
+    brand: '',
+    model: '',
+    price_min: '',
+    price_max: '',
+    lead_date: new Date().toISOString().slice(0, 10),
+    lead_source: '',
+    notes: '',
+    body_type: '',
+    fuel: '',
+    transmission: '',
+    year_min: '',
+    year_max: '',
+    year_exact: '',
+  });
 
   // inclui plate no estado do novo carro
   const [newCar, setNewCar] = useState({
@@ -265,15 +290,16 @@ const AdminDashboard = () => {
   const fileInputRef = useRef(null);
   const navigate = useNavigate();
 
+  // modal gestão a partir da Matriz
+  const [isGestaoOpen, setIsGestaoOpen] = useState(false);
+  const [selectedCar, setSelectedCar] = useState(null);
+
   // filtros (VEÍCULOS)
   const [carSearch, setCarSearch] = useState('');
   const [brandFilter, setBrandFilter] = useState('');
 
-  const [selectedCar, setSelectedCar] = useState(null);
-  const [isGestaoOpen, setIsGestaoOpen] = useState(false);
-
   const carOptions = {
-    transmissions: ['Automático', 'Manual'],
+    transmissions: ['Automático', 'Manual', 'CVT'],
     bodyTypes: ['SUV', 'Sedan', 'Hatch', 'Picape', 'Esportivo', 'Outro'],
     fuels: ['Flex', 'Gasolina', 'Diesel', 'Elétrico', 'Híbrido'],
     colors: [
@@ -296,6 +322,95 @@ const AdminDashboard = () => {
     'Descartado',
   ];
 
+  // ======== FUNÇÕES DE MATCH (Pedidos x Carros) ========
+  const normalize = (s = '') =>
+    String(s || '')
+      .trim()
+      .toLowerCase();
+
+  const doesRequestMatchCar = (req, car) => {
+    if (!req || !car) return false;
+
+    // só vamos fazer match automático de PEDIDO -> CARRO
+    if (req.type !== 'pedido') return false;
+
+    const rBrand = normalize(req.brand);
+    const rModel = normalize(req.model);
+    const rBody = normalize(req.body_type);
+    const rFuel = normalize(req.fuel);
+    const rTrans = normalize(req.transmission);
+
+    const cBrand = normalize(car.brand);
+    const cModel = normalize(car.model);
+    const cBody = normalize(car.body_type);
+    const cFuel = normalize(car.fuel);
+    const cTrans = normalize(car.transmission);
+
+    // marca
+    if (rBrand && !cBrand.includes(rBrand)) return false;
+    // modelo
+    if (rModel && !cModel.includes(rModel)) return false;
+    // carroceria
+    if (rBody && cBody && rBody !== cBody) return false;
+    // combustível
+    if (rFuel && cFuel && rFuel !== cFuel) return false;
+    // câmbio
+    if (rTrans && cTrans && rTrans !== cTrans) return false;
+
+    // preço
+    const carPrice = Number(car.price || 0);
+    if (req.price_min && carPrice < Number(req.price_min)) return false;
+    if (req.price_max && carPrice > Number(req.price_max)) return false;
+
+    // ano
+    const carYear = Number(car.year || 0);
+    if (req.year_min && carYear < Number(req.year_min)) return false;
+    if (req.year_max && carYear > Number(req.year_max)) return false;
+
+    return true;
+  };
+
+  const autoMatchRequests = async (carsList, requestsList) => {
+    if (!Array.isArray(carsList) || !Array.isArray(requestsList)) return;
+
+    const updates = [];
+
+    for (const req of requestsList) {
+      if (req.type !== 'pedido') continue;
+      // se já está com match gravado, pula
+      if (req.matched_car_id) continue;
+
+      // tenta achar 1 carro que atenda
+      const foundCar = carsList.find((car) => doesRequestMatchCar(req, car));
+
+      if (foundCar) {
+        updates.push({
+          id: req.id,
+          patch: { matched_car_id: foundCar.id },
+          car: foundCar,
+        });
+      }
+    }
+
+    // dispara updates
+    for (const up of updates) {
+      await updateClientRequest(up.id, {
+        matched_car_id: up.car.id,
+      });
+      toast({
+        title: 'Novo match encontrado!',
+        description: `O pedido foi atendido pelo veículo ${up.car.brand} ${up.car.model}`,
+      });
+    }
+
+    if (updates.length > 0) {
+      // refetch pra sincronizar
+      const fresh = await getClientRequests();
+      setClientRequests(fresh || []);
+    }
+  };
+
+  // ========= CARREGAR DADOS =========
   const sortCarsActiveFirst = (list = []) => {
     return [...list].sort((a, b) => {
       const aActive = a.is_available === false ? 0 : 1;
@@ -316,7 +431,7 @@ const AdminDashboard = () => {
           testimonialsData,
           leadsData,
           platformsData,
-          clientRequestsData,
+          requestsData,
         ] = await Promise.all([
           getCars(),
           getTestimonials(),
@@ -324,12 +439,16 @@ const AdminDashboard = () => {
           getPlatforms(),
           getClientRequests(),
         ]);
-        setCars(sortCarsActiveFirst(carsData || []));
+
+        const orderedCars = sortCarsActiveFirst(carsData || []);
+        setCars(orderedCars);
         setTestimonials(testimonialsData || []);
         setLeads(leadsData || []);
         setPlatforms(platformsData || []);
-        setClientRequests(clientRequestsData || []);
-        clientRequestsRef.current = clientRequestsData || [];
+        setClientRequests(requestsData || []);
+
+        // tenta fazer match automático
+        await autoMatchRequests(orderedCars, requestsData || []);
       } catch (err) {
         console.error('Erro fetchAllData:', err);
         setCars([]);
@@ -337,7 +456,6 @@ const AdminDashboard = () => {
         setLeads([]);
         setPlatforms([]);
         setClientRequests([]);
-        clientRequestsRef.current = [];
       } finally {
         if (opts.showLoading) setLoading(false);
       }
@@ -349,10 +467,11 @@ const AdminDashboard = () => {
     fetchAllData();
   }, [fetchAllData]);
 
+  // ========= LEADS =========
   const handleStatusChange = async (leadId, newStatus) => {
     await updateLead(leadId, { status: newStatus });
     toast({ title: 'Status do lead atualizado!' });
-    fetchAllData();
+    fetchAllData({ showLoading: false });
   };
 
   const handleDeleteLead = async () => {
@@ -360,7 +479,7 @@ const AdminDashboard = () => {
     await deleteLead(leadToDelete);
     toast({ title: 'Lead removido com sucesso.' });
     setLeadToDelete(null);
-    fetchAllData();
+    fetchAllData({ showLoading: false });
   };
 
   const leadsForCSV = (leadsData) =>
@@ -381,11 +500,13 @@ const AdminDashboard = () => {
     navigate('/admin');
   };
 
+  // input genérico
   const handleInputChange = (e, setStateFunc) => {
     const { name, type, checked, value } = e.target;
     const finalValue = type === 'checkbox' ? checked : value;
     setStateFunc((prev) => ({ ...prev, [name]: finalValue }));
   };
+
   const handleNewCarInputChange = useCallback(
     (e) => handleInputChange(e, setNewCar),
     []
@@ -399,14 +520,18 @@ const AdminDashboard = () => {
     []
   );
 
+  // ========= DESTAQUES =========
   const handleToggleFeatured = async (carId, currentStatus) => {
     await updateCar(carId, { is_featured: !currentStatus });
     toast({
-      title: `Veículo ${!currentStatus ? 'adicionado aos' : 'removido dos'} destaques!`,
+      title: `Veículo ${
+        !currentStatus ? 'adicionado aos' : 'removido dos'
+      } destaques!`,
     });
-    fetchAllData();
+    fetchAllData({ showLoading: false });
   };
 
+  // ========= TESTIMONIALS =========
   const handleAddTestimonial = async (e) => {
     e.preventDefault();
     await addTestimonial(newTestimonial);
@@ -416,14 +541,15 @@ const AdminDashboard = () => {
       testimonial_text: '',
       car_sold: '',
     });
-    fetchAllData();
+    fetchAllData({ showLoading: false });
   };
   const handleDeleteTestimonial = async (id) => {
     await deleteTestimonial(id);
     toast({ title: 'Depoimento removido.' });
-    fetchAllData();
+    fetchAllData({ showLoading: false });
   };
 
+  // ========= FOTOS =========
   const handlePhotoUpload = (e) => {
     const files = Array.from(e.target.files || []);
     setPhotosToUpload((prev) => [...prev, ...files]);
@@ -442,26 +568,7 @@ const AdminDashboard = () => {
     }
   };
 
-  // match no front
-  const findMatchesForCar = useCallback((car, requests) => {
-    if (!car || !Array.isArray(requests)) return [];
-    const price = Number(car.price || 0);
-    const brand = (car.brand || '').toLowerCase();
-    const model = (car.model || '').toLowerCase();
-
-    return requests.filter((r) => {
-      if (r.type !== 'pedido') return false;
-
-      if (r.brand && r.brand.toLowerCase() !== brand) return false;
-      if (r.model && r.model.toLowerCase() !== model) return false;
-
-      if (r.price_min && price && price < Number(r.price_min)) return false;
-      if (r.price_max && price && price > Number(r.price_max)) return false;
-
-      return true;
-    });
-  }, []);
-
+  // ========= ADD CAR =========
   const handleAddCar = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -501,20 +608,8 @@ const AdminDashboard = () => {
           variant: 'destructive',
         });
       } else {
-        // ALERTA DE MATCH AQUI
-        if (addedCar) {
-          const matches = findMatchesForCar(addedCar, clientRequestsRef.current);
-          if (matches.length > 0) {
-            toast({
-              title: '🚨 Match encontrado!',
-              description: `${matches.length} pedido(s) combinam com ${addedCar.brand} ${addedCar.model}. Veja em "Pedidos / Oferecidos".`,
-            });
-          }
-        }
-
-        setCars((prevCars) =>
-          sortCarsActiveFirst([...(prevCars || []), addedCar])
-        );
+        const newList = sortCarsActiveFirst([...(cars || []), addedCar]);
+        setCars(newList);
         setNewCar({
           brand: '',
           model: '',
@@ -535,6 +630,9 @@ const AdminDashboard = () => {
         setMainPhotoIndex(0);
         if (fileInputRef.current) fileInputRef.current.value = '';
         toast({ title: 'Veículo adicionado!' });
+
+        // tenta achar match pros pedidos existentes
+        await autoMatchRequests([addedCar], clientRequests);
       }
     } catch (err) {
       console.error('Erro handleAddCar:', err);
@@ -548,6 +646,7 @@ const AdminDashboard = () => {
     }
   };
 
+  // ========= EDIT CAR =========
   const handleEditCarClick = (car) => {
     setPhotosToUpload([]);
     setPhotosToDelete([]);
@@ -618,6 +717,9 @@ const AdminDashboard = () => {
         setIsEditDialogOpen(false);
         setEditingCar(null);
         toast({ title: 'Veículo atualizado!' });
+
+        // ao editar, também podemos tentar match
+        await autoMatchRequests([finalCarData], clientRequests);
       }
     } catch (err) {
       console.error('Erro handleUpdateCar:', err);
@@ -631,6 +733,7 @@ const AdminDashboard = () => {
     }
   };
 
+  // ========= DELETE CAR =========
   const handleDeleteCar = async (id) => {
     setLoading(true);
     try {
@@ -666,11 +769,12 @@ const AdminDashboard = () => {
     }
   };
 
-  // --- VENDAS: abrir modal
+  // ========= VENDA =========
   const openSaleDialog = (car) => {
     setCarToSell(car);
     setSaleForm({
-      platform_id: car.sold_platform_id || (platforms[0] && platforms[0].id) || '',
+      platform_id:
+        car.sold_platform_id || (platforms[0] && platforms[0].id) || '',
       sale_price: car.sale_price || '',
       sale_date: car.sold_at
         ? car.sold_at.slice(0, 10)
@@ -685,7 +789,7 @@ const AdminDashboard = () => {
     setSaleForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  // --- FILTROS (Admin - VEÍCULOS) — inclui PLACA
+  // ========= FILTROS VEÍCULOS =========
   const brandOptions = useMemo(() => {
     const brands = Array.from(
       new Set(
@@ -722,24 +826,17 @@ const AdminDashboard = () => {
     });
   }, [cars, carSearch, brandFilter]);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex justify-center items-center">
-        <div className="text-yellow-500 text-xl animate-pulse">
-          Carregando painel...
-        </div>
-      </div>
-    );
-  }
-
-  const estoqueAtualCount = (cars || []).filter(
-    (c) => c.is_sold !== true && c.is_available !== false
+  // ===================== PEDIDOS / OFERECIDOS =====================
+  const totalRequests = clientRequests.length;
+  const totalPedidos = clientRequests.filter((r) => r.type === 'pedido').length;
+  const totalOferecidos = clientRequests.filter(
+    (r) => r.type === 'oferecido'
   ).length;
-  const vendidosCount = (cars || []).filter((c) => c.is_sold === true).length;
+  const totalComMatch = clientRequests.filter((r) => r.matched_car_id).length;
 
-  // ---------- FUNÇÕES PEDIDOS/OFER
   const openNewRequestModal = () => {
-    setEditingRequest({
+    setEditingRequest(null);
+    setRequestForm({
       type: 'pedido',
       client_name: '',
       client_contact: '',
@@ -750,124 +847,123 @@ const AdminDashboard = () => {
       lead_date: new Date().toISOString().slice(0, 10),
       lead_source: '',
       notes: '',
-      matched_car_id: null,
+      body_type: '',
+      fuel: '',
+      transmission: '',
+      year_min: '',
+      year_max: '',
+      year_exact: '',
     });
     setIsRequestModalOpen(true);
   };
 
-  const openEditRequestModal = (row) => {
-    setEditingRequest({
-      ...row,
-      lead_date:
-        row.lead_date ||
-        (row.created_at ? row.created_at.slice(0, 10) : new Date().toISOString().slice(0, 10)),
+  const openEditRequestModal = (req) => {
+    setEditingRequest(req);
+    setRequestForm({
+      type: req.type || 'pedido',
+      client_name: req.client_name || '',
+      client_contact: req.client_contact || '',
+      brand: req.brand || '',
+      model: req.model || '',
+      price_min: req.price_min || '',
+      price_max: req.price_max || '',
+      lead_date: (req.lead_date || '').slice(0, 10) || '',
+      lead_source: req.lead_source || '',
+      notes: req.notes || '',
+      body_type: req.body_type || '',
+      fuel: req.fuel || '',
+      transmission: req.transmission || '',
+      year_min: req.year_min || '',
+      year_max: req.year_max || '',
+      year_exact: req.year_exact || '',
     });
     setIsRequestModalOpen(true);
   };
 
-  const saveRequest = async () => {
-    if (!editingRequest) return;
-    // se tiver faixa de valor digitada direto, deixar
-    const payload = {
-      type: editingRequest.type || 'pedido',
-      client_name: editingRequest.client_name || '',
-      client_contact: editingRequest.client_contact || '',
-      brand: editingRequest.brand || '',
-      model: editingRequest.model || '',
-      price_min: editingRequest.price_min ? Number(editingRequest.price_min) : null,
-      price_max: editingRequest.price_max ? Number(editingRequest.price_max) : null,
-      lead_date: editingRequest.lead_date || new Date().toISOString().slice(0, 10),
-      lead_source: editingRequest.lead_source || '',
-      notes: editingRequest.notes || '',
-      matched_car_id: editingRequest.matched_car_id || null,
-    };
-
-    if (editingRequest.id) {
-      const { error } = await updateClientRequest(editingRequest.id, payload);
-      if (error) {
-        toast({
-          title: 'Erro ao atualizar pedido',
-          description: error.message,
-          variant: 'destructive',
-        });
-        return;
-      }
-      toast({ title: 'Pedido atualizado!' });
-    } else {
-      const { error } = await addClientRequest(payload);
-      if (error) {
-        toast({
-          title: 'Erro ao criar pedido',
-          description: error.message,
-          variant: 'destructive',
-        });
-        return;
-      }
-      toast({ title: 'Pedido criado!' });
-    }
-
-    const list = await getClientRequests();
-    setClientRequests(list);
-    clientRequestsRef.current = list;
-    setIsRequestModalOpen(false);
-    setEditingRequest(null);
+  const handleRequestFormChange = (e) => {
+    const { name, value } = e.target;
+    setRequestForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  // rodar match manual: percorre todos pedidos e tenta casar com carros do estoque
-  const runMatchNow = async () => {
-    const reqs = clientRequestsRef.current || [];
-    const carsList = cars || [];
-    let totalMatched = 0;
-
-    for (const r of reqs) {
-      if (r.type !== 'pedido') continue;
-
-      const brand = (r.brand || '').toLowerCase();
-      const model = (r.model || '').toLowerCase();
-      const min = r.price_min ? Number(r.price_min) : null;
-      const max = r.price_max ? Number(r.price_max) : null;
-
-      const found = carsList.find((c) => {
-        const cBrand = (c.brand || '').toLowerCase();
-        const cModel = (c.model || '').toLowerCase();
-        const cPrice = Number(c.price || 0);
-
-        if (brand && cBrand !== brand) return false;
-        if (model && cModel !== model) return false;
-        if (min && cPrice < min) return false;
-        if (max && cPrice > max) return false;
-        if (c.is_sold) return false;
-
-        return true;
-      });
-
-      if (found) {
-        await updateClientRequest(r.id, { matched_car_id: found.id });
-        totalMatched++;
-      } else {
-        // se quiser limpar match quando não achar mais
-        if (r.matched_car_id) {
-          await updateClientRequest(r.id, { matched_car_id: null });
+  const handleSaveRequest = async () => {
+    try {
+      if (editingRequest) {
+        const { error } = await updateClientRequest(editingRequest.id, {
+          ...requestForm,
+        });
+        if (error) {
+          toast({
+            title: 'Erro ao atualizar pedido/oferecido',
+            description: String(error.message || error),
+            variant: 'destructive',
+          });
+          return;
         }
+        toast({ title: 'Registro atualizado!' });
+      } else {
+        const { error } = await addClientRequest({ ...requestForm });
+        if (error) {
+          toast({
+            title: 'Erro ao salvar pedido/oferecido',
+            description: String(error.message || error),
+            variant: 'destructive',
+          });
+          return;
+        }
+        toast({ title: 'Registro criado!' });
       }
-    }
+      setIsRequestModalOpen(false);
+      const fresh = await getClientRequests();
+      setClientRequests(fresh || []);
 
-    const list = await getClientRequests();
-    setClientRequests(list);
-    clientRequestsRef.current = list;
-
-    if (totalMatched > 0) {
+      // tenta match pra este registro
+      if (!editingRequest) {
+        // usando carros atuais
+        await autoMatchRequests(cars, fresh || []);
+      }
+    } catch (err) {
+      console.error(err);
       toast({
-        title: 'Match concluído',
-        description: `${totalMatched} pedido(s) encontrados.`,
-      });
-    } else {
-      toast({
-        title: 'Nenhum match agora',
-        description: 'Tente cadastrar um veículo com mesma marca/modelo.',
+        title: 'Erro ao salvar pedido/oferecido',
+        description: String(err),
+        variant: 'destructive',
       });
     }
   };
+
+  const handleDeleteRequest = async (id) => {
+    const { error } = await deleteClientRequest(id);
+    if (error) {
+      toast({
+        title: 'Erro ao deletar',
+        description: String(error),
+        variant: 'destructive',
+      });
+      return;
+    }
+    toast({ title: 'Registro removido.' });
+    const fresh = await getClientRequests();
+    setClientRequests(fresh || []);
+  };
+
+  // ========= LOADING =========
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex justify-center items-center">
+        <div className="text-yellow-500 text-xl animate-pulse">
+          Carregando painel...
+        </div>
+      </div>
+    );
+  }
+
+  // contagens
+  const estoqueAtualCount = (cars || []).filter(
+    (c) => c.is_sold !== true && c.is_available !== false
+  ).length;
+  const vendidosCount = (cars || []).filter(
+    (c) => c.is_sold === true
+  ).length;
 
   return (
     <div className="relative isolate min-h-screen bg-gray-50 text-gray-800 pt-28">
@@ -887,7 +983,8 @@ const AdminDashboard = () => {
             </Button>
           </div>
 
-          <div className="flex space-x-4 mb-8 border-b overflow-x-auto">
+          {/* TABS */}
+          <div className="flex flex-wrap space-x-4 mb-8 border-b">
             <button
               className={`px-4 py-2 font-semibold ${
                 activeTab === 'leads'
@@ -896,7 +993,7 @@ const AdminDashboard = () => {
               }`}
               onClick={() => setActiveTab('leads')}
             >
-              <Users className="inline mr-2" /> Leads
+              <MessageSquare className="inline mr-2" /> Leads
             </button>
             <button
               className={`px-4 py-2 font-semibold ${
@@ -948,7 +1045,6 @@ const AdminDashboard = () => {
             >
               <BarChart2 className="inline mr-2" /> Relatórios
             </button>
-            {/* NOVA ABA */}
             <button
               className={`px-4 py-2 font-semibold ${
                 activeTab === 'requests'
@@ -966,7 +1062,8 @@ const AdminDashboard = () => {
             <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-xl border">
               <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
                 <div className="text-lg font-bold">
-                  Exibindo <span className="text-yellow-500">{leads.length}</span> lead(s)
+                  Exibindo{' '}
+                  <span className="text-yellow-500">{leads.length}</span> lead(s)
                 </div>
                 <div className="flex flex-wrap items-center justify-center gap-4">
                   <div className="flex gap-2 items-center">
@@ -979,7 +1076,10 @@ const AdminDashboard = () => {
                       name="startDate"
                       value={leadFilters.startDate}
                       onChange={(e) =>
-                        setLeadFilters((f) => ({ ...f, startDate: e.target.value }))
+                        setLeadFilters((f) => ({
+                          ...f,
+                          startDate: e.target.value,
+                        }))
                       }
                       className="bg-white border-gray-300 rounded-md p-2 h-10 text-sm"
                     />
@@ -994,7 +1094,10 @@ const AdminDashboard = () => {
                       name="endDate"
                       value={leadFilters.endDate}
                       onChange={(e) =>
-                        setLeadFilters((f) => ({ ...f, endDate: e.target.value }))
+                        setLeadFilters((f) => ({
+                          ...f,
+                          endDate: e.target.value,
+                        }))
                       }
                       className="bg-white border-gray-300 rounded-md p-2 h-10 text-sm"
                     />
@@ -1040,7 +1143,9 @@ const AdminDashboard = () => {
                             {lead.lead_type}
                           </span>
                         </p>
-                        <p className="text-gray-600 truncate">{lead.client_contact}</p>
+                        <p className="text-gray-600 truncate">
+                          {lead.client_contact}
+                        </p>
                         {lead.cars && lead.cars.slug && (
                           <p className="text-sm mt-2">
                             Interesse:{' '}
@@ -1057,7 +1162,9 @@ const AdminDashboard = () => {
                       <div className="flex items-center gap-1">
                         <select
                           value={lead.status}
-                          onChange={(e) => handleStatusChange(lead.id, e.target.value)}
+                          onChange={(e) =>
+                            handleStatusChange(lead.id, e.target.value)
+                          }
                           className="bg-gray-100 border-gray-300 rounded p-2 text-sm flex-shrink-0"
                         >
                           {statusOptions.map((s) => (
@@ -1068,7 +1175,9 @@ const AdminDashboard = () => {
                         </select>
                         <AlertDialog
                           open={leadToDelete === lead.id}
-                          onOpenChange={(isOpen) => !isOpen && setLeadToDelete(null)}
+                          onOpenChange={(isOpen) =>
+                            !isOpen && setLeadToDelete(null)
+                          }
                         >
                           <AlertDialogTrigger asChild>
                             <Button
@@ -1107,7 +1216,8 @@ const AdminDashboard = () => {
             <>
               <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-8 mb-6 shadow-xl border">
                 <h2 className="text-2xl font-semibold mb-6 flex items-center">
-                  <PlusCircle className="mr-3 text-yellow-500" /> Adicionar Novo Veículo
+                  <PlusCircle className="mr-3 text-yellow-500" /> Adicionar Novo
+                  Veículo
                 </h2>
                 <form onSubmit={handleAddCar} className="space-y-6">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -1120,9 +1230,11 @@ const AdminDashboard = () => {
                   <div>
                     <Button
                       type="button"
-                      onClick={() => fileInputRef.current && fileInputRef.current.click()}
+                      onClick={() =>
+                        fileInputRef.current && fileInputRef.current.click()
+                      }
                     >
-                      <ImageIcon className="mr-2 h-4 w-4" /> Adicionar Fotos
+                      <Download className="mr-2 h-4 w-4" /> Adicionar Fotos
                     </Button>
                     <input
                       type="file"
@@ -1143,7 +1255,9 @@ const AdminDashboard = () => {
                             src={URL.createObjectURL(file)}
                             alt={`Preview ${index}`}
                             className={`h-24 w-24 object-cover rounded-lg ${
-                              mainPhotoIndex === index ? 'ring-2 ring-yellow-500' : ''
+                              mainPhotoIndex === index
+                                ? 'ring-2 ring-yellow-500'
+                                : ''
                             }`}
                           />
                           {mainPhotoIndex === index && (
@@ -1175,6 +1289,7 @@ const AdminDashboard = () => {
                 </form>
               </div>
 
+              {/* NOVO BLOCO: Estoque / Vendidos */}
               <div className="flex justify-between items-center mb-6">
                 <div>
                   <h2 className="text-2xl font-semibold flex items-center">
@@ -1200,6 +1315,7 @@ const AdminDashboard = () => {
                 </Button>
               </div>
 
+              {/* CONTROLES DE FILTRO — inclui PLACA */}
               <div className="flex flex-col md:flex-row gap-3 items-center mb-4">
                 <input
                   placeholder="Pesquisar marca, modelo ou PLACA..."
@@ -1210,7 +1326,9 @@ const AdminDashboard = () => {
                 <select
                   value={brandFilter || 'ALL'}
                   onChange={(e) =>
-                    setBrandFilter(e.target.value === 'ALL' ? '' : e.target.value)
+                    setBrandFilter(
+                      e.target.value === 'ALL' ? '' : e.target.value
+                    )
                   }
                   className="w-full md:w-1/4 p-2 border rounded"
                 >
@@ -1279,7 +1397,10 @@ const AdminDashboard = () => {
                             }).format(car.price || 0)}
                           </p>
                           <p className="text-xs text-gray-600 mt-1">
-                            Placa: <span className="font-medium">{car.plate || '-'}</span>
+                            Placa:{' '}
+                            <span className="font-medium">
+                              {car.plate || '-'}
+                            </span>
                           </p>
 
                           {car.is_available === false && (
@@ -1290,7 +1411,9 @@ const AdminDashboard = () => {
                                   return 'Vendido -';
                                 }
 
-                                const clean = String(raw).replace('T', ' ').trim();
+                                const clean = String(raw)
+                                  .replace('T', ' ')
+                                  .trim();
                                 const y = clean.slice(0, 4);
                                 const m = clean.slice(5, 7);
                                 const d = clean.slice(8, 10);
@@ -1325,7 +1448,9 @@ const AdminDashboard = () => {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => handleToggleFeatured(car.id, car.is_featured)}
+                          onClick={() =>
+                            handleToggleFeatured(car.id, car.is_featured)
+                          }
                           title={
                             car.is_featured
                               ? 'Remover dos destaques'
@@ -1377,7 +1502,7 @@ const AdminDashboard = () => {
                               onClick={() =>
                                 unmarkCarAsSold(car.id, {
                                   deleteAllSales: true,
-                                }).then(() => fetchAllData())
+                                }).then(() => fetchAllData({ showLoading: false }))
                               }
                               title="Reverter venda"
                             >
@@ -1465,7 +1590,8 @@ const AdminDashboard = () => {
             <>
               <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-8 mb-12 shadow-xl border">
                 <h2 className="text-2xl font-semibold mb-6 flex items-center">
-                  <PlusCircle className="mr-3 text-yellow-500" /> Adicionar Novo Depoimento
+                  <PlusCircle className="mr-3 text-yellow-500" /> Adicionar Novo
+                  Depoimento
                 </h2>
                 <form onSubmit={handleAddTestimonial} className="space-y-6">
                   <input
@@ -1498,8 +1624,8 @@ const AdminDashboard = () => {
 
               <div>
                 <h2 className="text-2xl font-semibold mb-6 flex items-center">
-                  <MessageSquare className="mr-3 text-yellow-500" /> Depoimentos Cadastrados (
-                  {testimonials.length})
+                  <MessageSquare className="mr-3 text-yellow-500" /> Depoimentos
+                  Cadastrados ({testimonials.length})
                 </h2>
                 <div className="space-y-4">
                   {testimonials.map((item) => (
@@ -1509,7 +1635,9 @@ const AdminDashboard = () => {
                       className="bg-white rounded-2xl p-4 flex items-center justify-between shadow border"
                     >
                       <div>
-                        <p className="italic text-gray-600">"{item.testimonial_text}"</p>
+                        <p className="italic text-gray-600">
+                          "{item.testimonial_text}"
+                        </p>
                         <p className="font-bold mt-2 text-gray-800">
                           {item.client_name} -{' '}
                           <span className="text-sm font-normal text-gray-500">
@@ -1538,145 +1666,192 @@ const AdminDashboard = () => {
             </div>
           )}
 
-          {/* NOVA ABA: PEDIDOS / OFERECIDOS */}
+          {/* PEDIDOS / OFERECIDOS */}
           {activeTab === 'requests' && (
             <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-xl border">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+              <div className="flex items-center justify-between mb-6">
                 <div>
-                  <h2 className="text-2xl font-semibold text-gray-900 flex items-center gap-2">
-                    <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-yellow-400/20 text-yellow-500">
-                      <ClipboardList className="h-5 w-5" />
-                    </span>
+                  <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                    <ClipboardList className="text-yellow-500" />
                     Pedidos / Oferecidos
                   </h2>
-                  <p className="text-sm text-gray-500 mt-1">
-                    Registre quem pediu carro e quem ofereceu carro. Match é automático.
+                  <p className="text-sm text-gray-500">
+                    Registre quem pediu carro e quem ofereceu carro. Match é
+                    automático.
                   </p>
                 </div>
-                <div className="flex gap-3">
-                  <Button
-                    onClick={runMatchNow}
-                    variant="outline"
-                    className="flex items-center gap-2"
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                    Rodar match
-                  </Button>
-                  <Button
-                    onClick={openNewRequestModal}
-                    className="bg-yellow-400 text-black hover:bg-yellow-500"
-                  >
-                    + Novo
-                  </Button>
+                <Button
+                  className="bg-yellow-400 text-black hover:bg-yellow-500"
+                  onClick={openNewRequestModal}
+                >
+                  + Novo
+                </Button>
+              </div>
+
+              {/* cards */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div className="rounded-2xl border bg-white p-4">
+                  <p className="text-xs text-gray-500 uppercase tracking-wide">
+                    Total
+                  </p>
+                  <p className="text-3xl font-bold text-gray-900 mt-2">
+                    {totalRequests}
+                  </p>
+                </div>
+                <div className="rounded-2xl border bg-white p-4">
+                  <p className="text-xs text-gray-500 uppercase tracking-wide">
+                    Pedidos
+                  </p>
+                  <p className="text-3xl font-bold text-gray-900 mt-2">
+                    {totalPedidos}
+                  </p>
+                </div>
+                <div className="rounded-2xl border bg-white p-4">
+                  <p className="text-xs text-gray-500 uppercase tracking-wide">
+                    Oferecidos
+                  </p>
+                  <p className="text-3xl font-bold text-gray-900 mt-2">
+                    {totalOferecidos}
+                  </p>
+                </div>
+                <div className="rounded-2xl border bg-white p-4">
+                  <p className="text-xs text-gray-500 uppercase tracking-wide">
+                    Com match
+                  </p>
+                  <p className="text-3xl font-bold text-green-600 mt-2">
+                    {totalComMatch}
+                  </p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                <div className="bg-white rounded-xl border p-4 shadow-sm">
-                  <p className="text-xs uppercase text-gray-500">Total</p>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">{clientRequests.length}</p>
-                </div>
-                <div className="bg-white rounded-xl border p-4 shadow-sm">
-                  <p className="text-xs uppercase text-gray-500">Pedidos</p>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">
-                    {clientRequests.filter((r) => r.type === 'pedido').length}
-                  </p>
-                </div>
-                <div className="bg-white rounded-xl border p-4 shadow-sm">
-                  <p className="text-xs uppercase text-gray-500">Oferecidos</p>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">
-                    {clientRequests.filter((r) => r.type === 'oferecido').length}
-                  </p>
-                </div>
-                <div className="bg-white rounded-xl border p-4 shadow-sm">
-                  <p className="text-xs uppercase text-gray-500">Com Match</p>
-                  <p className="text-2xl font-bold text-emerald-600 mt-1">
-                    {clientRequests.filter((r) => r.matched_car_id).length}
-                  </p>
-                </div>
-              </div>
-
-              <div className="overflow-x-auto rounded-xl border bg-white">
-                <table className="min-w-full text-left text-sm">
-                  <thead className="bg-gray-50">
+              {/* tabela */}
+              <div className="overflow-x-auto rounded-2xl border">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
                     <tr>
-                      <th className="px-4 py-3">Tipo</th>
-                      <th className="px-4 py-3">Cliente</th>
-                      <th className="px-4 py-3">Contato</th>
-                      <th className="px-4 py-3">Marca/Modelo</th>
-                      <th className="px-4 py-3">Faixa Valor</th>
-                      <th className="px-4 py-3">Data</th>
-                      <th className="px-4 py-3">Origem</th>
-                      <th className="px-4 py-3 text-right">Ações</th>
+                      <th className="py-3 px-4">Tipo</th>
+                      <th className="py-3 px-4">Cliente</th>
+                      <th className="py-3 px-4">Contato</th>
+                      <th className="py-3 px-4">Marca/Modelo</th>
+                      <th className="py-3 px-4">Carroceria</th>
+                      <th className="py-3 px-4">Faixa Valor</th>
+                      <th className="py-3 px-4">Ano</th>
+                      <th className="py-3 px-4">Data</th>
+                      <th className="py-3 px-4">Origem</th>
+                      <th className="py-3 px-4 text-right">Ações</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {clientRequests.map((r) => (
-                      <tr
-                        key={r.id}
-                        className={r.matched_car_id ? 'bg-emerald-50/60' : 'hover:bg-gray-50'}
-                      >
-                        <td className="px-4 py-2">
-                          <span
-                            className={`text-xs rounded-full px-2 py-1 ${
-                              r.type === 'pedido'
-                                ? 'bg-yellow-100 text-yellow-700'
-                                : 'bg-slate-100 text-slate-700'
-                            }`}
-                          >
-                            {r.type === 'pedido' ? 'Pedido' : 'Oferecido'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2 text-sm text-gray-800">
-                          {r.client_name || '-'}
-                        </td>
-                        <td className="px-4 py-2 text-sm text-gray-800">
-                          {r.client_contact || '-'}
-                        </td>
-                        <td className="px-4 py-2 text-sm text-gray-800">
-                          {(r.brand || '-') + ' ' + (r.model || '')}
-                        </td>
-                        <td className="px-4 py-2 text-sm text-gray-800">
-                          {r.price_min || r.price_max
-                            ? `R$ ${r.price_min || 0} - R$ ${r.price_max || 0}`
-                            : '-'}
-                        </td>
-                        <td className="px-4 py-2 text-sm text-gray-800">
-                          {r.lead_date || r.created_at?.slice(0, 10) || '-'}
-                        </td>
-                        <td className="px-4 py-2 text-sm text-gray-800">
-                          {r.lead_source || '-'}
-                        </td>
-                        <td className="px-4 py-2 text-right">
-                          <div className="flex gap-2 justify-end">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => openEditRequestModal(r)}
+                    {clientRequests.map((req) => {
+                      const hasMatch = !!req.matched_car_id;
+                      return (
+                        <tr
+                          key={req.id}
+                          className="border-b last:border-0 hover:bg-gray-50/50 cursor-pointer"
+                          onClick={() => openEditRequestModal(req)}
+                        >
+                          <td className="py-3 px-4">
+                            <span
+                              className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${
+                                req.type === 'pedido'
+                                  ? 'bg-yellow-100 text-yellow-700'
+                                  : 'bg-blue-100 text-blue-700'
+                              }`}
                             >
-                              <Edit className="h-4 w-4 text-blue-500" />
-                            </Button>
+                              {req.type === 'pedido' ? 'Pedido' : 'Oferecido'}
+                              {hasMatch && (
+                                <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
+                              )}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            {req.client_name || '—'}
+                          </td>
+                          <td className="py-3 px-4">
+                            {req.client_contact || '—'}
+                          </td>
+                          <td className="py-3 px-4">
+                            {(req.brand || '—') +
+                              (req.model ? ` ${req.model}` : '')}
+                          </td>
+                          <td className="py-3 px-4">
+                            {req.body_type || '—'}
+                          </td>
+                          <td className="py-3 px-4">
+                            {req.type === 'pedido' ? (
+                              <>
+                                {req.price_min
+                                  ? new Intl.NumberFormat('pt-BR', {
+                                      style: 'currency',
+                                      currency: 'BRL',
+                                    }).format(req.price_min)
+                                  : '—'}{' '}
+                                {req.price_max ? 'até' : ''}
+                                {req.price_max
+                                  ? ' ' +
+                                    new Intl.NumberFormat('pt-BR', {
+                                      style: 'currency',
+                                      currency: 'BRL',
+                                    }).format(req.price_max)
+                                  : ''}
+                              </>
+                            ) : req.price_max ? (
+                              new Intl.NumberFormat('pt-BR', {
+                                style: 'currency',
+                                currency: 'BRL',
+                              }).format(req.price_max)
+                            ) : (
+                              '—'
+                            )}
+                          </td>
+                          <td className="py-3 px-4">
+                            {req.type === 'pedido' ? (
+                              req.year_min || req.year_max ? (
+                                <>
+                                  {req.year_min || '—'}{' '}
+                                  {req.year_max ? `até ${req.year_max}` : ''}
+                                </>
+                              ) : (
+                                '—'
+                              )
+                            ) : req.year_exact ? (
+                              req.year_exact
+                            ) : (
+                              '—'
+                            )}
+                          </td>
+                          <td className="py-3 px-4">
+                            {req.lead_date
+                              ? new Date(req.lead_date).toLocaleDateString(
+                                  'pt-BR'
+                                )
+                              : '—'}
+                          </td>
+                          <td className="py-3 px-4">
+                            {req.lead_source || '—'}
+                          </td>
+                          <td className="py-3 px-4 text-right">
                             <Button
                               variant="ghost"
                               size="icon"
-                              onClick={async () => {
-                                await deleteClientRequest(r.id);
-                                const list = await getClientRequests();
-                                setClientRequests(list);
-                                clientRequestsRef.current = list;
-                                toast({ title: 'Removido.' });
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteRequest(req.id);
                               }}
                             >
-                              <Trash2 className="h-4 w-4 text-red-500" />
+                              <Trash2 className="h-5 w-5 text-red-500" />
                             </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                        </tr>
+                      );
+                    })}
                     {clientRequests.length === 0 && (
                       <tr>
-                        <td colSpan={8} className="px-4 py-10 text-center text-gray-400 text-sm">
-                          Nenhum pedido ou veículo oferecido ainda.
+                        <td
+                          className="py-6 px-4 text-center text-gray-400"
+                          colSpan={10}
+                        >
+                          Nenhum registro ainda.
                         </td>
                       </tr>
                     )}
@@ -1688,7 +1863,7 @@ const AdminDashboard = () => {
         </motion.div>
       </div>
 
-      {/* EDIT DIALOG (VEÍCULO) */}
+      {/* EDIT CAR DIALOG */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="bg-white text-gray-900">
           <DialogHeader>
@@ -1707,7 +1882,9 @@ const AdminDashboard = () => {
                 />
               </div>
               <div className="space-y-2">
-                <label className="font-medium text-sm text-gray-700">Fotos</label>
+                <label className="font-medium text-sm text-gray-700">
+                  Fotos
+                </label>
                 <div className="flex flex-wrap gap-4 p-2 bg-gray-100 rounded-lg min-h-[112px]">
                   {editingCar.photo_urls &&
                     editingCar.photo_urls.map((url, index) => (
@@ -1745,14 +1922,20 @@ const AdminDashboard = () => {
                 </div>
                 <Button
                   type="button"
-                  onClick={() => fileInputRef.current && fileInputRef.current.click()}
+                  onClick={() =>
+                    fileInputRef.current && fileInputRef.current.click()
+                  }
                   className="bg-transparent border border-yellow-500 text-yellow-500 hover:bg-yellow-500 hover:text-black text-xs px-3 py-1.5 h-auto"
                 >
-                  <ImageIcon className="mr-2 h-4 w-4" /> Adicionar
+                  <Download className="mr-2 h-4 w-4" /> Adicionar
                 </Button>
               </div>
               <DialogFooter className="pt-4">
-                <Button type="button" variant="ghost" onClick={() => setIsEditDialogOpen(false)}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setIsEditDialogOpen(false)}
+                >
                   Cancelar
                 </Button>
                 <Button
@@ -1776,7 +1959,9 @@ const AdminDashboard = () => {
           </DialogHeader>
           <form onSubmit={(e) => e.preventDefault()} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">Veículo</label>
+              <label className="block text-sm font-medium text-gray-700">
+                Veículo
+              </label>
               <div className="mt-1 text-sm">
                 {carToSell
                   ? `${carToSell.brand} ${carToSell.model} (${carToSell.year})`
@@ -1784,7 +1969,9 @@ const AdminDashboard = () => {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Plataforma</label>
+              <label className="block text-sm font-medium text-gray-700">
+                Plataforma
+              </label>
               <select
                 name="platform_id"
                 value={saleForm.platform_id}
@@ -1814,7 +2001,9 @@ const AdminDashboard = () => {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Data da venda</label>
+                <label className="block text-sm font-medium text-gray-700">
+                  Data da venda
+                </label>
                 <input
                   name="sale_date"
                   value={saleForm.sale_date}
@@ -1825,7 +2014,9 @@ const AdminDashboard = () => {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Notas (opcional)</label>
+              <label className="block text-sm font-medium text-gray-700">
+                Notas (opcional)
+              </label>
               <textarea
                 name="notes"
                 value={saleForm.notes}
@@ -1835,7 +2026,11 @@ const AdminDashboard = () => {
               />
             </div>
             <DialogFooter>
-              <Button type="button" variant="ghost" onClick={() => setSaleDialogOpen(false)}>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setSaleDialogOpen(false)}
+              >
                 Cancelar
               </Button>
               <Button
@@ -1859,7 +2054,7 @@ const AdminDashboard = () => {
                       });
                     } else {
                       toast({ title: 'Veículo marcado como vendido!' });
-                      await fetchAllData();
+                      await fetchAllData({ showLoading: false });
                       setSaleDialogOpen(false);
                       setCarToSell(null);
                     }
@@ -1881,170 +2076,268 @@ const AdminDashboard = () => {
         </DialogContent>
       </Dialog>
 
-      {/* MODAL PEDIDO / OFERECIDO */}
+      {/* MODAL PEDIDOS / OFERECIDOS */}
       <Dialog open={isRequestModalOpen} onOpenChange={setIsRequestModalOpen}>
-        <DialogContent className="bg-white text-gray-900">
+        <DialogContent className="bg-white text-gray-900 max-w-2xl">
           <DialogHeader>
             <DialogTitle>
-              {editingRequest && editingRequest.id ? 'Editar pedido' : 'Novo pedido/oferecido'}
+              {editingRequest ? 'Editar registro' : 'Novo pedido / oferecido'}
             </DialogTitle>
           </DialogHeader>
-          {editingRequest && (
-            <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-sm font-medium text-gray-700">Tipo</label>
-                  <select
-                    value={editingRequest.type || 'pedido'}
-                    onChange={(e) =>
-                      setEditingRequest((prev) => ({ ...prev, type: e.target.value }))
-                    }
-                    className="w-full border rounded px-3 py-2"
-                  >
-                    <option value="pedido">Pedido</option>
-                    <option value="oferecido">Oferecido</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-700">Data</label>
-                  <input
-                    type="date"
-                    value={
-                      editingRequest.lead_date ||
-                      new Date().toISOString().slice(0, 10)
-                    }
-                    onChange={(e) =>
-                      setEditingRequest((prev) => ({ ...prev, lead_date: e.target.value }))
-                    }
-                    className="w-full border rounded px-3 py-2"
-                  />
-                </div>
-              </div>
 
-              <div>
-                <label className="text-sm font-medium text-gray-700">Cliente</label>
-                <input
-                    value={editingRequest.client_name || ''}
-                    onChange={(e) =>
-                      setEditingRequest((prev) => ({ ...prev, client_name: e.target.value }))
-                    }
-                    className="w-full border rounded px-3 py-2"
-                    placeholder="Nome do cliente"
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700">Contato</label>
-                <input
-                  value={editingRequest.client_contact || ''}
-                  onChange={(e) =>
-                    setEditingRequest((prev) => ({ ...prev, client_contact: e.target.value }))
-                  }
-                  className="w-full border rounded px-3 py-2"
-                  placeholder="WhatsApp, telefone..."
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-sm font-medium text-gray-700">Marca</label>
-                  <input
-                    value={editingRequest.brand || ''}
-                    onChange={(e) =>
-                      setEditingRequest((prev) => ({ ...prev, brand: e.target.value }))
-                    }
-                    className="w-full border rounded px-3 py-2"
-                    placeholder="Ex.: BMW"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-700">Modelo</label>
-                  <input
-                    value={editingRequest.model || ''}
-                    onChange={(e) =>
-                      setEditingRequest((prev) => ({ ...prev, model: e.target.value }))
-                    }
-                    className="w-full border rounded px-3 py-2"
-                    placeholder="Ex.: X1"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                    <label className="text-sm font-medium text-gray-700">Valor mín. (R$)</label>
-                    <input
-                      type="number"
-                      value={editingRequest.price_min || ''}
-                      onChange={(e) =>
-                        setEditingRequest((prev) => ({ ...prev, price_min: e.target.value }))
-                      }
-                      className="w-full border rounded px-3 py-2"
-                    />
-                </div>
-                <div>
-                    <label className="text-sm font-medium text-gray-700">Valor máx. (R$)</label>
-                    <input
-                      type="number"
-                      value={editingRequest.price_max || ''}
-                      onChange={(e) =>
-                        setEditingRequest((prev) => ({ ...prev, price_max: e.target.value }))
-                      }
-                      className="w-full border rounded px-3 py-2"
-                    />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium text-gray-700">Origem</label>
-                <input
-                  value={editingRequest.lead_source || ''}
-                  onChange={(e) =>
-                    setEditingRequest((prev) => ({ ...prev, lead_source: e.target.value }))
-                  }
-                  className="w-full border rounded px-3 py-2"
-                  placeholder="Insta, site, whats..."
-                />
-              </div>
-
-              <div>
-                <label className="text-sm font-medium text-gray-700">Observações</label>
-                <textarea
-                  value={editingRequest.notes || ''}
-                  onChange={(e) =>
-                    setEditingRequest((prev) => ({ ...prev, notes: e.target.value }))
-                  }
-                  className="w-full border rounded px-3 py-2"
-                  rows={3}
-                />
-              </div>
-
-              {editingRequest.matched_car_id && (
-                <div className="bg-emerald-50 text-emerald-700 px-3 py-2 rounded text-sm">
-                  Este pedido já tem match com veículo ID: {editingRequest.matched_car_id}
-                </div>
-              )}
-
-              <DialogFooter className="pt-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => {
-                    setIsRequestModalOpen(false);
-                    setEditingRequest(null);
-                  }}
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  type="button"
-                  className="bg-yellow-400 text-black hover:bg-yellow-500"
-                  onClick={saveRequest}
-                >
-                  Salvar
-                </Button>
-              </DialogFooter>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[75vh] overflow-y-auto pr-2">
+            <div className="col-span-2 flex gap-3">
+              <label className="text-sm font-semibold text-gray-700">
+                Tipo
+              </label>
+              <select
+                name="type"
+                value={requestForm.type}
+                onChange={handleRequestFormChange}
+                className="border rounded-md px-3 py-2"
+              >
+                <option value="pedido">Pedido (procura carro)</option>
+                <option value="oferecido">Oferecido (tem o carro)</option>
+              </select>
             </div>
-          )}
+
+            <div>
+              <label className="text-sm font-semibold text-gray-700">
+                Cliente
+              </label>
+              <input
+                name="client_name"
+                value={requestForm.client_name}
+                onChange={handleRequestFormChange}
+                className="w-full border rounded-md px-3 py-2"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-semibold text-gray-700">
+                Contato
+              </label>
+              <input
+                name="client_contact"
+                value={requestForm.client_contact}
+                onChange={handleRequestFormChange}
+                className="w-full border rounded-md px-3 py-2"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-semibold text-gray-700">
+                Marca
+              </label>
+              <input
+                name="brand"
+                value={requestForm.brand}
+                onChange={handleRequestFormChange}
+                className="w-full border rounded-md px-3 py-2"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-semibold text-gray-700">
+                Modelo
+              </label>
+              <input
+                name="model"
+                value={requestForm.model}
+                onChange={handleRequestFormChange}
+                className="w-full border rounded-md px-3 py-2"
+              />
+            </div>
+
+            {/* NOVOS CAMPOS */}
+            <div>
+              <label className="text-sm font-semibold text-gray-700">
+                Carroceria
+              </label>
+              <select
+                name="body_type"
+                value={requestForm.body_type}
+                onChange={handleRequestFormChange}
+                className="w-full border rounded-md px-3 py-2"
+              >
+                <option value="">—</option>
+                {carOptions.bodyTypes.map((b) => (
+                  <option key={b} value={b}>
+                    {b}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-sm font-semibold text-gray-700">
+                Combustível
+              </label>
+              <select
+                name="fuel"
+                value={requestForm.fuel}
+                onChange={handleRequestFormChange}
+                className="w-full border rounded-md px-3 py-2"
+              >
+                <option value="">—</option>
+                {carOptions.fuels.map((f) => (
+                  <option key={f} value={f}>
+                    {f}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-sm font-semibold text-gray-700">
+                Câmbio
+              </label>
+              <select
+                name="transmission"
+                value={requestForm.transmission}
+                onChange={handleRequestFormChange}
+                className="w-full border rounded-md px-3 py-2"
+              >
+                <option value="">—</option>
+                {carOptions.transmissions.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* VALOR / ANO DEPENDENDO DO TIPO */}
+            {requestForm.type === 'pedido' ? (
+              <>
+                <div>
+                  <label className="text-sm font-semibold text-gray-700">
+                    Valor mín (R$)
+                  </label>
+                  <input
+                    name="price_min"
+                    value={requestForm.price_min}
+                    onChange={handleRequestFormChange}
+                    type="number"
+                    className="w-full border rounded-md px-3 py-2"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-semibold text-gray-700">
+                    Valor máx (R$)
+                  </label>
+                  <input
+                    name="price_max"
+                    value={requestForm.price_max}
+                    onChange={handleRequestFormChange}
+                    type="number"
+                    className="w-full border rounded-md px-3 py-2"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-semibold text-gray-700">
+                    Ano mín
+                  </label>
+                  <input
+                    name="year_min"
+                    value={requestForm.year_min}
+                    onChange={handleRequestFormChange}
+                    type="number"
+                    className="w-full border rounded-md px-3 py-2"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-semibold text-gray-700">
+                    Ano máx
+                  </label>
+                  <input
+                    name="year_max"
+                    value={requestForm.year_max}
+                    onChange={handleRequestFormChange}
+                    type="number"
+                    className="w-full border rounded-md px-3 py-2"
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <label className="text-sm font-semibold text-gray-700">
+                    Valor na mão (R$)
+                  </label>
+                  <input
+                    name="price_max"
+                    value={requestForm.price_max}
+                    onChange={handleRequestFormChange}
+                    type="number"
+                    className="w-full border rounded-md px-3 py-2"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-semibold text-gray-700">
+                    Ano exato
+                  </label>
+                  <input
+                    name="year_exact"
+                    value={requestForm.year_exact}
+                    onChange={handleRequestFormChange}
+                    type="number"
+                    className="w-full border rounded-md px-3 py-2"
+                  />
+                </div>
+              </>
+            )}
+
+            <div>
+              <label className="text-sm font-semibold text-gray-700">
+                Data
+              </label>
+              <input
+                name="lead_date"
+                value={requestForm.lead_date}
+                onChange={handleRequestFormChange}
+                type="date"
+                className="w-full border rounded-md px-3 py-2"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-semibold text-gray-700">
+                Origem
+              </label>
+              <input
+                name="lead_source"
+                value={requestForm.lead_source}
+                onChange={handleRequestFormChange}
+                className="w-full border rounded-md px-3 py-2"
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="text-sm font-semibold text-gray-700">
+                Observações
+              </label>
+              <textarea
+                name="notes"
+                value={requestForm.notes}
+                onChange={handleRequestFormChange}
+                rows={3}
+                className="w-full border rounded-md px-3 py-2"
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="pt-4">
+            <Button
+              variant="ghost"
+              onClick={() => setIsRequestModalOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              className="bg-yellow-400 text-black hover:bg-yellow-500"
+              onClick={handleSaveRequest}
+            >
+              Salvar
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

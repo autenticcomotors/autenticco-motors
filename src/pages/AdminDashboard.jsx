@@ -18,6 +18,7 @@ import {
   Image as ImageIcon,
   Check,
   Users,
+  RefreshCw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
@@ -225,6 +226,10 @@ const AdminDashboard = () => {
     car_sold: '',
   });
 
+  // NOVO: modal de pedido/oferecido
+  const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
+  const [editingRequest, setEditingRequest] = useState(null);
+
   // inclui plate no estado do novo carro
   const [newCar, setNewCar] = useState({
     brand: '',
@@ -264,7 +269,6 @@ const AdminDashboard = () => {
   const [carSearch, setCarSearch] = useState('');
   const [brandFilter, setBrandFilter] = useState('');
 
-  // (você já usava na Matriz, só estou declarando)
   const [selectedCar, setSelectedCar] = useState(null);
   const [isGestaoOpen, setIsGestaoOpen] = useState(false);
 
@@ -377,7 +381,6 @@ const AdminDashboard = () => {
     navigate('/admin');
   };
 
-  // input genérico (suporta checkbox)
   const handleInputChange = (e, setStateFunc) => {
     const { name, type, checked, value } = e.target;
     const finalValue = type === 'checkbox' ? checked : value;
@@ -439,7 +442,7 @@ const AdminDashboard = () => {
     }
   };
 
-  // match no front (além do trigger do banco)
+  // match no front
   const findMatchesForCar = useCallback((car, requests) => {
     if (!car || !Array.isArray(requests)) return [];
     const price = Number(car.price || 0);
@@ -729,11 +732,142 @@ const AdminDashboard = () => {
     );
   }
 
-  // contagens
   const estoqueAtualCount = (cars || []).filter(
     (c) => c.is_sold !== true && c.is_available !== false
   ).length;
   const vendidosCount = (cars || []).filter((c) => c.is_sold === true).length;
+
+  // ---------- FUNÇÕES PEDIDOS/OFER
+  const openNewRequestModal = () => {
+    setEditingRequest({
+      type: 'pedido',
+      client_name: '',
+      client_contact: '',
+      brand: '',
+      model: '',
+      price_min: '',
+      price_max: '',
+      lead_date: new Date().toISOString().slice(0, 10),
+      lead_source: '',
+      notes: '',
+      matched_car_id: null,
+    });
+    setIsRequestModalOpen(true);
+  };
+
+  const openEditRequestModal = (row) => {
+    setEditingRequest({
+      ...row,
+      lead_date:
+        row.lead_date ||
+        (row.created_at ? row.created_at.slice(0, 10) : new Date().toISOString().slice(0, 10)),
+    });
+    setIsRequestModalOpen(true);
+  };
+
+  const saveRequest = async () => {
+    if (!editingRequest) return;
+    // se tiver faixa de valor digitada direto, deixar
+    const payload = {
+      type: editingRequest.type || 'pedido',
+      client_name: editingRequest.client_name || '',
+      client_contact: editingRequest.client_contact || '',
+      brand: editingRequest.brand || '',
+      model: editingRequest.model || '',
+      price_min: editingRequest.price_min ? Number(editingRequest.price_min) : null,
+      price_max: editingRequest.price_max ? Number(editingRequest.price_max) : null,
+      lead_date: editingRequest.lead_date || new Date().toISOString().slice(0, 10),
+      lead_source: editingRequest.lead_source || '',
+      notes: editingRequest.notes || '',
+      matched_car_id: editingRequest.matched_car_id || null,
+    };
+
+    if (editingRequest.id) {
+      const { error } = await updateClientRequest(editingRequest.id, payload);
+      if (error) {
+        toast({
+          title: 'Erro ao atualizar pedido',
+          description: error.message,
+          variant: 'destructive',
+        });
+        return;
+      }
+      toast({ title: 'Pedido atualizado!' });
+    } else {
+      const { error } = await addClientRequest(payload);
+      if (error) {
+        toast({
+          title: 'Erro ao criar pedido',
+          description: error.message,
+          variant: 'destructive',
+        });
+        return;
+      }
+      toast({ title: 'Pedido criado!' });
+    }
+
+    const list = await getClientRequests();
+    setClientRequests(list);
+    clientRequestsRef.current = list;
+    setIsRequestModalOpen(false);
+    setEditingRequest(null);
+  };
+
+  // rodar match manual: percorre todos pedidos e tenta casar com carros do estoque
+  const runMatchNow = async () => {
+    const reqs = clientRequestsRef.current || [];
+    const carsList = cars || [];
+    let totalMatched = 0;
+
+    for (const r of reqs) {
+      if (r.type !== 'pedido') continue;
+
+      const brand = (r.brand || '').toLowerCase();
+      const model = (r.model || '').toLowerCase();
+      const min = r.price_min ? Number(r.price_min) : null;
+      const max = r.price_max ? Number(r.price_max) : null;
+
+      const found = carsList.find((c) => {
+        const cBrand = (c.brand || '').toLowerCase();
+        const cModel = (c.model || '').toLowerCase();
+        const cPrice = Number(c.price || 0);
+
+        if (brand && cBrand !== brand) return false;
+        if (model && cModel !== model) return false;
+        if (min && cPrice < min) return false;
+        if (max && cPrice > max) return false;
+        if (c.is_sold) return false;
+
+        return true;
+      });
+
+      if (found) {
+        await updateClientRequest(r.id, { matched_car_id: found.id });
+        totalMatched++;
+      } else {
+        // se quiser limpar match quando não achar mais
+        if (r.matched_car_id) {
+          await updateClientRequest(r.id, { matched_car_id: null });
+        }
+      }
+    }
+
+    const list = await getClientRequests();
+    setClientRequests(list);
+    clientRequestsRef.current = list;
+
+    if (totalMatched > 0) {
+      toast({
+        title: 'Match concluído',
+        description: `${totalMatched} pedido(s) encontrados.`,
+      });
+    } else {
+      toast({
+        title: 'Nenhum match agora',
+        description: 'Tente cadastrar um veículo com mesma marca/modelo.',
+      });
+    }
+  };
 
   return (
     <div className="relative isolate min-h-screen bg-gray-50 text-gray-800 pt-28">
@@ -1041,7 +1175,6 @@ const AdminDashboard = () => {
                 </form>
               </div>
 
-              {/* NOVO BLOCO: Estoque / Vendidos */}
               <div className="flex justify-between items-center mb-6">
                 <div>
                   <h2 className="text-2xl font-semibold flex items-center">
@@ -1067,7 +1200,6 @@ const AdminDashboard = () => {
                 </Button>
               </div>
 
-              {/* CONTROLES DE FILTRO — inclui PLACA */}
               <div className="flex flex-col md:flex-row gap-3 items-center mb-4">
                 <input
                   placeholder="Pesquisar marca, modelo ou PLACA..."
@@ -1421,38 +1553,24 @@ const AdminDashboard = () => {
                     Registre quem pediu carro e quem ofereceu carro. Match é automático.
                   </p>
                 </div>
-                <Button
-                  onClick={async () => {
-                    const payload = {
-                      type: 'pedido',
-                      client_name: 'Novo cliente',
-                      client_contact: '',
-                      lead_date: new Date().toISOString().slice(0, 10),
-                    };
-                    const { error } = await addClientRequest(payload);
-                    if (error) {
-                      toast({
-                        title: 'Erro ao criar pedido',
-                        description: error.message,
-                        variant: 'destructive',
-                      });
-                    } else {
-                      const list = await getClientRequests();
-                      setClientRequests(list);
-                      clientRequestsRef.current = list;
-                      toast({
-                        title: 'Pedido criado',
-                        description: 'Preencha os dados na lista.',
-                      });
-                    }
-                  }}
-                  className="bg-yellow-400 text-black hover:bg-yellow-500"
-                >
-                  + Novo
-                </Button>
+                <div className="flex gap-3">
+                  <Button
+                    onClick={runMatchNow}
+                    variant="outline"
+                    className="flex items-center gap-2"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    Rodar match
+                  </Button>
+                  <Button
+                    onClick={openNewRequestModal}
+                    className="bg-yellow-400 text-black hover:bg-yellow-500"
+                  >
+                    + Novo
+                  </Button>
+                </div>
               </div>
 
-              {/* cards de resumo */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                 <div className="bg-white rounded-xl border p-4 shadow-sm">
                   <p className="text-xs uppercase text-gray-500">Total</p>
@@ -1478,7 +1596,6 @@ const AdminDashboard = () => {
                 </div>
               </div>
 
-              {/* tabela */}
               <div className="overflow-x-auto rounded-xl border bg-white">
                 <table className="min-w-full text-left text-sm">
                   <thead className="bg-gray-50">
@@ -1500,93 +1617,59 @@ const AdminDashboard = () => {
                         className={r.matched_car_id ? 'bg-emerald-50/60' : 'hover:bg-gray-50'}
                       >
                         <td className="px-4 py-2">
-                          <select
-                            value={r.type || 'pedido'}
-                            onChange={async (e) => {
-                              await updateClientRequest(r.id, { type: e.target.value });
-                              const list = await getClientRequests();
-                              setClientRequests(list);
-                              clientRequestsRef.current = list;
-                            }}
+                          <span
                             className={`text-xs rounded-full px-2 py-1 ${
                               r.type === 'pedido'
                                 ? 'bg-yellow-100 text-yellow-700'
                                 : 'bg-slate-100 text-slate-700'
                             }`}
                           >
-                            <option value="pedido">Pedido</option>
-                            <option value="oferecido">Oferecido</option>
-                          </select>
+                            {r.type === 'pedido' ? 'Pedido' : 'Oferecido'}
+                          </span>
                         </td>
-                        <td className="px-4 py-2">
-                          <input
-                            className="bg-transparent border-none focus:outline-none focus:ring-0 text-sm w-40"
-                            value={r.client_name || ''}
-                            onChange={async (e) => {
-                              await updateClientRequest(r.id, { client_name: e.target.value });
-                            }}
-                          />
+                        <td className="px-4 py-2 text-sm text-gray-800">
+                          {r.client_name || '-'}
                         </td>
-                        <td className="px-4 py-2">
-                          <input
-                            className="bg-transparent border-none focus:outline-none focus:ring-0 text-sm w-36"
-                            value={r.client_contact || ''}
-                            onChange={async (e) => {
-                              await updateClientRequest(r.id, { client_contact: e.target.value });
-                            }}
-                          />
+                        <td className="px-4 py-2 text-sm text-gray-800">
+                          {r.client_contact || '-'}
                         </td>
-                        <td className="px-4 py-2">
-                          <div className="flex gap-2">
-                            <input
-                              className="bg-transparent border-none focus:outline-none focus:ring-0 text-sm w-20"
-                              placeholder="Marca"
-                              value={r.brand || ''}
-                              onChange={async (e) => {
-                                await updateClientRequest(r.id, { brand: e.target.value });
-                              }}
-                            />
-                            <input
-                              className="bg-transparent border-none focus:outline-none focus:ring-0 text-sm w-24"
-                              placeholder="Modelo"
-                              value={r.model || ''}
-                              onChange={async (e) => {
-                                await updateClientRequest(r.id, { model: e.target.value });
-                              }}
-                            />
-                          </div>
+                        <td className="px-4 py-2 text-sm text-gray-800">
+                          {(r.brand || '-') + ' ' + (r.model || '')}
                         </td>
-                        <td className="px-4 py-2 text-sm text-gray-700">
+                        <td className="px-4 py-2 text-sm text-gray-800">
                           {r.price_min || r.price_max
                             ? `R$ ${r.price_min || 0} - R$ ${r.price_max || 0}`
                             : '-'}
                         </td>
-                        <td className="px-4 py-2 text-sm text-gray-700">
+                        <td className="px-4 py-2 text-sm text-gray-800">
                           {r.lead_date || r.created_at?.slice(0, 10) || '-'}
                         </td>
-                        <td className="px-4 py-2 text-sm text-gray-700">
-                          <input
-                            className="bg-transparent border-none focus:outline-none focus:ring-0 text-sm w-28"
-                            placeholder="Origem"
-                            value={r.lead_source || ''}
-                            onChange={async (e) => {
-                              await updateClientRequest(r.id, { lead_source: e.target.value });
-                            }}
-                          />
+                        <td className="px-4 py-2 text-sm text-gray-800">
+                          {r.lead_source || '-'}
                         </td>
                         <td className="px-4 py-2 text-right">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={async () => {
-                              await deleteClientRequest(r.id);
-                              const list = await getClientRequests();
-                              setClientRequests(list);
-                              clientRequestsRef.current = list;
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4 text-red-500" />
-                          </Button>
+                          <div className="flex gap-2 justify-end">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => openEditRequestModal(r)}
+                            >
+                              <Edit className="h-4 w-4 text-blue-500" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={async () => {
+                                await deleteClientRequest(r.id);
+                                const list = await getClientRequests();
+                                setClientRequests(list);
+                                clientRequestsRef.current = list;
+                                toast({ title: 'Removido.' });
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4 text-red-500" />
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -1605,7 +1688,7 @@ const AdminDashboard = () => {
         </motion.div>
       </div>
 
-      {/* EDIT DIALOG (usa FormFields com PLACA) */}
+      {/* EDIT DIALOG (VEÍCULO) */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="bg-white text-gray-900">
           <DialogHeader>
@@ -1795,6 +1878,173 @@ const AdminDashboard = () => {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL PEDIDO / OFERECIDO */}
+      <Dialog open={isRequestModalOpen} onOpenChange={setIsRequestModalOpen}>
+        <DialogContent className="bg-white text-gray-900">
+          <DialogHeader>
+            <DialogTitle>
+              {editingRequest && editingRequest.id ? 'Editar pedido' : 'Novo pedido/oferecido'}
+            </DialogTitle>
+          </DialogHeader>
+          {editingRequest && (
+            <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Tipo</label>
+                  <select
+                    value={editingRequest.type || 'pedido'}
+                    onChange={(e) =>
+                      setEditingRequest((prev) => ({ ...prev, type: e.target.value }))
+                    }
+                    className="w-full border rounded px-3 py-2"
+                  >
+                    <option value="pedido">Pedido</option>
+                    <option value="oferecido">Oferecido</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Data</label>
+                  <input
+                    type="date"
+                    value={
+                      editingRequest.lead_date ||
+                      new Date().toISOString().slice(0, 10)
+                    }
+                    onChange={(e) =>
+                      setEditingRequest((prev) => ({ ...prev, lead_date: e.target.value }))
+                    }
+                    className="w-full border rounded px-3 py-2"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-gray-700">Cliente</label>
+                <input
+                    value={editingRequest.client_name || ''}
+                    onChange={(e) =>
+                      setEditingRequest((prev) => ({ ...prev, client_name: e.target.value }))
+                    }
+                    className="w-full border rounded px-3 py-2"
+                    placeholder="Nome do cliente"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700">Contato</label>
+                <input
+                  value={editingRequest.client_contact || ''}
+                  onChange={(e) =>
+                    setEditingRequest((prev) => ({ ...prev, client_contact: e.target.value }))
+                  }
+                  className="w-full border rounded px-3 py-2"
+                  placeholder="WhatsApp, telefone..."
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Marca</label>
+                  <input
+                    value={editingRequest.brand || ''}
+                    onChange={(e) =>
+                      setEditingRequest((prev) => ({ ...prev, brand: e.target.value }))
+                    }
+                    className="w-full border rounded px-3 py-2"
+                    placeholder="Ex.: BMW"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Modelo</label>
+                  <input
+                    value={editingRequest.model || ''}
+                    onChange={(e) =>
+                      setEditingRequest((prev) => ({ ...prev, model: e.target.value }))
+                    }
+                    className="w-full border rounded px-3 py-2"
+                    placeholder="Ex.: X1"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                    <label className="text-sm font-medium text-gray-700">Valor mín. (R$)</label>
+                    <input
+                      type="number"
+                      value={editingRequest.price_min || ''}
+                      onChange={(e) =>
+                        setEditingRequest((prev) => ({ ...prev, price_min: e.target.value }))
+                      }
+                      className="w-full border rounded px-3 py-2"
+                    />
+                </div>
+                <div>
+                    <label className="text-sm font-medium text-gray-700">Valor máx. (R$)</label>
+                    <input
+                      type="number"
+                      value={editingRequest.price_max || ''}
+                      onChange={(e) =>
+                        setEditingRequest((prev) => ({ ...prev, price_max: e.target.value }))
+                      }
+                      className="w-full border rounded px-3 py-2"
+                    />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-gray-700">Origem</label>
+                <input
+                  value={editingRequest.lead_source || ''}
+                  onChange={(e) =>
+                    setEditingRequest((prev) => ({ ...prev, lead_source: e.target.value }))
+                  }
+                  className="w-full border rounded px-3 py-2"
+                  placeholder="Insta, site, whats..."
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-gray-700">Observações</label>
+                <textarea
+                  value={editingRequest.notes || ''}
+                  onChange={(e) =>
+                    setEditingRequest((prev) => ({ ...prev, notes: e.target.value }))
+                  }
+                  className="w-full border rounded px-3 py-2"
+                  rows={3}
+                />
+              </div>
+
+              {editingRequest.matched_car_id && (
+                <div className="bg-emerald-50 text-emerald-700 px-3 py-2 rounded text-sm">
+                  Este pedido já tem match com veículo ID: {editingRequest.matched_car_id}
+                </div>
+              )}
+
+              <DialogFooter className="pt-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    setIsRequestModalOpen(false);
+                    setEditingRequest(null);
+                  }}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  className="bg-yellow-400 text-black hover:bg-yellow-500"
+                  onClick={saveRequest}
+                >
+                  Salvar
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

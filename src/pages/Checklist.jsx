@@ -70,36 +70,37 @@ const Checklist = () => {
   const [cars, setCars] = useState([]);
   const [carId, setCarId] = useState(carParam);
   const [car, setCar] = useState(null);
+
   const [itens, setItens] = useState({});
   const [observacoes, setObservacoes] = useState('');
   const [tipo, setTipo] = useState('compra');
   const [nivel, setNivel] = useState('50%');
   const [salvando, setSalvando] = useState(false);
+  const [checklistId, setChecklistId] = useState(null); // 👈 pra saber se é insert ou update
 
-  // 1. puxa carros do estoque
+  // carrega carros
   useEffect(() => {
     (async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('cars')
         .select('*')
-        .eq('is_sold', false)
         .order('created_at', { ascending: false });
-      setCars(data || []);
+      if (!error) setCars(data || []);
     })();
   }, []);
 
-  // 2. quando escolhe carro, carrega dados + checklist salvo
+  // quando troca o carro -> carrega checklist dele
   useEffect(() => {
     if (!carId) {
       setCar(null);
+      setChecklistId(null);
       return;
     }
-
     const found = (cars || []).find((c) => c.id === carId);
     setCar(found || null);
 
     (async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('vehicle_checklists')
         .select('*')
         .eq('car_id', carId)
@@ -107,12 +108,15 @@ const Checklist = () => {
         .limit(1)
         .maybeSingle();
 
-      if (data) {
+      if (!error && data) {
+        setChecklistId(data.id);
         setItens(data.items || {});
         setObservacoes(data.observacoes || '');
         setTipo(data.tipo || 'compra');
         setNivel(data.nivel_combustivel || '50%');
       } else {
+        // não tem, começa limpo
+        setChecklistId(null);
         setItens({});
         setObservacoes('');
         setTipo('compra');
@@ -137,22 +141,37 @@ const Checklist = () => {
       nivel_combustivel: nivel,
     };
 
-    const { error } = await supabase
-      .from('vehicle_checklists')
-      .upsert(payload, { onConflict: 'car_id' });
+    let error = null;
+
+    if (checklistId) {
+      // UPDATE
+      const { error: e } = await supabase
+        .from('vehicle_checklists')
+        .update(payload)
+        .eq('id', checklistId);
+      error = e;
+    } else {
+      // INSERT
+      const { data, error: e } = await supabase
+        .from('vehicle_checklists')
+        .insert(payload)
+        .select()
+        .single();
+      error = e;
+      if (!e && data) setChecklistId(data.id);
+    }
 
     setSalvando(false);
     if (!error) {
-      // se quiser mostrar toast usa teu toast
       alert('Checklist salvo!');
     } else {
+      console.error(error);
       alert('Erro ao salvar checklist');
     }
   };
 
   return (
     <div className="min-h-screen bg-slate-50 pb-16">
-      {/* topo fixo, vira "app" no celular */}
       <div className="sticky top-0 z-40 bg-slate-50/90 backdrop-blur border-b flex items-center gap-3 px-4 py-3">
         <h1 className="text-base md:text-lg font-bold text-slate-900 flex-1">
           Checklist de veículo
@@ -166,7 +185,6 @@ const Checklist = () => {
         </Button>
       </div>
 
-      {/* seleção do carro */}
       <div className="max-w-5xl mx-auto mt-4 px-4 space-y-4">
         <div className="bg-white rounded-2xl border shadow-sm p-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="flex-1">
@@ -190,8 +208,18 @@ const Checklist = () => {
             </select>
             {car && (
               <p className="text-xs text-slate-500 mt-2">
-                FIPE: <b>{car.fipe_value ? `R$ ${Number(car.fipe_value).toLocaleString('pt-BR')}` : '—'}</b> •
-                Anúncio: <b>{car.price ? `R$ ${Number(car.price).toLocaleString('pt-BR')}` : '—'}</b>
+                FIPE:{' '}
+                <b>
+                  {car.fipe_value
+                    ? `R$ ${Number(car.fipe_value).toLocaleString('pt-BR')}`
+                    : '—'}
+                </b>{' '}
+                • Anúncio:{' '}
+                <b>
+                  {car.price
+                    ? `R$ ${Number(car.price).toLocaleString('pt-BR')}`
+                    : '—'}
+                </b>
               </p>
             )}
           </div>
@@ -221,15 +249,12 @@ const Checklist = () => {
 
         {carId ? (
           <>
-            {/* legenda */}
             <div className="bg-white rounded-2xl border shadow-sm p-3 text-xs text-slate-500">
               LEGENDA: <b>OK</b> = Estado adequado • <b>RD</b> = Riscado • <b>AD</b> = Amassado •{' '}
               <b>DD</b> = Danificado • <b>QD</b> = Quebrado • <b>FT</b> = Falta
             </div>
 
-            {/* blocos */}
             <div className="grid md:grid-cols-2 gap-4">
-              {/* externo */}
               <div className="bg-white rounded-2xl border shadow-sm p-3 space-y-2">
                 <p className="text-sm font-semibold text-slate-900 mb-1">Parte externa</p>
                 {BLOCO_EXTERNO.map((nome) => (
@@ -257,7 +282,6 @@ const Checklist = () => {
                 ))}
               </div>
 
-              {/* interno */}
               <div className="bg-white rounded-2xl border shadow-sm p-3 space-y-2">
                 <p className="text-sm font-semibold text-slate-900 mb-1">Documentos / interno</p>
                 {BLOCO_INTERNO.map((nome) => (
@@ -286,7 +310,6 @@ const Checklist = () => {
               </div>
             </div>
 
-            {/* observações */}
             <div className="bg-white rounded-2xl border shadow-sm p-4 space-y-2">
               <label className="text-sm text-slate-700">Observações / pendências</label>
               <textarea

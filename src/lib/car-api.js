@@ -237,18 +237,11 @@ export const addPlatform = async (name) => {
 /**
  * NOVA: usada só pela MATRIZ para gravar a ordem no banco.
  * Recebe array de plataformas (já na nova ordem) e atualiza um por um.
- *
- * Exemplo de chamada:
- *   updatePlatformOrder([
- *     { id: 'uuid1', order: 1 },
- *     { id: 'uuid2', order: 2 },
- *   ])
  */
 export const updatePlatformOrder = async (orderedPlatforms = []) => {
   try {
     for (const item of orderedPlatforms) {
       if (!item.id) continue;
-      // não vamos mexer no name!
       const { error } = await supabase
         .from('platforms')
         .update({ order: item.order ?? null })
@@ -615,5 +608,67 @@ export const getLatestChecklistTemplate = async () => {
 export const addChecklistItem = async () => {
   console.warn('[LEGADO] addChecklistItem chamado — checklist foi desativado. Ignorando.');
   return { data: null, error: null };
+};
+
+/*
+  =========================================================
+  C H E C K L I S T   N O V O   P O R   V E Í C U L O
+  =========================================================
+*/
+
+/**
+ * Lista todos os checklists de um carro
+ */
+export const getVehicleChecklists = async (carId) => {
+  if (!carId) return [];
+  const { data, error } = await supabase
+    .from('vehicle_checklists')
+    .select('*')
+    .eq('car_id', carId)
+    .order('filled_at', { ascending: false });
+  if (error) {
+    console.error('Erro ao buscar vehicle_checklists:', error);
+    return [];
+  }
+  return data || [];
+};
+
+/**
+ * Cria checklist novo
+ */
+export const addVehicleChecklist = async (payload) => {
+  const { data, error } = await supabase
+    .from('vehicle_checklists')
+    .insert([payload])
+    .select()
+    .single();
+  if (error) console.error('Erro ao criar vehicle_checklist:', error);
+  return { data, error };
+};
+
+/**
+ * Atualiza checklist existente
+ */
+export const updateVehicleChecklist = async (id, patch) => {
+  const { data, error } = await supabase
+    .from('vehicle_checklists')
+    .update(patch)
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) console.error('Erro ao atualizar vehicle_checklist:', error);
+  return { data, error };
+};
+
+/**
+ * Remove checklist (se precisar)
+ */
+export const deleteVehicleChecklist = async (id) => {
+  const { data, error } = await supabase
+    .from('vehicle_checklists')
+    .delete()
+    .eq('id', id);
+  if (error) console.error('Erro ao deletar vehicle_checklist:', error);
+  return { data, error };
 };
 

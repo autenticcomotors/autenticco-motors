@@ -18,8 +18,13 @@ import {
   setCarDeliveredAt, // 👈 já tinha
   updatePublication, // 👈 NOVO
   updateExpense, // 👈 NOVO
+  getVehicleChecklists,
+  addVehicleChecklist,
+  updateVehicleChecklist,
+  getLatestChecklistTemplate,
 } from '@/lib/car-api';
-import { X, Megaphone, Wallet, DollarSign, PenSquare } from 'lucide-react';
+import { X, Megaphone, Wallet, DollarSign, PenSquare, ClipboardList } from 'lucide-react';
+import VehicleChecklistForm from '@/components/VehicleChecklistForm';
 
 const moneyBR = (n) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(n || 0));
@@ -57,7 +62,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     published_at: '',
     notes: '',
   });
-  const [editingPubId, setEditingPubId] = useState(null);
+  const [editingPubId, setEditingPubId] = useState(null); // 👈 NOVO
 
   const [expenseForm, setExpenseForm] = useState({
     category: '',
@@ -66,7 +71,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     incurred_at: '',
     description: '',
   });
-  const [editingExpenseId, setEditingExpenseId] = useState(null);
+  const [editingExpenseId, setEditingExpenseId] = useState(null); // 👈 NOVO
 
   const [financeForm, setFinanceForm] = useState({
     fipe_value: '',
@@ -83,6 +88,12 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
   const [deliverMiniOpenFor, setDeliverMiniOpenFor] = useState(null);
   const [deliverDate, setDeliverDate] = useState('');
   const [deliverTime, setDeliverTime] = useState('');
+
+  // CHECKLIST
+  const [vehicleChecklists, setVehicleChecklists] = useState([]);
+  const [checklistTemplate, setChecklistTemplate] = useState(null);
+  const [checklistFormOpen, setChecklistFormOpen] = useState(false);
+  const [editingChecklist, setEditingChecklist] = useState(null);
 
   const isoFromDateTime = (dateStr, timeStr) => {
     if (!dateStr) return null;
@@ -208,28 +219,26 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     setEditingExpenseId(null);
 
     try {
-      const [pubs, exps] = await Promise.all([getPublicationsByCar(car.id), getExpensesByCar(car.id)]);
+      const [pubs, exps, vcls, tpl] = await Promise.all([
+        getPublicationsByCar(car.id),
+        getExpensesByCar(car.id),
+        getVehicleChecklists(car.id),
+        getLatestChecklistTemplate(),
+      ]);
       setPublications(pubs || []);
       setExpenses(exps || []);
-
-      // 👇 aqui já deixo o DEVOLVER calculado automático (preço - comissão)
-      const priceNum = Number(car.price || 0);
-      const commissionNum = Number(car.commission || 0);
-      const autoReturn = Math.max(priceNum - commissionNum, 0);
-
+      setVehicleChecklists(vcls || []);
+      setChecklistTemplate(tpl?.data || null);
       setFinanceForm({
         fipe_value: car.fipe_value ?? '',
         commission: car.commission ?? '',
-        // se já tinha salvo no banco, usa; se não, usa o automático
-        return_to_seller:
-          car.return_to_seller !== null && car.return_to_seller !== undefined
-            ? car.return_to_seller
-            : autoReturn ? String(autoReturn) : '',
+        return_to_seller: car.return_to_seller ?? '',
       });
     } catch (err) {
       console.error('Erro abrir modal', err);
       setPublications([]);
       setExpenses([]);
+      setVehicleChecklists([]);
     }
   };
 
@@ -461,13 +470,9 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
 
       const fipe_value = financeForm.fipe_value !== '' ? Number(financeForm.fipe_value) : null;
       const commission = financeForm.commission !== '' ? Number(financeForm.commission) : 0;
+      const return_to_seller =
+        financeForm.return_to_seller !== '' ? Number(financeForm.return_to_seller) : 0;
 
-      // 👇 AQUI entra o que você pediu:
-      // DEVOLVER = VALOR DE VENDA (price) - COMISSÃO (fixa que você digitou)
-      const carPrice = Number(selectedCar.price || 0);
-      const autoReturn = Math.max(carPrice - commission, 0);
-
-      // lucro estimado permanece como estava
       const estimated_profit =
         commission +
         Number(summary.extraChargedTotal || 0) -
@@ -477,16 +482,9 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
       await updateCar(selectedCar.id, {
         fipe_value,
         commission,
-        // força salvar o devolver calculado
-        return_to_seller: autoReturn,
+        return_to_seller,
         profit: estimated_profit,
       });
-
-      // reflete no form sem quebrar layout
-      setFinanceForm((prev) => ({
-        ...prev,
-        return_to_seller: String(autoReturn),
-      }));
 
       toast({ title: 'Financeiro atualizado' });
 
@@ -640,7 +638,29 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
   }, [cars, searchTerm, brandFilter, sortBy, summaryMap, showOnlyAvailable]);
 
   const marketplacePlatforms = (platforms || []).filter((p) => p.platform_type === 'marketplace');
-  const socialPlatforms = (platforms || []).filter((p) => p.platform_type === 'social');
+  const socialPlatforms = (platforms || []).filter((p) => p.platform_type !== 'marketplace');
+
+  const handleChecklistSaved = async (payload, checklistId = null) => {
+    try {
+      if (!selectedCar) return;
+      if (checklistId) {
+        await updateVehicleChecklist(checklistId, payload);
+      } else {
+        await addVehicleChecklist(payload);
+      }
+      toast({ title: 'Checklist salvo' });
+      const vcls = await getVehicleChecklists(selectedCar.id);
+      setVehicleChecklists(vcls || []);
+      setChecklistFormOpen(false);
+    } catch (err) {
+      console.error(err);
+      toast({
+        title: 'Erro ao salvar checklist',
+        description: err.message || String(err),
+        variant: 'destructive',
+      });
+    }
+  };
 
   return (
     <div className="space-y-4 relative">
@@ -718,11 +738,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
 
           const isSold = !!car.is_sold;
           const isDelivered = !!car.delivered_at;
-
-          // 👇 DEVOLVER automático também na LISTA
-          const priceNum = Number(car.price || 0);
-          const commissionNum = Number(car.commission || 0);
-          const autoReturnList = Math.max(priceNum - commissionNum, 0);
 
           return (
             <div
@@ -833,12 +848,13 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                     ) : null}
                   </p>
 
-                  {/* DEVOLVER AGORA SEMPRE AUTOMÁTICO */}
-                  <p className="mt-1">
-                    <span className="text-xs bg-amber-50 text-amber-900 px-2 py-0.5 rounded">
-                      Devolver: {moneyBR(autoReturnList)}
-                    </span>
-                  </p>
+                  {car.return_to_seller ? (
+                    <p className="mt-1">
+                      <span className="text-xs bg-amber-50 text-amber-900 px-2 py-0.5 rounded">
+                        Devolver: {moneyBR(car.return_to_seller)}
+                      </span>
+                    </p>
+                  ) : null}
 
                   <p className="text-sm text-gray-600">
                     Placa: <span className="font-semibold">{car.plate || '-'}</span>
@@ -991,6 +1007,9 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
               incurred_at: '',
               description: '',
             });
+            setVehicleChecklists([]);
+            setChecklistFormOpen(false);
+            setEditingChecklist(null);
           }
         }}
       >
@@ -1002,7 +1021,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
             </DialogTitle>
           </DialogHeader>
 
-          <div className="flex gap-3 mb-4">
+          <div className="flex gap-3 mb-4 flex-wrap">
             <button
               onClick={() => {
                 setActiveTab('marketplaces');
@@ -1066,6 +1085,15 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
               }`}
             >
               Financeiro
+            </button>
+            <button
+              onClick={() => setActiveTab('checklist')}
+              className={`px-3 py-1 rounded flex items-center gap-1 ${
+                activeTab === 'checklist' ? 'bg-yellow-400 text-black' : 'bg-gray-100'
+              }`}
+            >
+              <ClipboardList className="w-4 h-4" />
+              Checklist
             </button>
           </div>
 
@@ -1280,71 +1308,140 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
           )}
 
           {/* FINANCEIRO */}
-{activeTab === 'finance' && (
-  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-    <div className="space-y-3">
-      <div className="flex gap-2 items-center">
-        <input
-          value={financeForm.fipe_value}
-          onChange={(e) => setFinanceForm((p) => ({ ...p, fipe_value: e.target.value }))}
-          placeholder="Valor FIPE"
-          type="number"
-          className="w-full border rounded px-2 py-2"
-        />
-        <Button
-          type="button"
-          onClick={handleFetchFipe}
-          className="bg-gray-100 text-gray-900 border border-gray-200"
-        >
-          Buscar FIPE
-        </Button>
-      </div>
-      <p className="text-xs text-gray-500">
-        FIPE: valor de referência do modelo. Pode ser diferente do valor real negociado.
-      </p>
+          {activeTab === 'finance' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-3">
+                <div className="flex gap-2 items-center">
+                  <input
+                    value={financeForm.fipe_value}
+                    onChange={(e) => setFinanceForm((p) => ({ ...p, fipe_value: e.target.value }))}
+                    placeholder="Valor FIPE"
+                    type="number"
+                    className="w-full border rounded px-2 py-2"
+                  />
+                  <Button
+                    type="button"
+                    onClick={handleFetchFipe}
+                    className="bg-gray-100 text-gray-900 border border-gray-200"
+                  >
+                    Buscar FIPE
+                  </Button>
+                </div>
+                <p className="text-xs text-gray-500">
+                  FIPE: valor de referência do modelo. Pode ser diferente do valor real negociado.
+                </p>
 
-      <input
-        value={financeForm.commission}
-        onChange={(e) => setFinanceForm((p) => ({ ...p, commission: e.target.value }))}
-        placeholder="Comissão (R$)"
-        type="number"
-        className="w-full border rounded px-2 py-2"
-      />
-      <p className="text-xs text-gray-500">
-        Comissão: quanto a AutenTicco recebe pela operação (fixo ou % convertido).
-      </p>
+                <input
+                  value={financeForm.commission}
+                  onChange={(e) => setFinanceForm((p) => ({ ...p, commission: e.target.value }))}
+                  placeholder="Comissão (R$)"
+                  type="number"
+                  className="w-full border rounded px-2 py-2"
+                />
+                <p className="text-xs text-gray-500">
+                  Comissão: quanto a AutenTicco recebe pela operação (fixo ou % convertido).
+                </p>
 
-      {/* DEVOLVER apenas leitura */}
-      <div className="w-full border rounded px-3 py-2 bg-gray-50 text-gray-800">
-        <p className="text-sm font-semibold">
-          Devolver automaticamente: {moneyBR(Number(selectedCar?.price || 0) - Number(financeForm.commission || 0))}
-        </p>
-        <p className="text-xs text-gray-500">
-          Valor calculado automaticamente (preço - comissão).
-        </p>
-      </div>
+                <input
+                  value={financeForm.return_to_seller}
+                  onChange={(e) =>
+                    setFinanceForm((p) => ({ ...p, return_to_seller: e.target.value }))
+                  }
+                  placeholder="Devolver ao cliente (R$)"
+                  type="number"
+                  className="w-full border rounded px-2 py-2"
+                />
+                <p className="text-xs text-gray-500">
+                  Devolver: valor que volta pro dono do carro após a venda.
+                </p>
 
-      <Button onClick={handleSaveFinance} className="bg-yellow-400 text-black w-full">
-        Salvar financeiro
-      </Button>
-    </div>
-    <div className="bg-gray-50 rounded-lg p-4 text-sm">
-      <p className="font-semibold mb-2">Como calculamos o lucro estimado:</p>
-      <ul className="list-disc list-inside space-y-1 text-gray-600">
-        <li>Lucro = Comissão</li>
-        <li>+ todos os valores cobrados (gastos repassados)</li>
-        <li>– todos os gastos extras</li>
-        <li>– todos os anúncios (marketplaces)</li>
-      </ul>
-      <p className="mt-2 text-xs text-gray-400">
-        Esse valor aparece na listagem principal de gestão.
-      </p>
-    </div>
-  </div>
-)}
+                <Button onClick={handleSaveFinance} className="bg-yellow-400 text-black w-full">
+                  Salvar financeiro
+                </Button>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-4 text-sm">
+                <p className="font-semibold mb-2">Como calculamos o lucro estimado:</p>
+                <ul className="list-disc list-inside space-y-1 text-gray-600">
+                  <li>Lucro = Comissão</li>
+                  <li>+ todos os valores cobrados (gastos repassados)</li>
+                  <li>– todos os gastos extras</li>
+                  <li>– todos os anúncios (marketplaces)</li>
+                </ul>
+                <p className="mt-2 text-xs text-gray-400">
+                  Esse valor aparece na listagem principal de gestão.
+                </p>
+              </div>
+            </div>
+          )}
 
+          {/* CHECKLIST */}
+          {activeTab === 'checklist' && (
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <h3 className="text-base font-semibold">Checklists do veículo</h3>
+                <Button
+                  onClick={() => {
+                    setEditingChecklist(null);
+                    setChecklistFormOpen(true);
+                  }}
+                  className="bg-yellow-400 text-black"
+                >
+                  Novo checklist
+                </Button>
+              </div>
+              <div className="border rounded-lg divide-y">
+                {(vehicleChecklists || []).length === 0 && (
+                  <p className="p-4 text-sm text-gray-500">
+                    Nenhum checklist ainda. Clique em “Novo checklist”.
+                  </p>
+                )}
+                {(vehicleChecklists || []).map((c) => (
+                  <div key={c.id} className="flex items-center justify-between p-3">
+                    <div>
+                      <p className="text-sm font-medium">
+                        {new Date(c.filled_at).toLocaleString('pt-BR', {
+                          dateStyle: 'short',
+                          timeStyle: 'short',
+                        })}{' '}
+                        — {c.inspector_name || 'Sem nome'}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        Combustível: {c.fuel_level ? `${c.fuel_level}%` : '—'} • Itens:{' '}
+                        {Object.keys(c.data || {}).length}
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setEditingChecklist(c);
+                          setChecklistFormOpen(true);
+                        }}
+                      >
+                        Ver / Editar
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
+
+      {checklistFormOpen && selectedCar && (
+        <VehicleChecklistForm
+          car={selectedCar}
+          initialData={editingChecklist}
+          templateFromDb={checklistTemplate}
+          onCancel={() => {
+            setChecklistFormOpen(false);
+            setEditingChecklist(null);
+          }}
+          onSave={handleChecklistSaved}
+        />
+      )}
     </div>
   );
 };

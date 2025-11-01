@@ -322,6 +322,52 @@ const AdminDashboard = () => {
     'Descartado',
   ];
 
+  // ======== helpers de conversão =========
+  const toNumberOrNull = (v) => {
+    if (v === '' || v === null || typeof v === 'undefined') return null;
+    // tira possível separador brasileiro
+    const clean = String(v).replace(/\./g, '').replace(',', '.');
+    const n = Number(clean);
+    return Number.isNaN(n) ? null : n;
+  };
+
+  const buildRequestPayload = (form) => {
+    const base = {
+      type: form.type || 'pedido',
+      client_name: form.client_name?.trim() || null,
+      client_contact: form.client_contact?.trim() || null,
+      brand: form.brand?.trim() || null,
+      model: form.model?.trim() || null,
+      lead_date: form.lead_date || new Date().toISOString().slice(0, 10),
+      lead_source: form.lead_source?.trim() || null,
+      notes: form.notes?.trim() || null,
+      body_type: form.body_type || null,
+      fuel: form.fuel || null,
+      transmission: form.transmission || null,
+    };
+
+    if ((form.type || 'pedido') === 'pedido') {
+      return {
+        ...base,
+        price_min: toNumberOrNull(form.price_min),
+        price_max: toNumberOrNull(form.price_max),
+        year_min: toNumberOrNull(form.year_min),
+        year_max: toNumberOrNull(form.year_max),
+        year_exact: null,
+      };
+    }
+
+    // oferecido
+    return {
+      ...base,
+      price_min: null,
+      price_max: toNumberOrNull(form.price_max),
+      year_min: null,
+      year_max: null,
+      year_exact: toNumberOrNull(form.year_exact),
+    };
+  };
+
   // ======== FUNÇÕES DE MATCH (Pedidos x Carros) ========
   const normalize = (s = '') =>
     String(s || '')
@@ -377,10 +423,8 @@ const AdminDashboard = () => {
 
     for (const req of requestsList) {
       if (req.type !== 'pedido') continue;
-      // se já está com match gravado, pula
       if (req.matched_car_id) continue;
 
-      // tenta achar 1 carro que atenda
       const foundCar = carsList.find((car) => doesRequestMatchCar(req, car));
 
       if (foundCar) {
@@ -392,7 +436,6 @@ const AdminDashboard = () => {
       }
     }
 
-    // dispara updates
     for (const up of updates) {
       await updateClientRequest(up.id, {
         matched_car_id: up.car.id,
@@ -404,7 +447,6 @@ const AdminDashboard = () => {
     }
 
     if (updates.length > 0) {
-      // refetch pra sincronizar
       const fresh = await getClientRequests();
       setClientRequests(fresh || []);
     }
@@ -447,7 +489,6 @@ const AdminDashboard = () => {
         setPlatforms(platformsData || []);
         setClientRequests(requestsData || []);
 
-        // tenta fazer match automático
         await autoMatchRequests(orderedCars, requestsData || []);
       } catch (err) {
         console.error('Erro fetchAllData:', err);
@@ -631,7 +672,6 @@ const AdminDashboard = () => {
         if (fileInputRef.current) fileInputRef.current.value = '';
         toast({ title: 'Veículo adicionado!' });
 
-        // tenta achar match pros pedidos existentes
         await autoMatchRequests([addedCar], clientRequests);
       }
     } catch (err) {
@@ -718,7 +758,6 @@ const AdminDashboard = () => {
         setEditingCar(null);
         toast({ title: 'Veículo atualizado!' });
 
-        // ao editar, também podemos tentar match
         await autoMatchRequests([finalCarData], clientRequests);
       }
     } catch (err) {
@@ -865,17 +904,17 @@ const AdminDashboard = () => {
       client_contact: req.client_contact || '',
       brand: req.brand || '',
       model: req.model || '',
-      price_min: req.price_min || '',
-      price_max: req.price_max || '',
+      price_min: req.price_min ?? '',
+      price_max: req.price_max ?? '',
       lead_date: (req.lead_date || '').slice(0, 10) || '',
       lead_source: req.lead_source || '',
       notes: req.notes || '',
       body_type: req.body_type || '',
       fuel: req.fuel || '',
       transmission: req.transmission || '',
-      year_min: req.year_min || '',
-      year_max: req.year_max || '',
-      year_exact: req.year_exact || '',
+      year_min: req.year_min ?? '',
+      year_max: req.year_max ?? '',
+      year_exact: req.year_exact ?? '',
     });
     setIsRequestModalOpen(true);
   };
@@ -887,10 +926,10 @@ const AdminDashboard = () => {
 
   const handleSaveRequest = async () => {
     try {
+      const payload = buildRequestPayload(requestForm);
+
       if (editingRequest) {
-        const { error } = await updateClientRequest(editingRequest.id, {
-          ...requestForm,
-        });
+        const { error } = await updateClientRequest(editingRequest.id, payload);
         if (error) {
           toast({
             title: 'Erro ao atualizar pedido/oferecido',
@@ -901,7 +940,7 @@ const AdminDashboard = () => {
         }
         toast({ title: 'Registro atualizado!' });
       } else {
-        const { error } = await addClientRequest({ ...requestForm });
+        const { error } = await addClientRequest(payload);
         if (error) {
           toast({
             title: 'Erro ao salvar pedido/oferecido',
@@ -916,9 +955,7 @@ const AdminDashboard = () => {
       const fresh = await getClientRequests();
       setClientRequests(fresh || []);
 
-      // tenta match pra este registro
       if (!editingRequest) {
-        // usando carros atuais
         await autoMatchRequests(cars, fresh || []);
       }
     } catch (err) {
@@ -1315,7 +1352,7 @@ const AdminDashboard = () => {
                 </Button>
               </div>
 
-              {/* CONTROLES DE FILTRO — inclui PLACA */}
+              {/* CONTROLES DE FILTRO */}
               <div className="flex flex-col md:flex-row gap-3 items-center mb-4">
                 <input
                   placeholder="Pesquisar marca, modelo ou PLACA..."

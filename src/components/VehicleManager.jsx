@@ -15,16 +15,13 @@ import {
   getExpensesForCars,
   updateCar,
   getFipeForCar,
-  setCarDeliveredAt, // 👈 já tinha
-  updatePublication, // 👈 NOVO
-  updateExpense, // 👈 NOVO
+  setCarDeliveredAt,
+  updatePublication,
+  updateExpense,
   getVehicleChecklists,
-  addVehicleChecklist,
-  updateVehicleChecklist,
   getLatestChecklistTemplate,
 } from '@/lib/car-api';
 import { X, Megaphone, Wallet, DollarSign, PenSquare, ClipboardList } from 'lucide-react';
-import VehicleChecklistForm from '@/components/VehicleChecklistForm';
 
 const moneyBR = (n) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(n || 0));
@@ -62,7 +59,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     published_at: '',
     notes: '',
   });
-  const [editingPubId, setEditingPubId] = useState(null); // 👈 NOVO
+  const [editingPubId, setEditingPubId] = useState(null);
 
   const [expenseForm, setExpenseForm] = useState({
     category: '',
@@ -71,7 +68,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     incurred_at: '',
     description: '',
   });
-  const [editingExpenseId, setEditingExpenseId] = useState(null); // 👈 NOVO
+  const [editingExpenseId, setEditingExpenseId] = useState(null);
 
   const [financeForm, setFinanceForm] = useState({
     fipe_value: '',
@@ -79,21 +76,16 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     return_to_seller: '',
   });
 
-  // mini-modal entrada
   const [entryMiniOpenFor, setEntryMiniOpenFor] = useState(null);
   const [entryDate, setEntryDate] = useState('');
   const [entryTime, setEntryTime] = useState('');
-
-  // mini-modal entrega
   const [deliverMiniOpenFor, setDeliverMiniOpenFor] = useState(null);
   const [deliverDate, setDeliverDate] = useState('');
   const [deliverTime, setDeliverTime] = useState('');
 
-  // CHECKLIST
+  // apenas para contar se tem checklist
   const [vehicleChecklists, setVehicleChecklists] = useState([]);
   const [checklistTemplate, setChecklistTemplate] = useState(null);
-  const [checklistFormOpen, setChecklistFormOpen] = useState(false);
-  const [editingChecklist, setEditingChecklist] = useState(null);
 
   const isoFromDateTime = (dateStr, timeStr) => {
     if (!dateStr) return null;
@@ -104,13 +96,10 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
 
   const diffInDays = (car) => {
     if (!car) return '-';
-
     const startIso = car.entry_at || car.entered_at;
     if (!startIso) return '-';
-
     const startStr = String(startIso).slice(0, 10);
     const startDate = new Date(`${startStr}T00:00:00`);
-
     let endDate;
     if (car.sold_at) {
       const soldStr = String(car.sold_at).slice(0, 10);
@@ -120,10 +109,8 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
       const todayStr = today.toISOString().slice(0, 10);
       endDate = new Date(`${todayStr}T00:00:00`);
     }
-
     const ms = endDate.getTime() - startDate.getTime();
     const days = Math.floor(ms / (1000 * 60 * 60 * 24));
-
     return `${days} dia(s) em estoque`;
   };
 
@@ -132,7 +119,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     window.dispatchEvent(new Event('autenticco:cars-updated'));
   };
 
-  // plataformas
   useEffect(() => {
     (async () => {
       try {
@@ -145,14 +131,13 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     })();
   }, []);
 
-  // montar mapa de resumo
+  // montar resumo
   useEffect(() => {
     const ids = (cars || []).map((c) => c.id).filter(Boolean);
     if (!ids.length) {
       setSummaryMap({});
       return;
     }
-
     let mounted = true;
     (async () => {
       try {
@@ -205,7 +190,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
         console.error('Erro resumo', err);
       }
     })();
-
     return () => {
       mounted = false;
     };
@@ -217,7 +201,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     setOpen(true);
     setEditingPubId(null);
     setEditingExpenseId(null);
-
     try {
       const [pubs, exps, vcls, tpl] = await Promise.all([
         getPublicationsByCar(car.id),
@@ -242,7 +225,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     }
   };
 
-  // salvar / atualizar anúncio
   const handleSavePublication = async () => {
     if (!selectedCar) return;
     try {
@@ -255,7 +237,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
         published_at: pubForm.published_at || null,
         notes: pubForm.notes || '',
       };
-
       if (editingPubId) {
         await updatePublication(editingPubId, payload);
         toast({ title: 'Registro atualizado' });
@@ -263,14 +244,12 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
         await addPublication(payload);
         toast({ title: 'Registro salvo' });
       }
-
       const [pubs, exps] = await Promise.all([
         getPublicationsByCar(selectedCar.id),
         getExpensesByCar(selectedCar.id),
       ]);
       setPublications(pubs || []);
       setExpenses(exps || []);
-
       setPubForm({
         platform_id: '',
         link: '',
@@ -280,7 +259,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
         notes: '',
       });
       setEditingPubId(null);
-
       await dispatchGlobalUpdate();
     } catch (err) {
       console.error(err);
@@ -292,16 +270,13 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     }
   };
 
-  // clicar em EDITAR publicação
   const handleEditPublicationClick = (pub) => {
     setEditingPubId(pub.id);
-    setActiveTab(
-      (() => {
-        const pf = platforms.find((pl) => pl.id === pub.platform_id);
-        if (pf?.platform_type === 'marketplace') return 'marketplaces';
-        return 'social';
-      })()
-    );
+    setActiveTab(() => {
+      const pf = platforms.find((pl) => pl.id === pub.platform_id);
+      if (pf?.platform_type === 'marketplace') return 'marketplaces';
+      return 'social';
+    });
     setPubForm({
       platform_id: pub.platform_id || '',
       link: pub.link || '',
@@ -312,12 +287,10 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     });
   };
 
-  // excluir anúncio
   const handleDeletePublication = async (id) => {
     try {
       await deletePublication(id);
       toast({ title: 'Registro removido' });
-
       if (selectedCar) {
         const [pubs, exps] = await Promise.all([
           getPublicationsByCar(selectedCar.id),
@@ -326,7 +299,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
         setPublications(pubs || []);
         setExpenses(exps || []);
       }
-
       if (editingPubId === id) {
         setEditingPubId(null);
         setPubForm({
@@ -338,7 +310,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
           notes: '',
         });
       }
-
       await dispatchGlobalUpdate();
     } catch (err) {
       console.error(err);
@@ -350,7 +321,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     }
   };
 
-  // salvar / atualizar gasto
   const handleSaveExpense = async () => {
     if (!selectedCar) return;
     try {
@@ -367,7 +337,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
           : new Date().toISOString(),
         description: expenseForm.description || '',
       };
-
       if (editingExpenseId) {
         await updateExpense(editingExpenseId, payload);
         toast({ title: 'Gasto/Ganho atualizado' });
@@ -375,14 +344,12 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
         await addExpense(payload);
         toast({ title: 'Gasto/Ganho salvo' });
       }
-
       const [pubs, exps] = await Promise.all([
         getPublicationsByCar(selectedCar.id),
         getExpensesByCar(selectedCar.id),
       ]);
       setPublications(pubs || []);
       setExpenses(exps || []);
-
       setExpenseForm({
         category: '',
         amount: '',
@@ -391,7 +358,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
         description: '',
       });
       setEditingExpenseId(null);
-
       await dispatchGlobalUpdate();
     } catch (err) {
       console.error(err);
@@ -403,7 +369,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     }
   };
 
-  // clicar em EDITAR gasto
   const handleEditExpenseClick = (expense) => {
     setEditingExpenseId(expense.id);
     setActiveTab('expenses');
@@ -419,12 +384,10 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     });
   };
 
-  // excluir gasto
   const handleDeleteExpense = async (id) => {
     try {
       await deleteExpense(id);
       toast({ title: 'Registro removido' });
-
       if (selectedCar) {
         const [pubs, exps] = await Promise.all([
           getPublicationsByCar(selectedCar.id),
@@ -433,7 +396,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
         setPublications(pubs || []);
         setExpenses(exps || []);
       }
-
       if (editingExpenseId === id) {
         setEditingExpenseId(null);
         setExpenseForm({
@@ -444,7 +406,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
           description: '',
         });
       }
-
       await dispatchGlobalUpdate();
     } catch (err) {
       console.error(err);
@@ -456,7 +417,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     }
   };
 
-  // salvar financeiro
   const handleSaveFinance = async () => {
     if (!selectedCar) return;
     try {
@@ -467,12 +427,10 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
         extraExpensesTotal: 0,
         extraChargedTotal: 0,
       };
-
       const fipe_value = financeForm.fipe_value !== '' ? Number(financeForm.fipe_value) : null;
       const commission = financeForm.commission !== '' ? Number(financeForm.commission) : 0;
       const return_to_seller =
         financeForm.return_to_seller !== '' ? Number(financeForm.return_to_seller) : 0;
-
       const estimated_profit =
         commission +
         Number(summary.extraChargedTotal || 0) -
@@ -485,9 +443,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
         return_to_seller,
         profit: estimated_profit,
       });
-
       toast({ title: 'Financeiro atualizado' });
-
       await dispatchGlobalUpdate();
     } catch (err) {
       console.error(err);
@@ -499,7 +455,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     }
   };
 
-  // buscar fipe
   const handleFetchFipe = async () => {
     if (!selectedCar) return;
     try {
@@ -520,7 +475,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     }
   };
 
-  // abrir mini-modal de ENTRADA
   const openEntryMini = (car) => {
     const d = car.entry_at ? new Date(car.entry_at) : new Date();
     setEntryDate(d.toISOString().slice(0, 10));
@@ -547,7 +501,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     }
   };
 
-  // abrir mini-modal de ENTREGA
   const openDeliverMini = (car) => {
     const d = car.delivered_at ? new Date(car.delivered_at) : new Date();
     setDeliverDate(d.toISOString().slice(0, 10));
@@ -574,7 +527,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
     }
   };
 
-  // marcas
   const brandOptions = useMemo(() => {
     const setB = new Set();
     (cars || []).forEach((c) => {
@@ -585,7 +537,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
 
   const [showOnlyAvailable, setShowOnlyAvailable] = useState(false);
 
-  // filtro
   const filteredCars = useMemo(() => {
     const term = (searchTerm || '').trim().toLowerCase();
     let list = (cars || []).filter((c) => {
@@ -640,28 +591,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
   const marketplacePlatforms = (platforms || []).filter((p) => p.platform_type === 'marketplace');
   const socialPlatforms = (platforms || []).filter((p) => p.platform_type !== 'marketplace');
 
-  const handleChecklistSaved = async (payload, checklistId = null) => {
-    try {
-      if (!selectedCar) return;
-      if (checklistId) {
-        await updateVehicleChecklist(checklistId, payload);
-      } else {
-        await addVehicleChecklist(payload);
-      }
-      toast({ title: 'Checklist salvo' });
-      const vcls = await getVehicleChecklists(selectedCar.id);
-      setVehicleChecklists(vcls || []);
-      setChecklistFormOpen(false);
-    } catch (err) {
-      console.error(err);
-      toast({
-        title: 'Erro ao salvar checklist',
-        description: err.message || String(err),
-        variant: 'destructive',
-      });
-    }
-  };
-
   return (
     <div className="space-y-4 relative">
       <div className="flex flex-col md:flex-row gap-3 items-center">
@@ -702,7 +631,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
           <option value="profit">Ordenar por lucro estimado</option>
           <option value="name">Ordenar por nome (A-Z)</option>
         </select>
-
         <button
           onClick={() => {
             setSearchTerm('');
@@ -886,12 +814,10 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                           {(() => {
                             const raw = car.sold_at;
                             if (!raw) return 'Vendido';
-
                             const clean = String(raw).replace('T', ' ').trim();
                             const y = clean.slice(0, 4);
                             const m = clean.slice(5, 7);
                             const d = clean.slice(8, 10);
-
                             if (!y || !m || !d) {
                               return `Vendido em ${raw} — ${
                                 car.sale_price
@@ -902,7 +828,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                                   : ''
                               }`;
                             }
-
                             const dataBR = `${d}/${m}/${y}`;
                             const preco = car.sale_price
                               ? new Intl.NumberFormat('pt-BR', {
@@ -910,11 +835,9 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                                   currency: 'BRL',
                                 }).format(car.sale_price)
                               : '';
-
                             return `Vendido em ${dataBR}${preco ? ` — ${preco}` : ''}`;
                           })()}
                         </p>
-
                         {!car.delivered_at ? (
                           <button
                             onClick={() => openDeliverMini(car)}
@@ -930,9 +853,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                       </>
                     )}
 
-                    {!isSold && (
-                      <p className="text-xs text-gray-400">Ainda não vendido</p>
-                    )}
+                    {!isSold && <p className="text-xs text-gray-400">Ainda não vendido</p>}
                   </div>
                 </div>
               </div>
@@ -972,10 +893,19 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                   </p>
                   <p className="text-sm text-green-700">{moneyBR(lucroLista)}</p>
                 </div>
-                <div>
+                <div className="flex flex-col gap-2">
                   <Button variant="outline" onClick={() => openManageModal(car)} className="text-sm">
                     Gerenciar
                   </Button>
+                  {/* atalho direto pro checklist */}
+                  <a
+                    href={`/dashboard/checklist?car=${car.id}`}
+                    className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <ClipboardList className="w-3 h-3" /> Checklist rápido
+                  </a>
                 </div>
               </div>
             </div>
@@ -983,7 +913,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
         })}
       </div>
 
-      {/* MODAL PRINCIPAL */}
       <Dialog
         open={open}
         onOpenChange={async (isOpen) => {
@@ -1008,8 +937,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
               description: '',
             });
             setVehicleChecklists([]);
-            setChecklistFormOpen(false);
-            setEditingChecklist(null);
           }
         }}
       >
@@ -1097,7 +1024,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
             </button>
           </div>
 
-          {/* ANÚNCIOS */}
+          {/* MARKETPLACES */}
           {activeTab === 'marketplaces' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-3">
@@ -1170,7 +1097,7 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
             </div>
           )}
 
-          {/* REDES SOCIAIS */}
+          {/* SOCIAL */}
           {activeTab === 'social' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-3">
@@ -1374,25 +1301,24 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
             </div>
           )}
 
-          {/* CHECKLIST */}
-          {activeTab === 'checklist' && (
+          {/* CHECKLIST – agora só mostra e manda pra página */}
+          {activeTab === 'checklist' && selectedCar && (
             <div className="space-y-4">
               <div className="flex justify-between items-center">
                 <h3 className="text-base font-semibold">Checklists do veículo</h3>
-                <Button
-                  onClick={() => {
-                    setEditingChecklist(null);
-                    setChecklistFormOpen(true);
-                  }}
-                  className="bg-yellow-400 text-black"
+                <a
+                  href={`/dashboard/checklist?car=${selectedCar.id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-4 py-2 rounded-lg bg-yellow-400 text-black text-sm font-semibold"
                 >
-                  Novo checklist
-                </Button>
+                  + Novo checklist em tela cheia
+                </a>
               </div>
               <div className="border rounded-lg divide-y">
                 {(vehicleChecklists || []).length === 0 && (
                   <p className="p-4 text-sm text-gray-500">
-                    Nenhum checklist ainda. Clique em “Novo checklist”.
+                    Nenhum checklist ainda. Abra em tela cheia para cadastrar.
                   </p>
                 )}
                 {(vehicleChecklists || []).map((c) => (
@@ -1410,17 +1336,15 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
                         {Object.keys(c.data || {}).length}
                       </p>
                     </div>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setEditingChecklist(c);
-                          setChecklistFormOpen(true);
-                        }}
+                    <div>
+                      <a
+                        href={`/dashboard/checklist?car=${selectedCar.id}&checklist=${c.id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-sm text-blue-600 hover:underline"
                       >
-                        Ver / Editar
-                      </Button>
+                        Ver / editar
+                      </a>
                     </div>
                   </div>
                 ))}
@@ -1429,19 +1353,6 @@ const VehicleManager = ({ cars = [], refreshAll = async () => {} }) => {
           )}
         </DialogContent>
       </Dialog>
-
-      {checklistFormOpen && selectedCar && (
-        <VehicleChecklistForm
-          car={selectedCar}
-          initialData={editingChecklist}
-          templateFromDb={checklistTemplate}
-          onCancel={() => {
-            setChecklistFormOpen(false);
-            setEditingChecklist(null);
-          }}
-          onSave={handleChecklistSaved}
-        />
-      )}
     </div>
   );
 };

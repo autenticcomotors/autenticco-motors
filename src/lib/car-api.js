@@ -57,7 +57,11 @@ export const getCarBySlug = async (slug) => {
 
 export const addCar = async (carData) => {
   const carName = `${carData.brand} ${carData.model}`;
-  const slug = `${(carData.brand || '').toLowerCase().replace(/ /g, '-')}-${(carData.model || '').toLowerCase().replace(/ /g, '-')}-${Date.now()}`;
+  const slug = `${(carData.brand || '')
+    .toLowerCase()
+    .replace(/ /g, '-')}-${(carData.model || '')
+    .toLowerCase()
+    .replace(/ /g, '-')}-${Date.now()}`;
 
   const payload = {
     ...carData,
@@ -228,7 +232,7 @@ export const addPlatform = async (name) => {
     .select()
     .single();
   if (error) {
-    console.error('Erro ao criar plataforma:', error);
+    console.error('Erro ao criar plataforma', error);
     return null;
   }
   return data;
@@ -616,9 +620,6 @@ export const addChecklistItem = async () => {
   =========================================================
 */
 
-/**
- * Lista todos os checklists de um carro
- */
 export const getVehicleChecklists = async (carId) => {
   if (!carId) return [];
   const { data, error } = await supabase
@@ -633,26 +634,34 @@ export const getVehicleChecklists = async (carId) => {
   return data || [];
 };
 
-/**
- * Cria checklist novo
- */
 export const addVehicleChecklist = async (payload) => {
+  const finalPayload = {
+    car_id: payload.car_id,
+    filled_at: payload.filled_at || new Date().toISOString(),
+    inspector_name: payload.inspector_name || null,
+    location: payload.location || null,
+    // AQUI é o pulo do gato: nunca deixa data = null
+    data: payload.data && Object.keys(payload.data).length > 0 ? payload.data : {},
+  };
   const { data, error } = await supabase
     .from('vehicle_checklists')
-    .insert([payload])
+    .insert([finalPayload])
     .select()
     .single();
   if (error) console.error('Erro ao criar vehicle_checklist:', error);
   return { data, error };
 };
 
-/**
- * Atualiza checklist existente
- */
 export const updateVehicleChecklist = async (id, patch) => {
+  const finalPatch = {
+    ...patch,
+  };
+  if (finalPatch.data == null) {
+    finalPatch.data = {};
+  }
   const { data, error } = await supabase
     .from('vehicle_checklists')
-    .update(patch)
+    .update(finalPatch)
     .eq('id', id)
     .select()
     .single();
@@ -660,15 +669,75 @@ export const updateVehicleChecklist = async (id, patch) => {
   return { data, error };
 };
 
-/**
- * Remove checklist (se precisar)
- */
 export const deleteVehicleChecklist = async (id) => {
   const { data, error } = await supabase
     .from('vehicle_checklists')
     .delete()
     .eq('id', id);
   if (error) console.error('Erro ao deletar vehicle_checklist:', error);
+  return { data, error };
+};
+
+/*
+  =========================================================
+  P E D I D O S   /   O F E R E C I D O S   (novo)
+  =========================================================
+*/
+
+export const getClientRequests = async (filters = {}) => {
+  let query = supabase
+    .from('client_requests')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (filters.type) {
+    query = query.eq('type', filters.type);
+  }
+  if (filters.has_match === true) {
+    query = query.not('matched_car_id', 'is', null);
+  }
+  if (filters.has_match === false) {
+    query = query.is('matched_car_id', null);
+  }
+  if (filters.brand) {
+    query = query.ilike('brand', filters.brand);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    console.error('Erro ao buscar client_requests:', error);
+    return [];
+  }
+  return data || [];
+};
+
+export const addClientRequest = async (payload) => {
+  const { data, error } = await supabase
+    .from('client_requests')
+    .insert([payload])
+    .select()
+    .single();
+  if (error) console.error('Erro ao adicionar client_request:', error);
+  return { data, error };
+};
+
+export const updateClientRequest = async (id, patch) => {
+  const { data, error } = await supabase
+    .from('client_requests')
+    .update(patch)
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) console.error('Erro ao atualizar client_request:', error);
+  return { data, error };
+};
+
+export const deleteClientRequest = async (id) => {
+  const { data, error } = await supabase
+    .from('client_requests')
+    .delete()
+    .eq('id', id);
+  if (error) console.error('Erro ao deletar client_request:', error);
   return { data, error };
 };
 

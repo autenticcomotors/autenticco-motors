@@ -11,12 +11,13 @@ import {
   LogOut,
   Download,
   MessageSquare,
-  Users,
-  Image as ImageIcon,
   FileText,
-  Check,
   Star,
   BarChart2,
+  ClipboardList,
+  Image as ImageIcon,
+  Check,
+  Users,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
@@ -36,6 +37,10 @@ import {
   getPlatforms,
   markCarAsSold,
   unmarkCarAsSold,
+  getClientRequests,
+  addClientRequest,
+  updateClientRequest,
+  deleteClientRequest,
 } from '@/lib/car-api';
 import {
   AlertDialog,
@@ -205,6 +210,8 @@ const AdminDashboard = () => {
   const [leads, setLeads] = useState([]);
   const [testimonials, setTestimonials] = useState([]);
   const [platforms, setPlatforms] = useState([]);
+  const [clientRequests, setClientRequests] = useState([]);
+  const clientRequestsRef = useRef([]);
   const [loading, setLoading] = useState(true);
   const [leadFilters, setLeadFilters] = useState({
     status: '',
@@ -257,6 +264,10 @@ const AdminDashboard = () => {
   const [carSearch, setCarSearch] = useState('');
   const [brandFilter, setBrandFilter] = useState('');
 
+  // (você já usava na Matriz, só estou declarando)
+  const [selectedCar, setSelectedCar] = useState(null);
+  const [isGestaoOpen, setIsGestaoOpen] = useState(false);
+
   const carOptions = {
     transmissions: ['Automático', 'Manual'],
     bodyTypes: ['SUV', 'Sedan', 'Hatch', 'Picape', 'Esportivo', 'Outro'],
@@ -296,23 +307,33 @@ const AdminDashboard = () => {
     async (opts = { showLoading: true }) => {
       if (opts.showLoading) setLoading(true);
       try {
-        const [carsData, testimonialsData, leadsData, platformsData] =
-          await Promise.all([
-            getCars(),
-            getTestimonials(),
-            getLeads(leadFilters),
-            getPlatforms(),
-          ]);
+        const [
+          carsData,
+          testimonialsData,
+          leadsData,
+          platformsData,
+          clientRequestsData,
+        ] = await Promise.all([
+          getCars(),
+          getTestimonials(),
+          getLeads(leadFilters),
+          getPlatforms(),
+          getClientRequests(),
+        ]);
         setCars(sortCarsActiveFirst(carsData || []));
         setTestimonials(testimonialsData || []);
         setLeads(leadsData || []);
         setPlatforms(platformsData || []);
+        setClientRequests(clientRequestsData || []);
+        clientRequestsRef.current = clientRequestsData || [];
       } catch (err) {
         console.error('Erro fetchAllData:', err);
         setCars([]);
         setTestimonials([]);
         setLeads([]);
         setPlatforms([]);
+        setClientRequests([]);
+        clientRequestsRef.current = [];
       } finally {
         if (opts.showLoading) setLoading(false);
       }
@@ -378,9 +399,7 @@ const AdminDashboard = () => {
   const handleToggleFeatured = async (carId, currentStatus) => {
     await updateCar(carId, { is_featured: !currentStatus });
     toast({
-      title: `Veículo ${
-        !currentStatus ? 'adicionado aos' : 'removido dos'
-      } destaques!`,
+      title: `Veículo ${!currentStatus ? 'adicionado aos' : 'removido dos'} destaques!`,
     });
     fetchAllData();
   };
@@ -419,6 +438,26 @@ const AdminDashboard = () => {
       setPhotosToUpload((prev) => prev.filter((_, i) => i !== index));
     }
   };
+
+  // match no front (além do trigger do banco)
+  const findMatchesForCar = useCallback((car, requests) => {
+    if (!car || !Array.isArray(requests)) return [];
+    const price = Number(car.price || 0);
+    const brand = (car.brand || '').toLowerCase();
+    const model = (car.model || '').toLowerCase();
+
+    return requests.filter((r) => {
+      if (r.type !== 'pedido') return false;
+
+      if (r.brand && r.brand.toLowerCase() !== brand) return false;
+      if (r.model && r.model.toLowerCase() !== model) return false;
+
+      if (r.price_min && price && price < Number(r.price_min)) return false;
+      if (r.price_max && price && price > Number(r.price_max)) return false;
+
+      return true;
+    });
+  }, []);
 
   const handleAddCar = async (e) => {
     e.preventDefault();
@@ -459,6 +498,17 @@ const AdminDashboard = () => {
           variant: 'destructive',
         });
       } else {
+        // ALERTA DE MATCH AQUI
+        if (addedCar) {
+          const matches = findMatchesForCar(addedCar, clientRequestsRef.current);
+          if (matches.length > 0) {
+            toast({
+              title: '🚨 Match encontrado!',
+              description: `${matches.length} pedido(s) combinam com ${addedCar.brand} ${addedCar.model}. Veja em "Pedidos / Oferecidos".`,
+            });
+          }
+        }
+
         setCars((prevCars) =>
           sortCarsActiveFirst([...(prevCars || []), addedCar])
         );
@@ -703,7 +753,7 @@ const AdminDashboard = () => {
             </Button>
           </div>
 
-          <div className="flex space-x-4 mb-8 border-b">
+          <div className="flex space-x-4 mb-8 border-b overflow-x-auto">
             <button
               className={`px-4 py-2 font-semibold ${
                 activeTab === 'leads'
@@ -763,6 +813,17 @@ const AdminDashboard = () => {
               onClick={() => setActiveTab('reports')}
             >
               <BarChart2 className="inline mr-2" /> Relatórios
+            </button>
+            {/* NOVA ABA */}
+            <button
+              className={`px-4 py-2 font-semibold ${
+                activeTab === 'requests'
+                  ? 'border-b-2 border-yellow-500 text-yellow-500'
+                  : 'text-gray-500 hover:text-gray-900'
+              }`}
+              onClick={() => setActiveTab('requests')}
+            >
+              <ClipboardList className="inline mr-2" /> Pedidos / Oferecidos
             </button>
           </div>
 
@@ -1090,42 +1151,41 @@ const AdminDashboard = () => {
                           </p>
 
                           {car.is_available === false && (
-  <p className="text-sm text-red-600 mt-1">
-    {(() => {
-      const raw = car.sold_at;
-      if (!raw) {
-        return 'Vendido -';
-      }
+                            <p className="text-sm text-red-600 mt-1">
+                              {(() => {
+                                const raw = car.sold_at;
+                                if (!raw) {
+                                  return 'Vendido -';
+                                }
 
-      // ex: "2025-10-25T00:00:00+00:00" ou "2025-10-25 00:00:00+00"
-      const clean = String(raw).replace('T', ' ').trim();
-      const y = clean.slice(0, 4);
-      const m = clean.slice(5, 7);
-      const d = clean.slice(8, 10);
+                                const clean = String(raw).replace('T', ' ').trim();
+                                const y = clean.slice(0, 4);
+                                const m = clean.slice(5, 7);
+                                const d = clean.slice(8, 10);
 
-      if (!y || !m || !d) {
-        // fallback: mostra cru
-        return `Vendido em ${raw} - ${
-          car.sale_price
-            ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
-                car.sale_price
-              )
-            : '-'
-        }`;
-      }
+                                if (!y || !m || !d) {
+                                  return `Vendido em ${raw} - ${
+                                    car.sale_price
+                                      ? new Intl.NumberFormat('pt-BR', {
+                                          style: 'currency',
+                                          currency: 'BRL',
+                                        }).format(car.sale_price)
+                                      : '-'
+                                  }`;
+                                }
 
-      const dataBR = `${d}/${m}/${y}`;
-      const preco = car.sale_price
-        ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
-            car.sale_price
-          )
-        : '-';
+                                const dataBR = `${d}/${m}/${y}`;
+                                const preco = car.sale_price
+                                  ? new Intl.NumberFormat('pt-BR', {
+                                      style: 'currency',
+                                      currency: 'BRL',
+                                    }).format(car.sale_price)
+                                  : '-';
 
-      return `Vendido em ${dataBR} - ${preco}`;
-    })()}
-  </p>
-)}
-
+                                return `Vendido em ${dataBR} - ${preco}`;
+                              })()}
+                            </p>
+                          )}
                         </div>
                       </div>
 
@@ -1257,7 +1317,7 @@ const AdminDashboard = () => {
                 platforms={platforms}
                 onOpenGestaoForCar={(car) => {
                   setSelectedCar(car);
-    		  setIsGestaoOpen(true);
+                  setIsGestaoOpen(true);
                   setTimeout(() => {
                     toast({
                       title: `Abrindo gestão do veículo ${car.brand} ${car.model}`,
@@ -1343,6 +1403,203 @@ const AdminDashboard = () => {
           {activeTab === 'reports' && (
             <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-xl border">
               <Reports />
+            </div>
+          )}
+
+          {/* NOVA ABA: PEDIDOS / OFERECIDOS */}
+          {activeTab === 'requests' && (
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-xl border">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+                <div>
+                  <h2 className="text-2xl font-semibold text-gray-900 flex items-center gap-2">
+                    <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-yellow-400/20 text-yellow-500">
+                      <ClipboardList className="h-5 w-5" />
+                    </span>
+                    Pedidos / Oferecidos
+                  </h2>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Registre quem pediu carro e quem ofereceu carro. Match é automático.
+                  </p>
+                </div>
+                <Button
+                  onClick={async () => {
+                    const payload = {
+                      type: 'pedido',
+                      client_name: 'Novo cliente',
+                      client_contact: '',
+                      lead_date: new Date().toISOString().slice(0, 10),
+                    };
+                    const { error } = await addClientRequest(payload);
+                    if (error) {
+                      toast({
+                        title: 'Erro ao criar pedido',
+                        description: error.message,
+                        variant: 'destructive',
+                      });
+                    } else {
+                      const list = await getClientRequests();
+                      setClientRequests(list);
+                      clientRequestsRef.current = list;
+                      toast({
+                        title: 'Pedido criado',
+                        description: 'Preencha os dados na lista.',
+                      });
+                    }
+                  }}
+                  className="bg-yellow-400 text-black hover:bg-yellow-500"
+                >
+                  + Novo
+                </Button>
+              </div>
+
+              {/* cards de resumo */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div className="bg-white rounded-xl border p-4 shadow-sm">
+                  <p className="text-xs uppercase text-gray-500">Total</p>
+                  <p className="text-2xl font-bold text-gray-900 mt-1">{clientRequests.length}</p>
+                </div>
+                <div className="bg-white rounded-xl border p-4 shadow-sm">
+                  <p className="text-xs uppercase text-gray-500">Pedidos</p>
+                  <p className="text-2xl font-bold text-gray-900 mt-1">
+                    {clientRequests.filter((r) => r.type === 'pedido').length}
+                  </p>
+                </div>
+                <div className="bg-white rounded-xl border p-4 shadow-sm">
+                  <p className="text-xs uppercase text-gray-500">Oferecidos</p>
+                  <p className="text-2xl font-bold text-gray-900 mt-1">
+                    {clientRequests.filter((r) => r.type === 'oferecido').length}
+                  </p>
+                </div>
+                <div className="bg-white rounded-xl border p-4 shadow-sm">
+                  <p className="text-xs uppercase text-gray-500">Com Match</p>
+                  <p className="text-2xl font-bold text-emerald-600 mt-1">
+                    {clientRequests.filter((r) => r.matched_car_id).length}
+                  </p>
+                </div>
+              </div>
+
+              {/* tabela */}
+              <div className="overflow-x-auto rounded-xl border bg-white">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3">Tipo</th>
+                      <th className="px-4 py-3">Cliente</th>
+                      <th className="px-4 py-3">Contato</th>
+                      <th className="px-4 py-3">Marca/Modelo</th>
+                      <th className="px-4 py-3">Faixa Valor</th>
+                      <th className="px-4 py-3">Data</th>
+                      <th className="px-4 py-3">Origem</th>
+                      <th className="px-4 py-3 text-right">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {clientRequests.map((r) => (
+                      <tr
+                        key={r.id}
+                        className={r.matched_car_id ? 'bg-emerald-50/60' : 'hover:bg-gray-50'}
+                      >
+                        <td className="px-4 py-2">
+                          <select
+                            value={r.type || 'pedido'}
+                            onChange={async (e) => {
+                              await updateClientRequest(r.id, { type: e.target.value });
+                              const list = await getClientRequests();
+                              setClientRequests(list);
+                              clientRequestsRef.current = list;
+                            }}
+                            className={`text-xs rounded-full px-2 py-1 ${
+                              r.type === 'pedido'
+                                ? 'bg-yellow-100 text-yellow-700'
+                                : 'bg-slate-100 text-slate-700'
+                            }`}
+                          >
+                            <option value="pedido">Pedido</option>
+                            <option value="oferecido">Oferecido</option>
+                          </select>
+                        </td>
+                        <td className="px-4 py-2">
+                          <input
+                            className="bg-transparent border-none focus:outline-none focus:ring-0 text-sm w-40"
+                            value={r.client_name || ''}
+                            onChange={async (e) => {
+                              await updateClientRequest(r.id, { client_name: e.target.value });
+                            }}
+                          />
+                        </td>
+                        <td className="px-4 py-2">
+                          <input
+                            className="bg-transparent border-none focus:outline-none focus:ring-0 text-sm w-36"
+                            value={r.client_contact || ''}
+                            onChange={async (e) => {
+                              await updateClientRequest(r.id, { client_contact: e.target.value });
+                            }}
+                          />
+                        </td>
+                        <td className="px-4 py-2">
+                          <div className="flex gap-2">
+                            <input
+                              className="bg-transparent border-none focus:outline-none focus:ring-0 text-sm w-20"
+                              placeholder="Marca"
+                              value={r.brand || ''}
+                              onChange={async (e) => {
+                                await updateClientRequest(r.id, { brand: e.target.value });
+                              }}
+                            />
+                            <input
+                              className="bg-transparent border-none focus:outline-none focus:ring-0 text-sm w-24"
+                              placeholder="Modelo"
+                              value={r.model || ''}
+                              onChange={async (e) => {
+                                await updateClientRequest(r.id, { model: e.target.value });
+                              }}
+                            />
+                          </div>
+                        </td>
+                        <td className="px-4 py-2 text-sm text-gray-700">
+                          {r.price_min || r.price_max
+                            ? `R$ ${r.price_min || 0} - R$ ${r.price_max || 0}`
+                            : '-'}
+                        </td>
+                        <td className="px-4 py-2 text-sm text-gray-700">
+                          {r.lead_date || r.created_at?.slice(0, 10) || '-'}
+                        </td>
+                        <td className="px-4 py-2 text-sm text-gray-700">
+                          <input
+                            className="bg-transparent border-none focus:outline-none focus:ring-0 text-sm w-28"
+                            placeholder="Origem"
+                            value={r.lead_source || ''}
+                            onChange={async (e) => {
+                              await updateClientRequest(r.id, { lead_source: e.target.value });
+                            }}
+                          />
+                        </td>
+                        <td className="px-4 py-2 text-right">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={async () => {
+                              await deleteClientRequest(r.id);
+                              const list = await getClientRequests();
+                              setClientRequests(list);
+                              clientRequestsRef.current = list;
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4 text-red-500" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                    {clientRequests.length === 0 && (
+                      <tr>
+                        <td colSpan={8} className="px-4 py-10 text-center text-gray-400 text-sm">
+                          Nenhum pedido ou veículo oferecido ainda.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </motion.div>

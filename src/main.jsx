@@ -1,3 +1,4 @@
+// src/main.jsx
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
@@ -11,6 +12,7 @@ import Contact from './pages/Contact';
 import CarDetail from './pages/car-detail';
 import AdminLogin from './pages/AdminLogin';
 import AdminDashboard from './pages/AdminDashboard';
+import Checklist from './pages/Checklist'; // 👈 NOVO
 import { Toaster } from './components/ui/toaster';
 import PrivateRoute from './components/PrivateRoute';
 
@@ -19,39 +21,26 @@ const router = createBrowserRouter([
     path: '/',
     element: <App />,
     children: [
-      {
-        path: '/',
-        element: <Home />,
-      },
-      {
-        path: '/estoque',
-        element: <Stock />,
-      },
-      {
-        path: '/vender',
-        element: <SellCar />,
-      },
-      {
-        path: '/sobre',
-        element: <About />,
-      },
-      {
-        path: '/contato',
-        element: <Contact />,
-      },
-      {
-        path: '/carro/:slug',
-        element: <CarDetail />,
-      },
-      {
-        path: '/admin',
-        element: <AdminLogin />,
-      },
+      { path: '/', element: <Home /> },
+      { path: '/estoque', element: <Stock /> },
+      { path: '/vender', element: <SellCar /> },
+      { path: '/sobre', element: <About /> },
+      { path: '/contato', element: <Contact /> },
+      { path: '/carro/:slug', element: <CarDetail /> },
+      { path: '/admin', element: <AdminLogin /> },
       {
         path: '/dashboard',
         element: (
           <PrivateRoute>
             <AdminDashboard />
+          </PrivateRoute>
+        ),
+      },
+      {
+        path: '/dashboard/checklist', // 👈 URL direta p/ celular
+        element: (
+          <PrivateRoute>
+            <Checklist />
           </PrivateRoute>
         ),
       },
@@ -65,3 +54,4 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <Toaster />
   </React.StrictMode>
 );
+

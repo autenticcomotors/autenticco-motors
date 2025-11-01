@@ -1,215 +1,321 @@
 // src/pages/Checklist.jsx
 import React, { useEffect, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
-import {
-  getCars,
-  getVehicleChecklists,
-  addVehicleChecklist,
-  updateVehicleChecklist,
-  getLatestChecklistTemplate,
-} from '@/lib/car-api';
-import VehicleChecklistForm from '@/components/VehicleChecklistForm';
+import { supabase } from '@/lib/supabase';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
 
-const moneyBR = (n) =>
-  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(n || 0));
+const STATUS = ['OK', 'RD', 'AD', 'DD', 'QD', 'FT'];
 
-const ChecklistPage = () => {
-  const location = useLocation();
+const BLOCO_EXTERNO = [
+  'Teto',
+  'Capô',
+  'Para-choque dianteiro',
+  'Paralama dianteiro direito',
+  'Porta dianteira direita',
+  'Porta traseira direita',
+  'Coluna traseira direita',
+  'Tampa porta-malas',
+  'Para-choque traseiro',
+  'Coluna traseira esquerda',
+  'Porta traseira esquerda',
+  'Porta dianteira esquerda',
+  'Paralama dianteiro esquerdo',
+  'Retrovisores',
+  'Vidros',
+  'Teto solar',
+  'Rodas',
+  'Pneus dianteiros',
+  'Pneus traseiros',
+  'Calotas',
+  'Faróis',
+  'Lanternas',
+];
+
+const BLOCO_INTERNO = [
+  'Documentação',
+  'IPVA',
+  'Histórico de manutenção',
+  'Revisões concessionária',
+  'Manual',
+  'Chave reserva',
+  'Único dono',
+  'Estepe / triângulo',
+  'Macaco / chave de rodas',
+  'Tapetes',
+  'Bancos',
+  'Forros de porta',
+  'Tapeçaria teto',
+  'Cinto de segurança',
+  'Volante',
+  'Manopla / câmbio / freio',
+  'Pedais',
+  'Extintor',
+  'Som',
+  'Multimídia',
+  'Buzina',
+  'Ar-condicionado',
+  'Parte elétrica',
+  'Trava / alarme',
+  'Motor',
+  'Câmbio',
+  'Suspensão',
+  'Freios / embreagem',
+];
+
+const Checklist = () => {
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const params = new URLSearchParams(location.search);
-  const selectedCarId = params.get('car') || '';
-  const selectedChecklistId = params.get('checklist') || '';
+  const carParam = searchParams.get('car') || '';
 
   const [cars, setCars] = useState([]);
+  const [carId, setCarId] = useState(carParam);
   const [car, setCar] = useState(null);
-  const [checklists, setChecklists] = useState([]);
-  const [editingChecklist, setEditingChecklist] = useState(null);
-  const [template, setTemplate] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [itens, setItens] = useState({});
+  const [observacoes, setObservacoes] = useState('');
+  const [tipo, setTipo] = useState('compra');
+  const [nivel, setNivel] = useState('50%');
+  const [salvando, setSalvando] = useState(false);
 
-  // carrega carros + template
+  // 1. puxa carros do estoque
   useEffect(() => {
     (async () => {
-      setLoading(true);
-      const [cs, tpl] = await Promise.all([
-        getCars({ includeSold: false }),
-        getLatestChecklistTemplate(),
-      ]);
-      setCars(cs || []);
-      setTemplate(tpl?.data || null);
-      setLoading(false);
+      const { data } = await supabase
+        .from('cars')
+        .select('*')
+        .eq('is_sold', false)
+        .order('created_at', { ascending: false });
+      setCars(data || []);
     })();
   }, []);
 
-  // quando tiver carId na url, busca checklists
+  // 2. quando escolhe carro, carrega dados + checklist salvo
   useEffect(() => {
-    if (!selectedCarId) {
+    if (!carId) {
       setCar(null);
-      setChecklists([]);
-      setEditingChecklist(null);
       return;
     }
-    const found = (cars || []).find((c) => c.id === selectedCarId);
+
+    const found = (cars || []).find((c) => c.id === carId);
     setCar(found || null);
-    if (found) {
-      (async () => {
-        const v = await getVehicleChecklists(found.id);
-        setChecklists(v || []);
-        if (selectedChecklistId) {
-          const ck = (v || []).find((x) => x.id === selectedChecklistId);
-          setEditingChecklist(ck || null);
-        } else {
-          setEditingChecklist(null);
-        }
-      })();
-    }
-  }, [selectedCarId, cars, selectedChecklistId]);
 
-  const handleSelectCar = (id) => {
-    navigate(`/dashboard/checklist?car=${id}`);
+    (async () => {
+      const { data } = await supabase
+        .from('vehicle_checklists')
+        .select('*')
+        .eq('car_id', carId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (data) {
+        setItens(data.items || {});
+        setObservacoes(data.observacoes || '');
+        setTipo(data.tipo || 'compra');
+        setNivel(data.nivel_combustivel || '50%');
+      } else {
+        setItens({});
+        setObservacoes('');
+        setTipo('compra');
+        setNivel('50%');
+      }
+    })();
+  }, [carId, cars]);
+
+  const marcar = (nome, valor) => {
+    setItens((prev) => ({ ...prev, [nome]: valor }));
   };
 
-  const handleSaveChecklist = async (payload, checklistId = null) => {
-    if (!car) return;
-    if (checklistId) {
-      await updateVehicleChecklist(checklistId, payload);
+  const salvar = async () => {
+    if (!carId) return;
+    setSalvando(true);
+
+    const payload = {
+      car_id: carId,
+      items: itens,
+      observacoes,
+      tipo,
+      nivel_combustivel: nivel,
+    };
+
+    const { error } = await supabase
+      .from('vehicle_checklists')
+      .upsert(payload, { onConflict: 'car_id' });
+
+    setSalvando(false);
+    if (!error) {
+      // se quiser mostrar toast usa teu toast
+      alert('Checklist salvo!');
     } else {
-      await addVehicleChecklist(payload);
+      alert('Erro ao salvar checklist');
     }
-    const v = await getVehicleChecklists(car.id);
-    setChecklists(v || []);
-    setEditingChecklist(null);
-    navigate(`/dashboard/checklist?car=${car.id}`);
   };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center text-gray-600">
-        Carregando...
-      </div>
-    );
-  }
 
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col">
-      {/* topo fixo */}
-      <header className="w-full bg-white border-b px-4 py-3 flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-lg font-bold text-gray-900">Checklist de Vistoria</h1>
-          <p className="text-xs text-gray-500">
-            Selecione um veículo e preencha. Página feita para celular. 📱
-          </p>
-        </div>
-        <a
-          href="/dashboard"
-          className="text-xs px-3 py-1 rounded bg-yellow-400 text-black font-semibold"
+    <div className="min-h-screen bg-slate-50 pb-16">
+      {/* topo fixo, vira "app" no celular */}
+      <div className="sticky top-0 z-40 bg-slate-50/90 backdrop-blur border-b flex items-center gap-3 px-4 py-3">
+        <h1 className="text-base md:text-lg font-bold text-slate-900 flex-1">
+          Checklist de veículo
+        </h1>
+        <Button
+          variant="outline"
+          onClick={() => navigate('/dashboard')}
+          className="text-xs md:text-sm"
         >
-          Voltar ao painel
-        </a>
-      </header>
+          Voltar
+        </Button>
+      </div>
 
-      <div className="flex-1 flex flex-col md:flex-row">
-        {/* coluna de veículos */}
-        <aside className="w-full md:w-72 border-r bg-white max-h-[calc(100vh-56px)] overflow-y-auto">
-          <div className="p-3">
-            <p className="text-xs text-gray-500 mb-2">Veículos em estoque</p>
-            <div className="space-y-2">
+      {/* seleção do carro */}
+      <div className="max-w-5xl mx-auto mt-4 px-4 space-y-4">
+        <div className="bg-white rounded-2xl border shadow-sm p-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex-1">
+            <p className="text-xs uppercase text-slate-500 mb-1">
+              Selecione o veículo
+            </p>
+            <select
+              value={carId}
+              onChange={(e) => {
+                setCarId(e.target.value);
+                navigate(`/dashboard/checklist?car=${e.target.value}`);
+              }}
+              className="w-full md:w-80 border rounded-lg px-3 py-2 bg-slate-50 text-sm"
+            >
+              <option value="">-- escolher --</option>
               {cars.map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => handleSelectCar(c.id)}
-                  className={`w-full text-left p-3 rounded-lg border ${
-                    selectedCarId === c.id ? 'border-yellow-400 bg-yellow-50' : 'border-gray-100'
-                  }`}
-                >
-                  <p className="text-sm font-semibold">
-                    {c.brand} {c.model}
-                  </p>
-                  <p className="text-xs text-gray-500 flex gap-1">
-                    {c.year} • {c.plate || 'sem placa'}
-                  </p>
-                  {c.fipe_value ? (
-                    <p className="text-xs text-gray-600">{moneyBR(c.fipe_value)}</p>
-                  ) : null}
-                </button>
+                <option key={c.id} value={c.id}>
+                  {c.brand} {c.model} {c.year ? `(${c.year})` : ''} — {c.plate || 'sem placa'}
+                </option>
               ))}
-              {cars.length === 0 && (
-                <p className="text-xs text-gray-400">Nenhum veículo em estoque.</p>
-              )}
-            </div>
+            </select>
+            {car && (
+              <p className="text-xs text-slate-500 mt-2">
+                FIPE: <b>{car.fipe_value ? `R$ ${Number(car.fipe_value).toLocaleString('pt-BR')}` : '—'}</b> •
+                Anúncio: <b>{car.price ? `R$ ${Number(car.price).toLocaleString('pt-BR')}` : '—'}</b>
+              </p>
+            )}
           </div>
-        </aside>
 
-        {/* área do formulário */}
-        <main className="flex-1 p-3 flex flex-col gap-3 max-h-[calc(100vh-56px)]">
-          {!car && (
-            <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
-              Selecione um veículo ao lado.
+          <div className="flex gap-2">
+            <select
+              value={tipo}
+              onChange={(e) => setTipo(e.target.value)}
+              className="border rounded-lg px-3 py-2 bg-slate-50 text-sm"
+            >
+              <option value="compra">Compra</option>
+              <option value="assessoria">Assessoria</option>
+              <option value="entrega">Entrega</option>
+            </select>
+            <select
+              value={nivel}
+              onChange={(e) => setNivel(e.target.value)}
+              className="border rounded-lg px-3 py-2 bg-slate-50 text-sm"
+            >
+              <option value="25%">25%</option>
+              <option value="50%">50%</option>
+              <option value="75%">75%</option>
+              <option value="100%">100%</option>
+            </select>
+          </div>
+        </div>
+
+        {carId ? (
+          <>
+            {/* legenda */}
+            <div className="bg-white rounded-2xl border shadow-sm p-3 text-xs text-slate-500">
+              LEGENDA: <b>OK</b> = Estado adequado • <b>RD</b> = Riscado • <b>AD</b> = Amassado •{' '}
+              <b>DD</b> = Danificado • <b>QD</b> = Quebrado • <b>FT</b> = Falta
             </div>
-          )}
 
-          {car && (
-            <>
-              {/* lista de checklists já feitos */}
-              <div className="bg-white rounded-xl border p-3">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-sm font-semibold text-gray-900">
-                    Checklists deste veículo ({checklists.length})
-                  </h2>
-                  <button
-                    onClick={() => setEditingChecklist(null)}
-                    className="text-xs px-3 py-1 rounded bg-yellow-400 text-black font-semibold"
-                  >
-                    + Novo checklist
-                  </button>
-                </div>
-                <div className="mt-2 flex gap-2 flex-wrap">
-                  {checklists.map((ck) => (
-                    <button
-                      key={ck.id}
-                      onClick={() =>
-                        navigate(`/dashboard/checklist?car=${car.id}&checklist=${ck.id}`)
-                      }
-                      className={`text-xs px-3 py-1 rounded border ${
-                        selectedChecklistId === ck.id
-                          ? 'border-yellow-400 bg-yellow-50'
-                          : 'border-gray-200'
-                      }`}
-                    >
-                      {new Date(ck.filled_at).toLocaleString('pt-BR', {
-                        dateStyle: 'short',
-                        timeStyle: 'short',
-                      })}{' '}
-                      — {ck.inspector_name || 'sem nome'}
-                    </button>
-                  ))}
-                  {checklists.length === 0 && (
-                    <p className="text-xs text-gray-400">Nenhum checklist ainda.</p>
-                  )}
-                </div>
+            {/* blocos */}
+            <div className="grid md:grid-cols-2 gap-4">
+              {/* externo */}
+              <div className="bg-white rounded-2xl border shadow-sm p-3 space-y-2">
+                <p className="text-sm font-semibold text-slate-900 mb-1">Parte externa</p>
+                {BLOCO_EXTERNO.map((nome) => (
+                  <div key={nome} className="flex items-center justify-between gap-2">
+                    <span className="text-sm text-slate-800 w-44">{nome}</span>
+                    <div className="flex gap-1 overflow-x-auto">
+                      {STATUS.map((st) => (
+                        <button
+                          key={st}
+                          type="button"
+                          onClick={() => marcar(nome, st)}
+                          className={`px-2 py-1 rounded text-xs whitespace-nowrap ${
+                            itens[nome] === st
+                              ? st === 'OK'
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : 'bg-slate-900 text-white'
+                              : 'bg-slate-100 text-slate-500'
+                          }`}
+                        >
+                          {st}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
 
-              {/* formulário */}
-              <div className="flex-1 min-h-0">
-                <VehicleChecklistForm
-                  car={car}
-                  initialData={editingChecklist}
-                  templateFromDb={template}
-                  onCancel={() => {
-                    setEditingChecklist(null);
-                    navigate(`/dashboard/checklist?car=${car.id}`);
-                  }}
-                  onSave={handleSaveChecklist}
-                  showClose={false}
-                />
+              {/* interno */}
+              <div className="bg-white rounded-2xl border shadow-sm p-3 space-y-2">
+                <p className="text-sm font-semibold text-slate-900 mb-1">Documentos / interno</p>
+                {BLOCO_INTERNO.map((nome) => (
+                  <div key={nome} className="flex items-center justify-between gap-2">
+                    <span className="text-sm text-slate-800 w-48">{nome}</span>
+                    <div className="flex gap-1 overflow-x-auto">
+                      {STATUS.map((st) => (
+                        <button
+                          key={st}
+                          type="button"
+                          onClick={() => marcar(nome, st)}
+                          className={`px-2 py-1 rounded text-xs whitespace-nowrap ${
+                            itens[nome] === st
+                              ? st === 'OK'
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : 'bg-slate-900 text-white'
+                              : 'bg-slate-100 text-slate-500'
+                          }`}
+                        >
+                          {st}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
-            </>
-          )}
-        </main>
+            </div>
+
+            {/* observações */}
+            <div className="bg-white rounded-2xl border shadow-sm p-4 space-y-2">
+              <label className="text-sm text-slate-700">Observações / pendências</label>
+              <textarea
+                value={observacoes}
+                onChange={(e) => setObservacoes(e.target.value)}
+                rows={3}
+                className="w-full border rounded-lg px-3 py-2 text-sm bg-slate-50"
+                placeholder="Ex.: risco porta dir., faltando estepe, dono vai mandar chave reserva..."
+              />
+              <div className="flex justify-end">
+                <Button
+                  onClick={salvar}
+                  className="bg-yellow-400 text-black hover:bg-yellow-500 font-semibold"
+                  disabled={salvando}
+                >
+                  {salvando ? 'Salvando...' : 'Salvar checklist'}
+                </Button>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="bg-white rounded-2xl border shadow-sm p-8 text-center text-slate-400">
+            Selecione um veículo acima para começar.
+          </div>
+        )}
       </div>
     </div>
   );
 };
 
-export default ChecklistPage;
+export default Checklist;
 

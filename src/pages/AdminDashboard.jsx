@@ -17,13 +17,12 @@ import {
   LogOut,
   Download,
   MessageSquare,
-  FileText,
-  BarChart2,
   Users,
   Image as ImageIcon,
-  Check,
-  ListChecks,
-  X,
+  FileText,
+  BarChart2,
+  Shield,
+  Search,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
@@ -43,11 +42,8 @@ import {
   getPlatforms,
   markCarAsSold,
   unmarkCarAsSold,
-  // pedidos / oferecidos
-  getClientRequests,
-  addClientRequest,
-  updateClientRequest,
-  deleteClientRequest,
+  getPublicationsForCars,
+  getExpensesForCars,
 } from '@/lib/car-api';
 import {
   AlertDialog,
@@ -71,8 +67,10 @@ import BackgroundShape from '@/components/BackgroundShape';
 import VehicleManager from '@/components/VehicleManager';
 import Reports from '@/pages/Reports';
 import OverviewBoard from '@/components/OverviewBoard';
-
-// ---------- FORM FIELDS (inclui PLACA) ----------
+import AccessControl from '@/pages/AccessControl'; // vamos navegar pra ele
+// ======================================================
+// FORM FIELDS (inclui PLACA)
+// ======================================================
 const FormFields = React.memo(({ carData, onChange, carOptions }) => (
   <>
     <input
@@ -212,11 +210,36 @@ const FormFields = React.memo(({ carData, onChange, carOptions }) => (
 ));
 
 const AdminDashboard = () => {
+  // abas
   const [activeTab, setActiveTab] = useState('leads');
+
+  // dados base
   const [cars, setCars] = useState([]);
   const [leads, setLeads] = useState([]);
   const [testimonials, setTestimonials] = useState([]);
   const [platforms, setPlatforms] = useState([]);
+
+  // pedidos / oferecidos
+  const [requestsOffers, setRequestsOffers] = useState([]);
+  const [isReqModalOpen, setIsReqModalOpen] = useState(false);
+  const [editingReq, setEditingReq] = useState(null);
+  const [reqFilterType, setReqFilterType] = useState('all');
+  const [reqSearch, setReqSearch] = useState('');
+
+  // match popup
+  const [matchModal, setMatchModal] = useState({
+    open: false,
+    matches: [],
+    car: null,
+  });
+
+  // usuário atual / permissões
+  const [currentUser, setCurrentUser] = useState(null);
+  const [currentUserPerms, setCurrentUserPerms] = useState({
+    roles: [],
+    permissions: [],
+  });
+
   const [loading, setLoading] = useState(true);
   const [leadFilters, setLeadFilters] = useState({
     status: '',
@@ -224,13 +247,8 @@ const AdminDashboard = () => {
     endDate: '',
   });
   const [leadToDelete, setLeadToDelete] = useState(null);
-  const [newTestimonial, setNewTestimonial] = useState({
-    client_name: '',
-    testimonial_text: '',
-    car_sold: '',
-  });
 
-  // carro novo (inclui placa)
+  // carro novo / edição
   const [newCar, setNewCar] = useState({
     brand: '',
     model: '',
@@ -247,13 +265,15 @@ const AdminDashboard = () => {
     color: '',
     is_blindado: false,
   });
-
   const [editingCar, setEditingCar] = useState(null);
   const [photosToUpload, setPhotosToUpload] = useState([]);
   const [photosToDelete, setPhotosToDelete] = useState([]);
   const [mainPhotoIndex, setMainPhotoIndex] = useState(0);
+  const fileInputRef = useRef(null);
+
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [carToDelete, setCarToDelete] = useState(null);
+
   const [saleDialogOpen, setSaleDialogOpen] = useState(false);
   const [carToSell, setCarToSell] = useState(null);
   const [saleForm, setSaleForm] = useState({
@@ -262,35 +282,22 @@ const AdminDashboard = () => {
     sale_date: '',
     notes: '',
   });
-  const fileInputRef = useRef(null);
-  const navigate = useNavigate();
 
-  // filtros de veículos
+  // filtros de carros
   const [carSearch, setCarSearch] = useState('');
   const [brandFilter, setBrandFilter] = useState('');
 
-  // matriz / gestão
+  // para overview / gestão direta
   const [selectedCar, setSelectedCar] = useState(null);
   const [isGestaoOpen, setIsGestaoOpen] = useState(false);
 
-  // pedidos / oferecidos
-  const [clientRequests, setClientRequests] = useState([]);
-  const [isReqDialogOpen, setIsReqDialogOpen] = useState(false);
-  const [editingRequest, setEditingRequest] = useState(null);
+  const navigate = useNavigate();
 
-  // filtros da lista de pedidos/oferecidos
-  const [reqFilterType, setReqFilterType] = useState('all'); // all | pedido | oferecido
-  const [reqSearch, setReqSearch] = useState('');
-  const [reqSort, setReqSort] = useState('desc'); // desc = mais novos primeiro
-
-  // popup de match
-  const [matchModalOpen, setMatchModalOpen] = useState(false);
-  const [matchModalPayload, setMatchModalPayload] = useState(null);
-
+  // opções fixas
   const carOptions = {
     transmissions: ['Automático', 'Manual'],
     bodyTypes: ['SUV', 'Sedan', 'Hatch', 'Picape', 'Esportivo', 'Outro'],
-    fuels: ['Flex', 'Gasolina', 'Diesel', 'Elétrico', 'Híbrido', 'GNV'],
+    fuels: ['Flex', 'Gasolina', 'Diesel', 'Elétrico', 'Híbrido'],
     colors: [
       'Preto',
       'Branco',
@@ -311,6 +318,42 @@ const AdminDashboard = () => {
     'Descartado',
   ];
 
+  // ============================================================
+  // CARREGA USUÁRIO E PERMISSÕES
+  // ============================================================
+  useEffect(() => {
+    (async () => {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (user) {
+          setCurrentUser(user);
+          const { data: permData } = await supabase
+            .from('vw_app_user_permissions')
+            .select('*')
+            .eq('user_id', user.id);
+          const row = Array.isArray(permData) ? permData[0] : permData;
+          if (row) {
+            setCurrentUserPerms({
+              roles: row.roles || [],
+              permissions: row.permissions || [],
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Erro carregando usuário/permissões:', err);
+      }
+    })();
+  }, []);
+
+  const canSeeAccessTab =
+    (currentUserPerms.permissions || []).includes('admin:full') ||
+    (currentUserPerms.roles || []).includes('super_admin');
+
+  // ============================================================
+  // FETCH PRINCIPAL
+  // ============================================================
   const sortCarsActiveFirst = (list = []) => {
     return [...list].sort((a, b) => {
       const aActive = a.is_available === false ? 0 : 1;
@@ -322,75 +365,39 @@ const AdminDashboard = () => {
     });
   };
 
-  const norm = (v) =>
-    String(v || '')
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .trim()
-      .toLowerCase();
-
-  // regra de match
-  const doesRequestMatchCar = (req, car) => {
-    if (!req || !car) return false;
-    if (car.is_sold) return false;
-
-    if (req.brand && norm(req.brand) !== norm(car.brand)) return false;
-    if (req.model) {
-      const rm = norm(req.model);
-      const cm = norm(car.model);
-      if (!(cm === rm || cm.includes(rm) || rm.includes(cm))) return false;
-    }
-
-    if (req.body_type && norm(req.body_type) !== norm(car.body_type)) return false;
-    if (req.fuel && norm(req.fuel) !== norm(car.fuel)) return false;
-    if (req.transmission && norm(req.transmission) !== norm(car.transmission))
-      return false;
-
-    const carYear = car.year ? Number(car.year) : null;
-    const reqYearExact = req.year_exact ? Number(req.year_exact) : null;
-    const reqYearMin = req.year_min ? Number(req.year_min) : null;
-    const reqYearMax = req.year_max ? Number(req.year_max) : null;
-
-    if (reqYearExact && carYear && carYear !== reqYearExact) return false;
-
-    if (!reqYearExact) {
-      if (reqYearMin && carYear && carYear < reqYearMin) return false;
-      if (reqYearMax && carYear && carYear > reqYearMax) return false;
-    }
-
-    const carPrice = car.price ? Number(car.price) : null;
-    const reqMin = req.price_min ? Number(req.price_min) : null;
-    const reqMax = req.price_max ? Number(req.price_max) : null;
-    if (reqMin && carPrice && carPrice < reqMin) return false;
-    if (reqMax && carPrice && carPrice > reqMax) return false;
-
-    return true;
-  };
-
   const fetchAllData = useCallback(
     async (opts = { showLoading: true }) => {
       if (opts.showLoading) setLoading(true);
       try {
-        const [carsData, testimonialsData, leadsData, platformsData, clientReqs] =
-          await Promise.all([
-            getCars(),
-            getTestimonials(),
-            getLeads(leadFilters),
-            getPlatforms(),
-            getClientRequests(),
-          ]);
+        const [
+          carsData,
+          testimonialsData,
+          leadsData,
+          platformsData,
+          reqOffData,
+        ] = await Promise.all([
+          getCars(),
+          getTestimonials(),
+          getLeads(leadFilters),
+          getPlatforms(),
+          supabase
+            .from('client_requests_offers')
+            .select('*')
+            .order('created_at', { ascending: false }),
+        ]);
+
         setCars(sortCarsActiveFirst(carsData || []));
         setTestimonials(testimonialsData || []);
         setLeads(leadsData || []);
         setPlatforms(platformsData || []);
-        setClientRequests(clientReqs || []);
+        setRequestsOffers(reqOffData.data || []);
       } catch (err) {
         console.error('Erro fetchAllData:', err);
         setCars([]);
         setTestimonials([]);
         setLeads([]);
         setPlatforms([]);
-        setClientRequests([]);
+        setRequestsOffers([]);
       } finally {
         if (opts.showLoading) setLoading(false);
       }
@@ -402,6 +409,9 @@ const AdminDashboard = () => {
     fetchAllData();
   }, [fetchAllData]);
 
+  // ============================================================
+  // LEADS
+  // ============================================================
   const handleStatusChange = async (leadId, newStatus) => {
     await updateLead(leadId, { status: newStatus });
     toast({ title: 'Status do lead atualizado!' });
@@ -429,11 +439,18 @@ const AdminDashboard = () => {
       notas: lead.notes,
     }));
 
+  // ============================================================
+  // LOGOUT
+  // ============================================================
   const handleLogout = async () => {
     await supabase.auth.signOut();
+    localStorage.removeItem('autenticco_admin_login_at');
     navigate('/admin');
   };
 
+  // ============================================================
+  // INPUTS GENÉRICOS
+  // ============================================================
   const handleInputChange = (e, setStateFunc) => {
     const { name, type, checked, value } = e.target;
     const finalValue = type === 'checkbox' ? checked : value;
@@ -447,20 +464,19 @@ const AdminDashboard = () => {
     (e) => handleInputChange(e, setEditingCar),
     []
   );
+
+  // ============================================================
+  // TESTIMONIALS
+  // ============================================================
+  const [newTestimonial, setNewTestimonial] = useState({
+    client_name: '',
+    testimonial_text: '',
+    car_sold: '',
+  });
   const handleNewTestimonialInputChange = useCallback(
     (e) => handleInputChange(e, setNewTestimonial),
     []
   );
-
-  const handleToggleFeatured = async (carId, currentStatus) => {
-    await updateCar(carId, { is_featured: !currentStatus });
-    toast({
-      title: `Veículo ${
-        !currentStatus ? 'adicionado aos' : 'removido dos'
-      } destaques!`,
-    });
-    fetchAllData();
-  };
 
   const handleAddTestimonial = async (e) => {
     e.preventDefault();
@@ -479,6 +495,9 @@ const AdminDashboard = () => {
     fetchAllData();
   };
 
+  // ============================================================
+  // FOTOS
+  // ============================================================
   const handlePhotoUpload = (e) => {
     const files = Array.from(e.target.files || []);
     setPhotosToUpload((prev) => [...prev, ...files]);
@@ -497,11 +516,91 @@ const AdminDashboard = () => {
     }
   };
 
-  // adicionar veículo
+  // ============================================================
+  // MATCH DE PEDIDOS/OFERECIDOS AO CADASTRAR CARRO
+  // ============================================================
+  const checkMatchForNewCar = async (car) => {
+    try {
+      // pega todos os pedidos/oferecidos
+      const { data: reqs } = await supabase
+        .from('client_requests_offers')
+        .select('*');
+
+      if (!reqs || reqs.length === 0) return;
+
+      // regra bem simples de match
+      const matches = reqs
+        .map((r) => {
+          let score = 0;
+
+          if (
+            r.brand &&
+            car.brand &&
+            r.brand.trim().toLowerCase() === car.brand.trim().toLowerCase()
+          ) {
+            score += 30;
+          }
+          if (
+            r.model &&
+            car.model &&
+            r.model.trim().toLowerCase() === car.model.trim().toLowerCase()
+          ) {
+            score += 30;
+          }
+          if (r.body_type && car.body_type && r.body_type === car.body_type) {
+            score += 15;
+          }
+          if (r.fuel && car.fuel && r.fuel === car.fuel) {
+            score += 10;
+          }
+          if (r.transmission && car.transmission && r.transmission === car.transmission) {
+            score += 10;
+          }
+          // ano
+          if (r.type === 'pedido') {
+            // pedido → tem faixa
+            const ano = Number(car.year);
+            const min = r.year_min ? Number(r.year_min) : null;
+            const max = r.year_max ? Number(r.year_max) : null;
+            if (ano) {
+              if ((min && ano < min) || (max && ano > max)) {
+                // fora da faixa
+              } else {
+                score += 10;
+              }
+            }
+          } else if (r.type === 'oferecido') {
+            // oferecido → ano exato
+            if (r.year_exact && car.year && Number(r.year_exact) === Number(car.year)) {
+              score += 10;
+            }
+          }
+
+          return { ...r, score };
+        })
+        .filter((m) => m.score >= 50)
+        .sort((a, b) => b.score - a.score);
+
+      if (matches.length > 0) {
+        setMatchModal({
+          open: true,
+          matches,
+          car,
+        });
+      }
+    } catch (err) {
+      console.error('Erro checkMatchForNewCar:', err);
+    }
+  };
+
+  // ============================================================
+  // ADD CAR
+  // ============================================================
   const handleAddCar = async (e) => {
     e.preventDefault();
     setLoading(true);
     try {
+      // upload fotos
       const photoUrls = [];
       for (const file of photosToUpload) {
         const fileName = `${newCar.brand}/${Date.now()}_${file.name}`;
@@ -522,6 +621,7 @@ const AdminDashboard = () => {
         } = supabase.storage.from('car_photos').getPublicUrl(data.path);
         photoUrls.push(publicUrl);
       }
+
       const carData = {
         ...newCar,
         photo_urls: photoUrls,
@@ -529,6 +629,7 @@ const AdminDashboard = () => {
         price: parseFloat(newCar.price || 0),
         is_available: true,
       };
+
       const { data: addedCar, error } = await addCar(carData);
       if (error) {
         toast({
@@ -537,8 +638,11 @@ const AdminDashboard = () => {
           variant: 'destructive',
         });
       } else {
-        const newList = sortCarsActiveFirst([...(cars || []), addedCar]);
-        setCars(newList);
+        // atualiza lista
+        setCars((prevCars) =>
+          sortCarsActiveFirst([...(prevCars || []), addedCar])
+        );
+        // limpa form
         setNewCar({
           brand: '',
           model: '',
@@ -560,27 +664,8 @@ const AdminDashboard = () => {
         if (fileInputRef.current) fileInputRef.current.value = '';
         toast({ title: 'Veículo adicionado!' });
 
-        // MATCH com pedidos
-        const pendingReqs = (clientRequests || []).filter(
-          (r) => !r.matched_car_id && r.type === 'pedido'
-        );
-        const matchedNow = pendingReqs.filter((req) =>
-          doesRequestMatchCar(req, addedCar)
-        );
-
-        if (matchedNow.length > 0) {
-          for (const m of matchedNow) {
-            await updateClientRequest(m.id, { matched_car_id: addedCar.id });
-          }
-          setMatchModalPayload({
-            mode: 'car',
-            car: addedCar,
-            requests: matchedNow,
-          });
-          setMatchModalOpen(true);
-          const ref = await getClientRequests();
-          setClientRequests(ref || []);
-        }
+        // checar MATCH
+        await checkMatchForNewCar(addedCar);
       }
     } catch (err) {
       console.error('Erro handleAddCar:', err);
@@ -594,6 +679,9 @@ const AdminDashboard = () => {
     }
   };
 
+  // ============================================================
+  // EDIT CAR
+  // ============================================================
   const handleEditCarClick = (car) => {
     setPhotosToUpload([]);
     setPhotosToDelete([]);
@@ -677,6 +765,9 @@ const AdminDashboard = () => {
     }
   };
 
+  // ============================================================
+  // DELETE CAR
+  // ============================================================
   const handleDeleteCar = async (id) => {
     setLoading(true);
     try {
@@ -712,11 +803,14 @@ const AdminDashboard = () => {
     }
   };
 
-  // venda
+  // ============================================================
+  // MARCAR COMO VENDIDO
+  // ============================================================
   const openSaleDialog = (car) => {
     setCarToSell(car);
     setSaleForm({
-      platform_id: car.sold_platform_id || (platforms[0] && platforms[0].id) || '',
+      platform_id:
+        car.sold_platform_id || (platforms[0] && platforms[0].id) || '',
       sale_price: car.sale_price || '',
       sale_date: car.sold_at
         ? car.sold_at.slice(0, 10)
@@ -725,13 +819,14 @@ const AdminDashboard = () => {
     });
     setSaleDialogOpen(true);
   };
-
   const handleSaleFormChange = (e) => {
     const { name, value } = e.target;
     setSaleForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  // filtros de veículos
+  // ============================================================
+  // FILTROS (carros)
+  // ============================================================
   const brandOptions = useMemo(() => {
     const brands = Array.from(
       new Set(
@@ -768,144 +863,135 @@ const AdminDashboard = () => {
     });
   }, [cars, carSearch, brandFilter]);
 
-  // pedidos / oferecidos — modelo em branco
-  const blankRequest = {
-    type: 'pedido',
-    client_name: '',
-    client_contact: '',
-    brand: '',
-    model: '',
-    body_type: '',
-    fuel: '',
-    transmission: '',
-    price_min: '',
-    price_max: '',
-    year_min: '',
-    year_max: '',
-    year_exact: '',
-    lead_date: new Date().toISOString().slice(0, 10),
-    lead_source: '',
-    notes: '',
+  // ============================================================
+  // PEDIDOS / OFERECIDOS - FUNÇÕES
+  // ============================================================
+  const openNewRequest = () => {
+    setEditingReq({
+      type: 'pedido',
+      client_name: '',
+      client_contact: '',
+      brand: '',
+      model: '',
+      version: '',
+      transmission: '',
+      body_type: '',
+      fuel: '',
+      year_min: '',
+      year_max: '',
+      year_exact: '',
+      price_min: '',
+      price_max: '',
+      lead_date: new Date().toISOString().slice(0, 10),
+      lead_source: '',
+      notes: '',
+    });
+    setIsReqModalOpen(true);
   };
 
-  const openNewRequestDialog = () => {
-    setEditingRequest({ ...blankRequest });
-    setIsReqDialogOpen(true);
-  };
+  const saveRequestOffer = async () => {
+    if (!editingReq) return;
+    try {
+      const payload = {
+        ...editingReq,
+      };
+      // normaliza
+      if (payload.type === 'oferecido') {
+        // ano exato
+        payload.year_min = null;
+        payload.year_max = null;
+      }
+      if (payload.type === 'pedido') {
+        payload.year_exact = null;
+      }
 
-  const handleReqChange = (e) => {
-    const { name, value } = e.target;
-    setEditingRequest((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
-
-  const saveRequest = async () => {
-    if (!editingRequest) return;
-    const payload = {
-      ...editingRequest,
-      price_min: editingRequest.price_min
-        ? Number(editingRequest.price_min)
-        : null,
-      price_max: editingRequest.price_max
-        ? Number(editingRequest.price_max)
-        : null,
-      year_min: editingRequest.year_min ? Number(editingRequest.year_min) : null,
-      year_max: editingRequest.year_max ? Number(editingRequest.year_max) : null,
-      year_exact: editingRequest.year_exact
-        ? Number(editingRequest.year_exact)
-        : null,
-    };
-
-    if (!editingRequest.id) {
-      const { data, error } = await addClientRequest(payload);
-      if (error) {
-        toast({
-          title: 'Erro ao salvar pedido/oferecido',
-          description: String(error.message || error),
-          variant: 'destructive',
-        });
-      } else {
-        // match imediato
-        const stock = cars || [];
-        const matchedCar = stock.find((c) => doesRequestMatchCar(data, c));
-        if (matchedCar) {
-          await updateClientRequest(data.id, { matched_car_id: matchedCar.id });
-          setMatchModalPayload({
-            mode: 'request',
-            request: data,
-            car: matchedCar,
+      if (editingReq.id) {
+        const { error } = await supabase
+          .from('client_requests_offers')
+          .update(payload)
+          .eq('id', editingReq.id);
+        if (error) {
+          toast({
+            title: 'Erro ao atualizar registro',
+            description: error.message,
+            variant: 'destructive',
           });
-          setMatchModalOpen(true);
+          return;
         }
-        const refreshed = await getClientRequests();
-        setClientRequests(refreshed || []);
-        toast({ title: 'Registro salvo!' });
-      }
-    } else {
-      const { error } = await updateClientRequest(editingRequest.id, payload);
-      if (error) {
-        toast({
-          title: 'Erro ao atualizar pedido/oferecido',
-          description: String(error.message || error),
-          variant: 'destructive',
-        });
-      } else {
-        const refreshed = await getClientRequests();
-        setClientRequests(refreshed || []);
         toast({ title: 'Registro atualizado!' });
+      } else {
+        const { error } = await supabase
+          .from('client_requests_offers')
+          .insert([payload]);
+        if (error) {
+          toast({
+            title: 'Erro ao salvar registro',
+            description: error.message,
+            variant: 'destructive',
+          });
+          return;
+        }
+        toast({ title: 'Registro criado!' });
       }
-    }
-
-    setIsReqDialogOpen(false);
-    setEditingRequest(null);
-  };
-
-  const deleteRequest = async (id) => {
-    await deleteClientRequest(id);
-    const refreshed = await getClientRequests();
-    setClientRequests(refreshed || []);
-    toast({ title: 'Registro removido.' });
-  };
-
-  // aplica os filtros da aba de pedidos
-  const filteredRequests = useMemo(() => {
-    let list = [...(clientRequests || [])];
-
-    if (reqFilterType === 'pedido') {
-      list = list.filter((r) => r.type === 'pedido');
-    } else if (reqFilterType === 'oferecido') {
-      list = list.filter((r) => r.type === 'oferecido');
-    }
-
-    const term = norm(reqSearch);
-    if (term) {
-      list = list.filter((r) => {
-        const txt = [
-          r.client_name,
-          r.client_contact,
-          r.brand,
-          r.model,
-          r.lead_source,
-          r.notes,
-        ]
-          .map((x) => norm(x))
-          .join(' ');
-        return txt.includes(term);
+      setIsReqModalOpen(false);
+      setEditingReq(null);
+      fetchAllData({ showLoading: false });
+    } catch (err) {
+      toast({
+        title: 'Erro ao salvar',
+        description: String(err),
+        variant: 'destructive',
       });
     }
+  };
 
-    list.sort((a, b) => {
-      const da = a.lead_date ? new Date(a.lead_date).getTime() : 0;
-      const db = b.lead_date ? new Date(b.lead_date).getTime() : 0;
-      return reqSort === 'desc' ? db - da : da - db;
-    });
+  const deleteRequestOffer = async (id) => {
+    try {
+      const { error } = await supabase
+        .from('client_requests_offers')
+        .delete()
+        .eq('id', id);
+      if (error) {
+        toast({
+          title: 'Erro ao excluir',
+          description: error.message,
+          variant: 'destructive',
+        });
+        return;
+      }
+      toast({ title: 'Excluído!' });
+      fetchAllData({ showLoading: false });
+    } catch (err) {
+      toast({
+        title: 'Erro ao excluir',
+        description: String(err),
+        variant: 'destructive',
+      });
+    }
+  };
 
+  const filteredRequestsOffers = useMemo(() => {
+    let list = requestsOffers || [];
+    if (reqFilterType !== 'all') {
+      list = list.filter((r) => r.type === reqFilterType);
+    }
+    if (reqSearch.trim() !== '') {
+      const term = reqSearch.trim().toLowerCase();
+      list = list.filter((r) => {
+        return (
+          (r.client_name || '').toLowerCase().includes(term) ||
+          (r.brand || '').toLowerCase().includes(term) ||
+          (r.model || '').toLowerCase().includes(term) ||
+          (r.client_contact || '').toLowerCase().includes(term)
+        );
+      });
+    }
     return list;
-  }, [clientRequests, reqFilterType, reqSearch, reqSort]);
+  }, [requestsOffers, reqFilterType, reqSearch]);
 
-  // =========== RENDER ===========
+  // ============================================================
+  // RENDER
+  // ============================================================
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex justify-center items-center">
@@ -916,18 +1002,11 @@ const AdminDashboard = () => {
     );
   }
 
+  // contagens
   const estoqueAtualCount = (cars || []).filter(
     (c) => c.is_sold !== true && c.is_available !== false
   ).length;
   const vendidosCount = (cars || []).filter((c) => c.is_sold === true).length;
-
-  const pedidosCount = (clientRequests || []).filter(
-    (r) => r.type === 'pedido'
-  ).length;
-  const oferecidosCount = (clientRequests || []).filter(
-    (r) => r.type === 'oferecido'
-  ).length;
-  const matchCount = (clientRequests || []).filter((r) => r.matched_car_id).length;
 
   return (
     <div className="relative isolate min-h-screen bg-gray-50 text-gray-800 pt-28">
@@ -937,17 +1016,40 @@ const AdminDashboard = () => {
       <BackgroundShape />
 
       <div className="relative z-10 w-full px-4 sm:px-6 lg:px-12 py-12">
-        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          {/* TOPO */}
           <div className="flex justify-between items-center mb-8">
-            <h1 className="text-3xl font-bold text-gray-900">
-              Painel de <span className="text-yellow-500">Controle</span>
-            </h1>
-            <Button onClick={handleLogout} variant="destructive">
-              <LogOut className="mr-2 h-4 w-4" /> Sair
-            </Button>
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">
+                Painel de <span className="text-yellow-500">Controle</span>
+              </h1>
+              {currentUser && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Logado como {currentUser.email}
+                </p>
+              )}
+            </div>
+
+            <div className="flex gap-3">
+              {canSeeAccessTab && (
+                <Button
+                  variant="outline"
+                  onClick={() => navigate('/dashboard/acessos')}
+                  className="flex items-center gap-2"
+                >
+                  <Shield className="w-4 h-4" /> Acessos
+                </Button>
+              )}
+              <Button onClick={handleLogout} variant="destructive">
+                <LogOut className="mr-2 h-4 w-4" /> Sair
+              </Button>
+            </div>
           </div>
 
-          {/* abas */}
+          {/* ABAS */}
           <div className="flex space-x-4 mb-8 border-b overflow-x-auto">
             <button
               className={`px-4 py-2 font-semibold ${
@@ -968,16 +1070,6 @@ const AdminDashboard = () => {
               onClick={() => setActiveTab('cars')}
             >
               <Car className="inline mr-2" /> Veículos
-            </button>
-            <button
-              className={`px-4 py-2 font-semibold ${
-                activeTab === 'testimonials'
-                  ? 'border-b-2 border-yellow-500 text-yellow-500'
-                  : 'text-gray-500 hover:text-gray-900'
-              }`}
-              onClick={() => setActiveTab('testimonials')}
-            >
-              <MessageSquare className="inline mr-2" /> Depoimentos
             </button>
             <button
               className={`px-4 py-2 font-semibold ${
@@ -1011,13 +1103,23 @@ const AdminDashboard = () => {
             </button>
             <button
               className={`px-4 py-2 font-semibold ${
-                activeTab === 'requests'
+                activeTab === 'pedidos'
                   ? 'border-b-2 border-yellow-500 text-yellow-500'
                   : 'text-gray-500 hover:text-gray-900'
               }`}
-              onClick={() => setActiveTab('requests')}
+              onClick={() => setActiveTab('pedidos')}
             >
-              <ListChecks className="inline mr-2" /> Pedidos / Oferecidos
+              <MessageSquare className="inline mr-2" /> Pedidos / Oferecidos
+            </button>
+            <button
+              className={`px-4 py-2 font-semibold ${
+                activeTab === 'testimonials'
+                  ? 'border-b-2 border-yellow-500 text-yellow-500'
+                  : 'text-gray-500 hover:text-gray-900'
+              }`}
+              onClick={() => setActiveTab('testimonials')}
+            >
+              <MessageSquare className="inline mr-2" /> Depoimentos
             </button>
           </div>
 
@@ -1026,12 +1128,16 @@ const AdminDashboard = () => {
             <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-xl border">
               <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
                 <div className="text-lg font-bold">
-                  Exibindo <span className="text-yellow-500">{leads.length}</span>{' '}
+                  Exibindo{' '}
+                  <span className="text-yellow-500">{leads.length}</span>{' '}
                   lead(s)
                 </div>
                 <div className="flex flex-wrap items-center justify-center gap-4">
                   <div className="flex gap-2 items-center">
-                    <label htmlFor="startDate" className="text-sm font-medium">
+                    <label
+                      htmlFor="startDate"
+                      className="text-sm font-medium"
+                    >
                       De:
                     </label>
                     <input
@@ -1040,7 +1146,10 @@ const AdminDashboard = () => {
                       name="startDate"
                       value={leadFilters.startDate}
                       onChange={(e) =>
-                        setLeadFilters((f) => ({ ...f, startDate: e.target.value }))
+                        setLeadFilters((f) => ({
+                          ...f,
+                          startDate: e.target.value,
+                        }))
                       }
                       className="bg-white border-gray-300 rounded-md p-2 h-10 text-sm"
                     />
@@ -1055,7 +1164,10 @@ const AdminDashboard = () => {
                       name="endDate"
                       value={leadFilters.endDate}
                       onChange={(e) =>
-                        setLeadFilters((f) => ({ ...f, endDate: e.target.value }))
+                        setLeadFilters((f) => ({
+                          ...f,
+                          endDate: e.target.value,
+                        }))
                       }
                       className="bg-white border-gray-300 rounded-md p-2 h-10 text-sm"
                     />
@@ -1063,7 +1175,10 @@ const AdminDashboard = () => {
                   <select
                     value={leadFilters.status}
                     onChange={(e) =>
-                      setLeadFilters((f) => ({ ...f, status: e.target.value }))
+                      setLeadFilters((f) => ({
+                        ...f,
+                        status: e.target.value,
+                      }))
                     }
                     className="bg-white border-gray-300 rounded-md p-2 h-10 text-sm"
                   >
@@ -1101,7 +1216,9 @@ const AdminDashboard = () => {
                             {lead.lead_type}
                           </span>
                         </p>
-                        <p className="text-gray-600 truncate">{lead.client_contact}</p>
+                        <p className="text-gray-600 truncate">
+                          {lead.client_contact}
+                        </p>
                         {lead.cars && lead.cars.slug && (
                           <p className="text-sm mt-2">
                             Interesse:{' '}
@@ -1118,7 +1235,9 @@ const AdminDashboard = () => {
                       <div className="flex items-center gap-1">
                         <select
                           value={lead.status}
-                          onChange={(e) => handleStatusChange(lead.id, e.target.value)}
+                          onChange={(e) =>
+                            handleStatusChange(lead.id, e.target.value)
+                          }
                           className="bg-gray-100 border-gray-300 rounded p-2 text-sm flex-shrink-0"
                         >
                           {statusOptions.map((s) => (
@@ -1129,7 +1248,9 @@ const AdminDashboard = () => {
                         </select>
                         <AlertDialog
                           open={leadToDelete === lead.id}
-                          onOpenChange={(isOpen) => !isOpen && setLeadToDelete(null)}
+                          onOpenChange={(isOpen) =>
+                            !isOpen && setLeadToDelete(null)
+                          }
                         >
                           <AlertDialogTrigger asChild>
                             <Button
@@ -1142,13 +1263,17 @@ const AdminDashboard = () => {
                           </AlertDialogTrigger>
                           <AlertDialogContent className="bg-white">
                             <AlertDialogHeader>
-                              <AlertDialogTitle>Tem certeza?</AlertDialogTitle>
+                              <AlertDialogTitle>
+                                Tem certeza?
+                              </AlertDialogTitle>
                               <AlertDialogDescription>
                                 Esta ação removerá o lead permanentemente.
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
-                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                              <AlertDialogCancel>
+                                Cancelar
+                              </AlertDialogCancel>
                               <AlertDialogAction onClick={handleDeleteLead}>
                                 Sim, Excluir
                               </AlertDialogAction>
@@ -1168,7 +1293,8 @@ const AdminDashboard = () => {
             <>
               <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-8 mb-6 shadow-xl border">
                 <h2 className="text-2xl font-semibold mb-6 flex items-center">
-                  <PlusCircle className="mr-3 text-yellow-500" /> Adicionar Novo Veículo
+                  <PlusCircle className="mr-3 text-yellow-500" /> Adicionar
+                  Novo Veículo
                 </h2>
                 <form onSubmit={handleAddCar} className="space-y-6">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -1181,7 +1307,9 @@ const AdminDashboard = () => {
                   <div>
                     <Button
                       type="button"
-                      onClick={() => fileInputRef.current && fileInputRef.current.click()}
+                      onClick={() =>
+                        fileInputRef.current && fileInputRef.current.click()
+                      }
                     >
                       <ImageIcon className="mr-2 h-4 w-4" /> Adicionar Fotos
                     </Button>
@@ -1204,7 +1332,9 @@ const AdminDashboard = () => {
                             src={URL.createObjectURL(file)}
                             alt={`Preview ${index}`}
                             className={`h-24 w-24 object-cover rounded-lg ${
-                              mainPhotoIndex === index ? 'ring-2 ring-yellow-500' : ''
+                              mainPhotoIndex === index
+                                ? 'ring-2 ring-yellow-500'
+                                : ''
                             }`}
                           />
                           {mainPhotoIndex === index && (
@@ -1236,7 +1366,7 @@ const AdminDashboard = () => {
                 </form>
               </div>
 
-              {/* estoque */}
+              {/* NOVO BLOCO: Estoque / Vendidos */}
               <div className="flex justify-between items-center mb-6">
                 <div>
                   <h2 className="text-2xl font-semibold flex items-center">
@@ -1262,7 +1392,7 @@ const AdminDashboard = () => {
                 </Button>
               </div>
 
-              {/* filtros veículos */}
+              {/* CONTROLES DE FILTRO */}
               <div className="flex flex-col md:flex-row gap-3 items-center mb-4">
                 <input
                   placeholder="Pesquisar marca, modelo ou PLACA..."
@@ -1273,7 +1403,9 @@ const AdminDashboard = () => {
                 <select
                   value={brandFilter || 'ALL'}
                   onChange={(e) =>
-                    setBrandFilter(e.target.value === 'ALL' ? '' : e.target.value)
+                    setBrandFilter(
+                      e.target.value === 'ALL' ? '' : e.target.value
+                    )
                   }
                   className="w-full md:w-1/4 p-2 border rounded"
                 >
@@ -1342,7 +1474,10 @@ const AdminDashboard = () => {
                             }).format(car.price || 0)}
                           </p>
                           <p className="text-xs text-gray-600 mt-1">
-                            Placa: <span className="font-medium">{car.plate || '-'}</span>
+                            Placa:{' '}
+                            <span className="font-medium">
+                              {car.plate || '-'}
+                            </span>
                           </p>
 
                           {car.is_available === false && (
@@ -1352,12 +1487,12 @@ const AdminDashboard = () => {
                                 if (!raw) {
                                   return 'Vendido -';
                                 }
-
-                                const clean = String(raw).replace('T', ' ').trim();
+                                const clean = String(raw)
+                                  .replace('T', ' ')
+                                  .trim();
                                 const y = clean.slice(0, 4);
                                 const m = clean.slice(5, 7);
                                 const d = clean.slice(8, 10);
-
                                 if (!y || !m || !d) {
                                   return `Vendido em ${raw} - ${
                                     car.sale_price
@@ -1368,7 +1503,6 @@ const AdminDashboard = () => {
                                       : '-'
                                   }`;
                                 }
-
                                 const dataBR = `${d}/${m}/${y}`;
                                 const preco = car.sale_price
                                   ? new Intl.NumberFormat('pt-BR', {
@@ -1376,7 +1510,6 @@ const AdminDashboard = () => {
                                       currency: 'BRL',
                                     }).format(car.sale_price)
                                   : '-';
-
                                 return `Vendido em ${dataBR} - ${preco}`;
                               })()}
                             </p>
@@ -1388,7 +1521,11 @@ const AdminDashboard = () => {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => handleToggleFeatured(car.id, car.is_featured)}
+                          onClick={() =>
+                            updateCar(car.id, {
+                              is_featured: !car.is_featured,
+                            }).then(() => fetchAllData({ showLoading: false }))
+                          }
                           title={
                             car.is_featured
                               ? 'Remover dos destaques'
@@ -1396,16 +1533,20 @@ const AdminDashboard = () => {
                           }
                         >
                           <svg
-                            xmlns="http://www.w3.org/2000/svg"
                             className={`h-5 w-5 transition-colors ${
                               car.is_featured
                                 ? 'text-yellow-500 fill-yellow-500'
                                 : 'text-gray-400 hover:text-yellow-500'
                             }`}
-                            viewBox="0 0 20 20"
-                            fill="currentColor"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth="1.5"
                           >
-                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.402c.499.036.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.5a.562.562 0 01-.84-.61l1.285-5.386a.563.563 0 00-.182-.557L3.04 10.345a.563.563 0 01.321-.988l5.518-.402a.563.563 0 00.475-.345l2.125-5.111z"
+                            />
                           </svg>
                         </Button>
                         <Button
@@ -1422,7 +1563,11 @@ const AdminDashboard = () => {
                             onClick={() => openSaleDialog(car)}
                             className="flex items-center gap-2"
                           >
-                            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none">
+                            <svg
+                              className="h-4 w-4"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                            >
                               <path
                                 d="M3 12h18"
                                 stroke="currentColor"
@@ -1473,13 +1618,17 @@ const AdminDashboard = () => {
                           </AlertDialogTrigger>
                           <AlertDialogContent className="bg-white">
                             <AlertDialogHeader>
-                              <AlertDialogTitle>Tem certeza?</AlertDialogTitle>
+                              <AlertDialogTitle>
+                                Tem certeza?
+                              </AlertDialogTitle>
                               <AlertDialogDescription>
                                 Esta ação removerá o veículo.
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
-                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                              <AlertDialogCancel>
+                                Cancelar
+                              </AlertDialogCancel>
                               <AlertDialogAction
                                 onClick={() => handleDeleteCar(carToDelete?.id)}
                               >
@@ -1524,14 +1673,135 @@ const AdminDashboard = () => {
             </div>
           )}
 
+          {/* RELATÓRIOS */}
+          {activeTab === 'reports' && (
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-xl border">
+              <Reports />
+            </div>
+          )}
+
+          {/* PEDIDOS / OFERECIDOS */}
+          {activeTab === 'pedidos' && (
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-xl border">
+              <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-6">
+                <div>
+                  <h2 className="text-2xl font-semibold flex items-center gap-2">
+                    <MessageSquare className="text-yellow-500" />
+                    Pedidos / Oferecidos
+                  </h2>
+                  <p className="text-xs text-gray-500">
+                    Clientes que pediram carro e pessoas que ofereceram carro.
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <div className="relative">
+                    <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      value={reqSearch}
+                      onChange={(e) => setReqSearch(e.target.value)}
+                      placeholder="Buscar por cliente, modelo..."
+                      className="pl-9 pr-3 py-2 rounded-lg border border-gray-200 text-sm"
+                    />
+                  </div>
+                  <select
+                    value={reqFilterType}
+                    onChange={(e) => setReqFilterType(e.target.value)}
+                    className="border rounded-lg px-3 py-2 text-sm"
+                  >
+                    <option value="all">Todos</option>
+                    <option value="pedido">Pedidos</option>
+                    <option value="oferecido">Oferecidos</option>
+                  </select>
+                  <Button onClick={openNewRequest}>
+                    <PlusCircle className="w-4 h-4 mr-2" />
+                    Novo
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-3 max-h-[520px] overflow-y-auto pr-2">
+                {filteredRequestsOffers.map((r) => (
+                  <div
+                    key={r.id}
+                    className="border rounded-xl p-4 flex items-center justify-between gap-4 bg-white"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                        {r.client_name || 'Sem nome'}
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] uppercase ${
+                            r.type === 'pedido'
+                              ? 'bg-blue-50 text-blue-600'
+                              : 'bg-green-50 text-green-600'
+                          }`}
+                        >
+                          {r.type}
+                        </span>
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {r.client_contact || '-'}
+                      </p>
+                      <p className="text-xs text-gray-600 mt-1">
+                        {r.brand} {r.model}{' '}
+                        {r.version ? `- ${r.version}` : ''}
+                      </p>
+                      <p className="text-[10px] text-gray-400 mt-1 flex gap-2 flex-wrap">
+                        {r.body_type && <span>Carroceria: {r.body_type}</span>}
+                        {r.fuel && <span>Combustível: {r.fuel}</span>}
+                        {r.transmission && <span>Câmbio: {r.transmission}</span>}
+                        {r.type === 'pedido' && (r.year_min || r.year_max) && (
+                          <span>
+                            Ano: {r.year_min || '-'} até {r.year_max || '-'}
+                          </span>
+                        )}
+                        {r.type === 'oferecido' && r.year_exact && (
+                          <span>Ano: {r.year_exact}</span>
+                        )}
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => {
+                          setEditingReq(r);
+                          setIsReqModalOpen(true);
+                        }}
+                      >
+                        <Edit className="w-4 h-4 text-blue-500" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => deleteRequestOffer(r.id)}
+                      >
+                        <Trash2 className="w-4 h-4 text-red-500" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+
+                {filteredRequestsOffers.length === 0 && (
+                  <p className="text-center text-gray-400 text-sm py-10">
+                    Nenhum registro ainda.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* DEPOIMENTOS */}
           {activeTab === 'testimonials' && (
             <>
               <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-8 mb-12 shadow-xl border">
                 <h2 className="text-2xl font-semibold mb-6 flex items-center">
-                  <PlusCircle className="mr-3 text-yellow-500" /> Adicionar Novo Depoimento
+                  <PlusCircle className="mr-3 text-yellow-500" /> Adicionar Novo
+                  Depoimento
                 </h2>
-                <form onSubmit={handleAddTestimonial} className="space-y-6">
+                <form
+                  onSubmit={handleAddTestimonial}
+                  className="space-y-6"
+                >
                   <input
                     name="client_name"
                     value={newTestimonial.client_name}
@@ -1562,8 +1832,8 @@ const AdminDashboard = () => {
 
               <div>
                 <h2 className="text-2xl font-semibold mb-6 flex items-center">
-                  <MessageSquare className="mr-3 text-yellow-500" /> Depoimentos Cadastrados (
-                  {testimonials.length})
+                  <MessageSquare className="mr-3 text-yellow-500" /> Depoimentos
+                  Cadastrados ({testimonials.length})
                 </h2>
                 <div className="space-y-4">
                   {testimonials.map((item) => (
@@ -1573,7 +1843,9 @@ const AdminDashboard = () => {
                       className="bg-white rounded-2xl p-4 flex items-center justify-between shadow border"
                     >
                       <div>
-                        <p className="italic text-gray-600">"{item.testimonial_text}"</p>
+                        <p className="italic text-gray-600">
+                          "{item.testimonial_text}"
+                        </p>
                         <p className="font-bold mt-2 text-gray-800">
                           {item.client_name} -{' '}
                           <span className="text-sm font-normal text-gray-500">
@@ -1594,203 +1866,10 @@ const AdminDashboard = () => {
               </div>
             </>
           )}
-
-          {/* RELATÓRIOS */}
-          {activeTab === 'reports' && (
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-xl border">
-              <Reports />
-            </div>
-          )}
-
-          {/* PEDIDOS / OFERECIDOS */}
-          {activeTab === 'requests' && (
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-xl border">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h2 className="text-xl font-bold flex items-center gap-2">
-                    <ListChecks className="text-yellow-500" />
-                    Pedidos / Oferecidos
-                  </h2>
-                  <p className="text-sm text-gray-500">
-                    Registre quem pediu carro e quem ofereceu carro. Match é automático.
-                  </p>
-                </div>
-                <Button
-                  onClick={openNewRequestDialog}
-                  className="bg-yellow-400 text-black hover:bg-yellow-500"
-                >
-                  + Novo
-                </Button>
-              </div>
-
-              {/* cards de total */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                <div className="border rounded-xl p-4 bg-white">
-                  <p className="text-xs text-gray-500">TOTAL</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {clientRequests.length}
-                  </p>
-                </div>
-                <div className="border rounded-xl p-4 bg-white">
-                  <p className="text-xs text-gray-500">PEDIDOS</p>
-                  <p className="text-2xl font-bold text-gray-900">{pedidosCount}</p>
-                </div>
-                <div className="border rounded-xl p-4 bg-white">
-                  <p className="text-xs text-gray-500">OFERECIDOS</p>
-                  <p className="text-2xl font-bold text-gray-900">{oferecidosCount}</p>
-                </div>
-                <div className="border rounded-xl p-4 bg-white">
-                  <p className="text-xs text-gray-500">COM MATCH</p>
-                  <p className="text-2xl font-bold text-green-600">{matchCount}</p>
-                </div>
-              </div>
-
-              {/* filtros da lista */}
-              <div className="flex flex-col lg:flex-row gap-3 mb-4 items-center lg:items-end justify-between">
-                <div className="flex gap-2 w-full lg:w-auto">
-                  <select
-                    value={reqFilterType}
-                    onChange={(e) => setReqFilterType(e.target.value)}
-                    className="border rounded px-3 py-2 text-sm"
-                  >
-                    <option value="all">Todos</option>
-                    <option value="pedido">Só pedidos</option>
-                    <option value="oferecido">Só oferecidos</option>
-                  </select>
-                  <button
-                    onClick={() =>
-                      setReqSort((prev) => (prev === 'desc' ? 'asc' : 'desc'))
-                    }
-                    className="border rounded px-3 py-2 text-sm bg-gray-50 hover:bg-gray-100"
-                  >
-                    {reqSort === 'desc' ? 'Mais recentes' : 'Mais antigos'}
-                  </button>
-                </div>
-                <input
-                  value={reqSearch}
-                  onChange={(e) => setReqSearch(e.target.value)}
-                  placeholder="Buscar por nome, contato, modelo, origem..."
-                  className="w-full lg:w-1/2 border rounded px-3 py-2 text-sm"
-                />
-              </div>
-
-              <div className="overflow-x-auto rounded-xl border bg-white">
-                <table className="min-w-full divide-y divide-gray-200 text-sm">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-2 text-left font-semibold text-gray-700">
-                        Tipo
-                      </th>
-                      <th className="px-4 py-2 text-left font-semibold text-gray-700">
-                        Cliente
-                      </th>
-                      <th className="px-4 py-2 text-left font-semibold text-gray-700">
-                        Contato
-                      </th>
-                      <th className="px-4 py-2 text-left font-semibold text-gray-700">
-                        Marca/Modelo
-                      </th>
-                      <th className="px-4 py-2 text-left font-semibold text-gray-700">
-                        Faixa Valor
-                      </th>
-                      <th className="px-4 py-2 text-left font-semibold text-gray-700">
-                        Data
-                      </th>
-                      <th className="px-4 py-2 text-left font-semibold text-gray-700">
-                        Origem
-                      </th>
-                      <th className="px-4 py-2 text-right font-semibold text-gray-700">
-                        Ações
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {filteredRequests.map((req) => (
-                      <tr
-                        key={req.id}
-                        className={
-                          req.matched_car_id ? 'bg-green-50/70 animate-pulse' : ''
-                        }
-                      >
-                        <td className="px-4 py-2">
-                          <select
-                            value={req.type || 'pedido'}
-                            onChange={async (e) => {
-                              await updateClientRequest(req.id, { type: e.target.value });
-                              const refreshed = await getClientRequests();
-                              setClientRequests(refreshed || []);
-                            }}
-                            className={`text-xs rounded-full px-3 py-1 border ${
-                              req.type === 'pedido'
-                                ? 'bg-yellow-50 text-yellow-700 border-yellow-200'
-                                : 'bg-blue-50 text-blue-700 border-blue-200'
-                            }`}
-                          >
-                            <option value="pedido">Pedido (procura carro)</option>
-                            <option value="oferecido">Oferecido (tem carro)</option>
-                          </select>
-                        </td>
-                        <td className="px-4 py-2">{req.client_name || '-'}</td>
-                        <td className="px-4 py-2">{req.client_contact || '-'}</td>
-                        <td className="px-4 py-2">
-                          {req.brand || req.model
-                            ? `${req.brand || ''} ${req.model || ''}`
-                            : '-'}
-                        </td>
-                        <td className="px-4 py-2">
-                          {req.price_min || req.price_max
-                            ? `R$ ${req.price_min || 0} — R$ ${req.price_max || '∞'}`
-                            : '-'}
-                        </td>
-                        <td className="px-4 py-2">
-                          {req.lead_date
-                            ? new Date(req.lead_date).toISOString().slice(0, 10)
-                            : '-'}
-                        </td>
-                        <td className="px-4 py-2">{req.lead_source || '-'}</td>
-                        <td className="px-4 py-2 text-right">
-                          <div className="flex gap-2 justify-end">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => {
-                                setEditingRequest(req);
-                                setIsReqDialogOpen(true);
-                              }}
-                            >
-                              <Edit className="h-4 w-4 text-blue-500" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => deleteRequest(req.id)}
-                            >
-                              <Trash2 className="h-4 w-4 text-red-500" />
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-
-                    {filteredRequests.length === 0 && (
-                      <tr>
-                        <td
-                          colSpan={8}
-                          className="px-4 py-6 text-center text-gray-400 text-sm"
-                        >
-                          Nenhum pedido ou carro oferecido encontrado com esse filtro.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
         </motion.div>
       </div>
 
-      {/* EDIT CAR DIALOG */}
+      {/* EDIT DIALOG */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="bg-white text-gray-900">
           <DialogHeader>
@@ -1809,7 +1888,9 @@ const AdminDashboard = () => {
                 />
               </div>
               <div className="space-y-2">
-                <label className="font-medium text-sm text-gray-700">Fotos</label>
+                <label className="font-medium text-sm text-gray-700">
+                  Fotos
+                </label>
                 <div className="flex flex-wrap gap-4 p-2 bg-gray-100 rounded-lg min-h-[112px]">
                   {editingCar.photo_urls &&
                     editingCar.photo_urls.map((url, index) => (
@@ -1847,14 +1928,20 @@ const AdminDashboard = () => {
                 </div>
                 <Button
                   type="button"
-                  onClick={() => fileInputRef.current && fileInputRef.current.click()}
+                  onClick={() =>
+                    fileInputRef.current && fileInputRef.current.click()
+                  }
                   className="bg-transparent border border-yellow-500 text-yellow-500 hover:bg-yellow-500 hover:text-black text-xs px-3 py-1.5 h-auto"
                 >
                   <ImageIcon className="mr-2 h-4 w-4" /> Adicionar
                 </Button>
               </div>
               <DialogFooter className="pt-4">
-                <Button type="button" variant="ghost" onClick={() => setIsEditDialogOpen(false)}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setIsEditDialogOpen(false)}
+                >
                   Cancelar
                 </Button>
                 <Button
@@ -1876,9 +1963,14 @@ const AdminDashboard = () => {
           <DialogHeader>
             <DialogTitle>Registrar Venda</DialogTitle>
           </DialogHeader>
-          <form onSubmit={(e) => e.preventDefault()} className="space-y-4">
+          <form
+            onSubmit={(e) => e.preventDefault()}
+            className="space-y-4"
+          >
             <div>
-              <label className="block text-sm font-medium text-gray-700">Veículo</label>
+              <label className="block text-sm font-medium text-gray-700">
+                Veículo
+              </label>
               <div className="mt-1 text-sm">
                 {carToSell
                   ? `${carToSell.brand} ${carToSell.model} (${carToSell.year})`
@@ -1886,7 +1978,9 @@ const AdminDashboard = () => {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Plataforma</label>
+              <label className="block text-sm font-medium text-gray-700">
+                Plataforma
+              </label>
               <select
                 name="platform_id"
                 value={saleForm.platform_id}
@@ -1916,7 +2010,9 @@ const AdminDashboard = () => {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Data da venda</label>
+                <label className="block text-sm font-medium text-gray-700">
+                  Data da venda
+                </label>
                 <input
                   name="sale_date"
                   value={saleForm.sale_date}
@@ -1927,7 +2023,9 @@ const AdminDashboard = () => {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Notas (opcional)</label>
+              <label className="block text-sm font-medium text-gray-700">
+                Notas (opcional)
+              </label>
               <textarea
                 name="notes"
                 value={saleForm.notes}
@@ -1937,7 +2035,11 @@ const AdminDashboard = () => {
               />
             </div>
             <DialogFooter>
-              <Button type="button" variant="ghost" onClick={() => setSaleDialogOpen(false)}>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setSaleDialogOpen(false)}
+              >
                 Cancelar
               </Button>
               <Button
@@ -1983,203 +2085,234 @@ const AdminDashboard = () => {
         </DialogContent>
       </Dialog>
 
-      {/* DIALOG de pedido/oferecido */}
-      <Dialog open={isReqDialogOpen} onOpenChange={setIsReqDialogOpen}>
-        <DialogContent className="max-w-3xl bg-white text-gray-900">
+      {/* MODAL PEDIDOS/OFER - FORM */}
+      <Dialog open={isReqModalOpen} onOpenChange={setIsReqModalOpen}>
+        <DialogContent className="bg-white max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Novo pedido / oferecido</DialogTitle>
+            <DialogTitle>
+              {editingReq?.id ? 'Editar registro' : 'Novo pedido / oferecido'}
+            </DialogTitle>
           </DialogHeader>
-          {editingRequest && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[70vh] overflow-y-auto">
+          {editingReq && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium mb-1">Tipo</label>
+                <label className="text-xs text-gray-500">Tipo</label>
                 <select
-                  name="type"
-                  value={editingRequest.type || 'pedido'}
-                  onChange={handleReqChange}
-                  className="w-full border rounded px-3 py-2"
+                  value={editingReq.type}
+                  onChange={(e) =>
+                    setEditingReq((prev) => ({ ...prev, type: e.target.value }))
+                  }
+                  className="w-full border rounded-lg px-3 py-2 text-sm"
                 >
-                  <option value="pedido">Pedido (procura carro)</option>
-                  <option value="oferecido">Oferecido (tem carro)</option>
+                  <option value="pedido">Pedido (cliente quer comprar)</option>
+                  <option value="oferecido">Oferecido (cliente tem carro)</option>
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Contato</label>
+                <label className="text-xs text-gray-500">Data do lead</label>
                 <input
-                  name="client_contact"
-                  value={editingRequest.client_contact || ''}
-                  onChange={handleReqChange}
-                  className="w-full border rounded px-3 py-2"
+                  type="date"
+                  value={editingReq.lead_date || ''}
+                  onChange={(e) =>
+                    setEditingReq((prev) => ({
+                      ...prev,
+                      lead_date: e.target.value,
+                    }))
+                  }
+                  className="w-full border rounded-lg px-3 py-2 text-sm"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Cliente</label>
+                <label className="text-xs text-gray-500">Cliente</label>
                 <input
-                  name="client_name"
-                  value={editingRequest.client_name || ''}
-                  onChange={handleReqChange}
-                  className="w-full border rounded px-3 py-2"
-                />
-              </div>
-              <div />
-              <div>
-                <label className="block text-sm font-medium mb-1">Marca</label>
-                <input
-                  name="brand"
-                  value={editingRequest.brand || ''}
-                  onChange={handleReqChange}
-                  className="w-full border rounded px-3 py-2"
+                  value={editingReq.client_name || ''}
+                  onChange={(e) =>
+                    setEditingReq((prev) => ({
+                      ...prev,
+                      client_name: e.target.value,
+                    }))
+                  }
+                  className="w-full border rounded-lg px-3 py-2 text-sm"
+                  placeholder="Nome"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Modelo</label>
+                <label className="text-xs text-gray-500">Contato</label>
                 <input
-                  name="model"
-                  value={editingRequest.model || ''}
-                  onChange={handleReqChange}
-                  className="w-full border rounded px-3 py-2"
+                  value={editingReq.client_contact || ''}
+                  onChange={(e) =>
+                    setEditingReq((prev) => ({
+                      ...prev,
+                      client_contact: e.target.value,
+                    }))
+                  }
+                  className="w-full border rounded-lg px-3 py-2 text-sm"
+                  placeholder="WhatsApp / Tel"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Carroceria</label>
-                <select
-                  name="body_type"
-                  value={editingRequest.body_type || ''}
-                  onChange={handleReqChange}
-                  className="w-full border rounded px-3 py-2"
-                >
-                  <option value="">—</option>
-                  <option value="SUV">SUV</option>
-                  <option value="Sedan">Sedan</option>
-                  <option value="Hatch">Hatch</option>
-                  <option value="Picape">Picape</option>
-                  <option value="Esportivo">Esportivo</option>
-                  <option value="Outro">Outro</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Combustível</label>
-                <select
-                  name="fuel"
-                  value={editingRequest.fuel || ''}
-                  onChange={handleReqChange}
-                  className="w-full border rounded px-3 py-2"
-                >
-                  <option value="">—</option>
-                  <option value="Flex">Flex</option>
-                  <option value="Gasolina">Gasolina</option>
-                  <option value="Diesel">Diesel</option>
-                  <option value="Elétrico">Elétrico</option>
-                  <option value="Híbrido">Híbrido</option>
-                  <option value="GNV">GNV</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Câmbio</label>
-                <select
-                  name="transmission"
-                  value={editingRequest.transmission || ''}
-                  onChange={handleReqChange}
-                  className="w-full border rounded px-3 py-2"
-                >
-                  <option value="">—</option>
-                  <option value="Automático">Automático</option>
-                  <option value="Manual">Manual</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Valor mín (R$)</label>
+                <label className="text-xs text-gray-500">Marca</label>
                 <input
-                  name="price_min"
-                  value={editingRequest.price_min || ''}
-                  onChange={handleReqChange}
-                  className="w-full border rounded px-3 py-2"
+                  value={editingReq.brand || ''}
+                  onChange={(e) =>
+                    setEditingReq((prev) => ({
+                      ...prev,
+                      brand: e.target.value,
+                    }))
+                  }
+                  className="w-full border rounded-lg px-3 py-2 text-sm"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Valor máx (R$)</label>
+                <label className="text-xs text-gray-500">Modelo</label>
                 <input
-                  name="price_max"
-                  value={editingRequest.price_max || ''}
-                  onChange={handleReqChange}
-                  className="w-full border rounded px-3 py-2"
+                  value={editingReq.model || ''}
+                  onChange={(e) =>
+                    setEditingReq((prev) => ({
+                      ...prev,
+                      model: e.target.value,
+                    }))
+                  }
+                  className="w-full border rounded-lg px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500">Versão</label>
+                <input
+                  value={editingReq.version || ''}
+                  onChange={(e) =>
+                    setEditingReq((prev) => ({
+                      ...prev,
+                      version: e.target.value,
+                    }))
+                  }
+                  className="w-full border rounded-lg px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500">Carroceria</label>
+                <input
+                  value={editingReq.body_type || ''}
+                  onChange={(e) =>
+                    setEditingReq((prev) => ({
+                      ...prev,
+                      body_type: e.target.value,
+                    }))
+                  }
+                  className="w-full border rounded-lg px-3 py-2 text-sm"
+                  placeholder="SUV, Sedan..."
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500">Combustível</label>
+                <input
+                  value={editingReq.fuel || ''}
+                  onChange={(e) =>
+                    setEditingReq((prev) => ({
+                      ...prev,
+                      fuel: e.target.value,
+                    }))
+                  }
+                  className="w-full border rounded-lg px-3 py-2 text-sm"
+                  placeholder="Flex, Gasolina..."
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500">Câmbio</label>
+                <input
+                  value={editingReq.transmission || ''}
+                  onChange={(e) =>
+                    setEditingReq((prev) => ({
+                      ...prev,
+                      transmission: e.target.value,
+                    }))
+                  }
+                  className="w-full border rounded-lg px-3 py-2 text-sm"
+                  placeholder="Automático, Manual"
                 />
               </div>
 
-              {editingRequest.type === 'oferecido' ? (
+              {/* ano pedido */}
+              {editingReq.type === 'pedido' && (
                 <>
                   <div>
-                    <label className="block text-sm font-medium mb-1">Ano exato</label>
+                    <label className="text-xs text-gray-500">
+                      Ano mínimo
+                    </label>
                     <input
-                      name="year_exact"
-                      value={editingRequest.year_exact || ''}
-                      onChange={handleReqChange}
-                      className="w-full border rounded px-3 py-2"
-                    />
-                  </div>
-                  <div />
-                </>
-              ) : (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Ano mín</label>
-                    <input
-                      name="year_min"
-                      value={editingRequest.year_min || ''}
-                      onChange={handleReqChange}
-                      className="w-full border rounded px-3 py-2"
+                      type="number"
+                      value={editingReq.year_min || ''}
+                      onChange={(e) =>
+                        setEditingReq((prev) => ({
+                          ...prev,
+                          year_min: e.target.value,
+                        }))
+                      }
+                      className="w-full border rounded-lg px-3 py-2 text-sm"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1">Ano máx</label>
+                    <label className="text-xs text-gray-500">
+                      Ano máximo
+                    </label>
                     <input
-                      name="year_max"
-                      value={editingRequest.year_max || ''}
-                      onChange={handleReqChange}
-                      className="w-full border rounded px-3 py-2"
+                      type="number"
+                      value={editingReq.year_max || ''}
+                      onChange={(e) =>
+                        setEditingReq((prev) => ({
+                          ...prev,
+                          year_max: e.target.value,
+                        }))
+                      }
+                      className="w-full border rounded-lg px-3 py-2 text-sm"
                     />
                   </div>
                 </>
               )}
 
-              <div>
-                <label className="block text-sm font-medium mb-1">Data</label>
-                <input
-                  type="date"
-                  name="lead_date"
-                  value={editingRequest.lead_date || ''}
-                  onChange={handleReqChange}
-                  className="w-full border rounded px-3 py-2"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Origem</label>
-                <input
-                  name="lead_source"
-                  value={editingRequest.lead_source || ''}
-                  onChange={handleReqChange}
-                  className="w-full border rounded px-3 py-2"
-                />
-              </div>
+              {/* ano oferecido */}
+              {editingReq.type === 'oferecido' && (
+                <div>
+                  <label className="text-xs text-gray-500">
+                    Ano do carro
+                  </label>
+                  <input
+                    type="number"
+                    value={editingReq.year_exact || ''}
+                    onChange={(e) =>
+                      setEditingReq((prev) => ({
+                        ...prev,
+                        year_exact: e.target.value,
+                      }))
+                    }
+                    className="w-full border rounded-lg px-3 py-2 text-sm"
+                  />
+                </div>
+              )}
+
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium mb-1">Observações</label>
+                <label className="text-xs text-gray-500">Observações</label>
                 <textarea
-                  name="notes"
-                  value={editingRequest.notes || ''}
-                  onChange={handleReqChange}
-                  className="w-full border rounded px-3 py-2 h-20"
+                  value={editingReq.notes || ''}
+                  onChange={(e) =>
+                    setEditingReq((prev) => ({
+                      ...prev,
+                      notes: e.target.value,
+                    }))
+                  }
+                  rows={3}
+                  className="w-full border rounded-lg px-3 py-2 text-sm"
                 />
               </div>
             </div>
           )}
-
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setIsReqDialogOpen(false)}>
+          <DialogFooter className="mt-4">
+            <Button variant="ghost" onClick={() => setIsReqModalOpen(false)}>
               Cancelar
             </Button>
             <Button
+              onClick={saveRequestOffer}
               className="bg-yellow-400 text-black hover:bg-yellow-500"
-              onClick={saveRequest}
             >
               Salvar
             </Button>
@@ -2187,107 +2320,44 @@ const AdminDashboard = () => {
         </DialogContent>
       </Dialog>
 
-      {/* POPUP DE MATCH */}
-      {matchModalOpen && matchModalPayload && (
-        <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/70 backdrop-blur-sm">
-          <div className="relative bg-white rounded-3xl shadow-2xl max-w-2xl w-[95%] overflow-hidden border-4 border-yellow-400 animate-pulse">
-            <div className="bg-gradient-to-r from-yellow-400 to-yellow-500 py-4 px-6 flex items-center justify-between">
-              <h3 className="text-xl font-extrabold text-black flex items-center gap-2">
-                <span className="h-3 w-3 rounded-full bg-red-500 animate-ping"></span>
-                ⚡ MATCH ENCONTRADO!
-              </h3>
-              <button
-                onClick={() => {
-                  setMatchModalOpen(false);
-                  setMatchModalPayload(null);
-                }}
-                className="text-black/60 hover:text-black"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="p-6 space-y-4 bg-white">
-              {matchModalPayload.mode === 'request' && (
-                <>
-                  <p className="text-gray-700">
-                    O pedido de <b>{matchModalPayload.request.client_name}</b> bateu
-                    com um carro que já está no estoque.
-                  </p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="bg-gray-50 rounded-xl p-4 border">
-                      <p className="text-xs text-gray-500 mb-1">Cliente</p>
-                      <p className="font-bold text-gray-900">
-                        {matchModalPayload.request.client_name}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        {matchModalPayload.request.client_contact || '-'}
-                      </p>
-                      <p className="text-sm mt-2 text-gray-600">
-                        Procurando: {matchModalPayload.request.brand}{' '}
-                        {matchModalPayload.request.model}
-                      </p>
-                    </div>
-                    <div className="bg-yellow-50 rounded-xl p-4 border border-yellow-200">
-                      <p className="text-xs text-gray-600 mb-1">Carro compatível</p>
-                      <p className="font-bold text-gray-900">
-                        {matchModalPayload.car.brand} {matchModalPayload.car.model}{' '}
-                        ({matchModalPayload.car.year})
-                      </p>
-                      <p className="text-sm text-gray-700">
-                        {new Intl.NumberFormat('pt-BR', {
-                          style: 'currency',
-                          currency: 'BRL',
-                        }).format(matchModalPayload.car.price || 0)}
-                      </p>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {matchModalPayload.mode === 'car' && (
-                <>
-                  <p className="text-gray-700">
-                    O veículo <b>{matchModalPayload.car.brand}</b>{' '}
-                    <b>{matchModalPayload.car.model}</b> que você acabou de cadastrar
-                    bateu com <b>{matchModalPayload.requests.length}</b>{' '}
-                    {matchModalPayload.requests.length === 1 ? 'pedido' : 'pedidos'} de
-                    cliente.
-                  </p>
-                  <div className="bg-gray-50 rounded-xl p-4 border space-y-2 max-h-52 overflow-y-auto">
-                    {matchModalPayload.requests.map((r) => (
-                      <div
-                        key={r.id}
-                        className="flex items-center justify-between gap-4 border-b last:border-b-0 py-1"
-                      >
-                        <div>
-                          <p className="font-semibold text-gray-900">
-                            {r.client_name || 'Sem nome'}
-                          </p>
-                          <p className="text-sm text-gray-500">
-                            {r.client_contact || '-'}
-                          </p>
-                        </div>
-                        <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-full">
-                          Pedido
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-
-              <div className="flex justify-end">
-                <Button
-                  className="bg-yellow-400 text-black hover:bg-yellow-500"
-                  onClick={() => {
-                    setMatchModalOpen(false);
-                    setMatchModalPayload(null);
-                    setActiveTab('requests');
-                  }}
+      {/* MODAL: MATCH DESTACADO */}
+      {matchModal.open && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full mx-4 p-6 border-4 border-yellow-400 animate-pulse">
+            <h2 className="text-2xl font-bold text-gray-900 mb-3 flex items-center gap-2">
+              🎉 MATCH ENCONTRADO!
+            </h2>
+            <p className="text-sm text-gray-600 mb-4">
+              O veículo <strong>{matchModal.car?.brand} {matchModal.car?.model}</strong> bateu com os seguintes pedidos/ofertas:
+            </p>
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {matchModal.matches.map((m) => (
+                <div
+                  key={m.id}
+                  className="border rounded-lg p-3 bg-yellow-50 flex items-center justify-between"
                 >
-                  Ver na aba de Pedidos
-                </Button>
-              </div>
+                  <div>
+                    <p className="text-sm font-semibold">{m.client_name}</p>
+                    <p className="text-xs text-gray-600">{m.client_contact}</p>
+                    <p className="text-[11px] text-gray-400 mt-1">
+                      {m.type} — {m.brand} {m.model}
+                    </p>
+                  </div>
+                  <span className="text-xs bg-yellow-400 text-black px-3 py-1 rounded-full font-bold">
+                    {m.score}%
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-5 text-right">
+              <Button
+                onClick={() =>
+                  setMatchModal({ open: false, matches: [], car: null })
+                }
+                className="bg-yellow-400 text-black hover:bg-yellow-500"
+              >
+                Fechar
+              </Button>
             </div>
           </div>
         </div>

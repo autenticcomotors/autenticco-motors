@@ -12,7 +12,8 @@ import Contact from './pages/Contact';
 import CarDetail from './pages/car-detail';
 import AdminLogin from './pages/AdminLogin';
 import AdminDashboard from './pages/AdminDashboard';
-import Checklist from './pages/Checklist'; // 👈 NOVO
+import Checklist from './pages/Checklist';
+import AccessControl from './pages/AccessControl'; // 👈 a página que você criou
 import { Toaster } from './components/ui/toaster';
 import PrivateRoute from './components/PrivateRoute';
 
@@ -27,7 +28,11 @@ const router = createBrowserRouter([
       { path: '/sobre', element: <About /> },
       { path: '/contato', element: <Contact /> },
       { path: '/carro/:slug', element: <CarDetail /> },
+
+      // LOGIN
       { path: '/admin', element: <AdminLogin /> },
+
+      // DASHBOARD PRINCIPAL (protegido)
       {
         path: '/dashboard',
         element: (
@@ -36,11 +41,23 @@ const router = createBrowserRouter([
           </PrivateRoute>
         ),
       },
+
+      // CHECKLIST direto (protegido)
       {
-        path: '/dashboard/checklist', // 👈 URL direta p/ celular
+        path: '/dashboard/checklist',
         element: (
           <PrivateRoute>
             <Checklist />
+          </PrivateRoute>
+        ),
+      },
+
+      // NOVO: Gestão de Acessos (protegido)
+      {
+        path: '/dashboard/acessos',
+        element: (
+          <PrivateRoute>
+            <AccessControl />
           </PrivateRoute>
         ),
       },

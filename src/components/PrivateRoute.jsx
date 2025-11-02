@@ -1,27 +1,57 @@
+// src/components/PrivateRoute.jsx
 import React, { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { supabase } from '@/lib/supabase'; // Importação corrigida
+import { supabase } from '@/lib/supabase';
+
+const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24h
 
 const PrivateRoute = ({ children }) => {
-    const [isAuthenticated, setIsAuthenticated] = useState(null);
+  const [checking, setChecking] = useState(true);
+  const [allowed, setAllowed] = useState(false);
 
-    useEffect(() => {
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            setIsAuthenticated(!!session);
-        });
+  useEffect(() => {
+    const check = async () => {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-            setIsAuthenticated(!!session);
-        });
+        const ts = localStorage.getItem('autenticco_admin_login_at');
+        const expired = !ts || Date.now() - Number(ts) > SESSION_TTL_MS;
 
-        return () => subscription.unsubscribe();
-    }, []);
+        if (!session || expired) {
+          if (session) {
+            await supabase.auth.signOut();
+          }
+          setAllowed(false);
+        } else {
+          setAllowed(true);
+        }
+      } catch (err) {
+        console.error('Erro PrivateRoute:', err);
+        setAllowed(false);
+      } finally {
+        setChecking(false);
+      }
+    };
 
-    if (isAuthenticated === null) {
-        return <div className="min-h-screen flex items-center justify-center text-white">Carregando...</div>;
-    }
+    check();
+  }, []);
 
-    return isAuthenticated ? children : <Navigate to="/admin" />;
+  if (checking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-500">
+        Verificando acesso...
+      </div>
+    );
+  }
+
+  if (!allowed) {
+    return <Navigate to="/admin" replace />;
+  }
+
+  return children;
 };
 
 export default PrivateRoute;
+

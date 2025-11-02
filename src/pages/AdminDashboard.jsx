@@ -1,5 +1,11 @@
 // src/pages/AdminDashboard.jsx
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+} from 'react';
 import { Helmet } from 'react-helmet';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -11,16 +17,12 @@ import {
   LogOut,
   Download,
   MessageSquare,
-  Users,
-  Image as ImageIcon,
   FileText,
-  Check,
-  Star,
   BarChart2,
   Shield,
-  AlertCircle,
+  ListChecks,
+  RefreshCw,
   Search,
-  Filter,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
@@ -40,6 +42,10 @@ import {
   getPlatforms,
   markCarAsSold,
   unmarkCarAsSold,
+  getCustomerDemandsOffers,
+  addCustomerDemandOffer,
+  updateCustomerDemandOffer,
+  deleteCustomerDemandOffer,
 } from '@/lib/car-api';
 import {
   AlertDialog,
@@ -63,6 +69,7 @@ import BackgroundShape from '@/components/BackgroundShape';
 import VehicleManager from '@/components/VehicleManager';
 import Reports from '@/pages/Reports';
 import OverviewBoard from '@/components/OverviewBoard';
+import AccessControl from '@/pages/AccessControl'; // 👈 nova aba
 
 // ---------- FORM FIELDS (inclui PLACA) ----------
 const FormFields = React.memo(({ carData, onChange, carOptions }) => (
@@ -72,14 +79,14 @@ const FormFields = React.memo(({ carData, onChange, carOptions }) => (
       value={carData.brand || ''}
       onChange={onChange}
       placeholder="Marca *"
-      className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none"
+      className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none"
     />
     <input
       name="model"
       value={carData.model || ''}
       onChange={onChange}
       placeholder="Modelo *"
-      className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none"
+      className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none"
     />
     <input
       name="year"
@@ -87,7 +94,7 @@ const FormFields = React.memo(({ carData, onChange, carOptions }) => (
       onChange={onChange}
       placeholder="Ano"
       type="number"
-      className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none"
+      className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none"
     />
 
     {/* PLACA */}
@@ -96,7 +103,7 @@ const FormFields = React.memo(({ carData, onChange, carOptions }) => (
       value={carData.plate || ''}
       onChange={onChange}
       placeholder="Placa (ex: ABC1D23)"
-      className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none"
+      className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none"
     />
 
     <input
@@ -105,7 +112,7 @@ const FormFields = React.memo(({ carData, onChange, carOptions }) => (
       onChange={onChange}
       placeholder="Preço *"
       type="number"
-      className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none"
+      className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none"
     />
     <input
       name="mileage"
@@ -113,13 +120,13 @@ const FormFields = React.memo(({ carData, onChange, carOptions }) => (
       onChange={onChange}
       placeholder="Quilometragem *"
       type="number"
-      className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none"
+      className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none"
     />
     <select
       name="color"
       value={carData.color || ''}
       onChange={onChange}
-      className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none"
+      className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none"
     >
       <option value="">Cor *</option>
       {carOptions.colors.map((c) => (
@@ -132,7 +139,7 @@ const FormFields = React.memo(({ carData, onChange, carOptions }) => (
       name="fuel"
       value={carData.fuel || ''}
       onChange={onChange}
-      className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none"
+      className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none"
     >
       <option value="">Combustível *</option>
       {carOptions.fuels.map((f) => (
@@ -145,7 +152,7 @@ const FormFields = React.memo(({ carData, onChange, carOptions }) => (
       name="transmission"
       value={carData.transmission || ''}
       onChange={onChange}
-      className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none"
+      className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none"
     >
       <option value="">Câmbio *</option>
       {carOptions.transmissions.map((t) => (
@@ -158,7 +165,7 @@ const FormFields = React.memo(({ carData, onChange, carOptions }) => (
       name="body_type"
       value={carData.body_type || ''}
       onChange={onChange}
-      className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none"
+      className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none"
     >
       <option value="">Carroceria *</option>
       {carOptions.bodyTypes.map((b) => (
@@ -173,7 +180,7 @@ const FormFields = React.memo(({ carData, onChange, carOptions }) => (
         value={carData.youtube_link || ''}
         onChange={onChange}
         placeholder="Link do Vídeo do YouTube"
-        className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none"
+        className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none"
       />
     </div>
     <div className="relative md:col-span-3">
@@ -183,7 +190,7 @@ const FormFields = React.memo(({ carData, onChange, carOptions }) => (
         onChange={onChange}
         placeholder="Descrição detalhada..."
         rows={4}
-        className="w-full bg-white border border-gray-300 rounded-lg p-3 resize-none text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none"
+        className="w-full bg-white border border-gray-200 rounded-lg p-3 resize-none text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none"
       />
     </div>
 
@@ -221,6 +228,17 @@ const AdminDashboard = () => {
     testimonial_text: '',
     car_sold: '',
   });
+
+  const [demands, setDemands] = useState([]);
+  const [demandsFilter, setDemandsFilter] = useState({
+    q: '',
+    type: 'all',
+    order: 'desc',
+  });
+  const [isDemandModalOpen, setIsDemandModalOpen] = useState(false);
+  const [editingDemand, setEditingDemand] = useState(null);
+
+  const [currentAdminUser, setCurrentAdminUser] = useState(null);
 
   // inclui plate no estado do novo carro
   const [newCar, setNewCar] = useState({
@@ -261,28 +279,10 @@ const AdminDashboard = () => {
   const [carSearch, setCarSearch] = useState('');
   const [brandFilter, setBrandFilter] = useState('');
 
-  // MATRIZ -> abrir gestão (mantive)
-  const [selectedCar, setSelectedCar] = useState(null);
-  const [isGestaoOpen, setIsGestaoOpen] = useState(false);
-
-  // PERMISSÃO
-  const [currentUser, setCurrentUser] = useState(null);
-  const [isMaster, setIsMaster] = useState(false);
-
-  // PEDIDOS / OFERECIDOS
-  const [customerRequests, setCustomerRequests] = useState([]);
-  const [requestFilterType, setRequestFilterType] = useState('all'); // all | pedido | oferecido
-  const [requestSearch, setRequestSearch] = useState('');
-  const [requestOrder, setRequestOrder] = useState('newest'); // newest | oldest | price
-
-  // MATCH POPUP
-  const [matchModalOpen, setMatchModalOpen] = useState(false);
-  const [matchResults, setMatchResults] = useState([]);
-
   const carOptions = {
     transmissions: ['Automático', 'Manual'],
     bodyTypes: ['SUV', 'Sedan', 'Hatch', 'Picape', 'Esportivo', 'Outro'],
-    fuels: ['Flex', 'Gasolina', 'Diesel', 'Elétrico', 'Híbrido'],
+    fuels: ['Flex', 'Gasolina', 'Diesel', 'Elétrico', 'Híbrido', '-'],
     colors: [
       'Preto',
       'Branco',
@@ -314,78 +314,50 @@ const AdminDashboard = () => {
     });
   };
 
-  const fetchCustomerRequests = useCallback(async () => {
-    try {
-      const { data, error } = await supabase
-        .from('customer_requests')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (error) {
-        console.error('Erro ao buscar customer_requests:', error);
-        setCustomerRequests([]);
-      } else {
-        setCustomerRequests(data || []);
-      }
-    } catch (err) {
-      console.error('Erro geral ao buscar customer_requests:', err);
-      setCustomerRequests([]);
-    }
-  }, []);
-
   const fetchAllData = useCallback(
     async (opts = { showLoading: true }) => {
       if (opts.showLoading) setLoading(true);
       try {
-        const [carsData, testimonialsData, leadsData, platformsData] =
+        const session = await supabase.auth.getSession();
+        const email = session?.data?.session?.user?.email || null;
+
+        let adminRow = null;
+        if (email) {
+          const { data: adminData } = await supabase
+            .from('admin_users')
+            .select('*, access_roles:role_id(*)')
+            .eq('email', email)
+            .maybeSingle();
+          adminRow = adminData;
+          setCurrentAdminUser(adminData || null);
+        }
+
+        const [carsData, testimonialsData, leadsData, platformsData, demandsData] =
           await Promise.all([
             getCars(),
             getTestimonials(),
             getLeads(leadFilters),
             getPlatforms(),
+            getCustomerDemandsOffers(),
           ]);
         setCars(sortCarsActiveFirst(carsData || []));
         setTestimonials(testimonialsData || []);
         setLeads(leadsData || []);
         setPlatforms(platformsData || []);
-        await fetchCustomerRequests();
+        setDemands(demandsData || []);
       } catch (err) {
         console.error('Erro fetchAllData:', err);
         setCars([]);
         setTestimonials([]);
         setLeads([]);
         setPlatforms([]);
+        setDemands([]);
       } finally {
         if (opts.showLoading) setLoading(false);
       }
     },
-    [leadFilters, fetchCustomerRequests]
+    [leadFilters]
   );
-
-  // pega usuário e papel
-  useEffect(() => {
-    (async () => {
-      const { data: auth } = await supabase.auth.getUser();
-      if (auth?.user) {
-        setCurrentUser(auth.user);
-        // pega papel
-        const { data: roleRows } = await supabase
-          .from('user_roles')
-          .select('*')
-          .eq('user_id', auth.user.id)
-          .limit(1)
-          .maybeSingle();
-        if (roleRows) {
-          setIsMaster(roleRows.role_slug === 'admin' || roleRows.is_master === true);
-        } else {
-          // se não tiver registro de papel, considera master (pra não travar você)
-          setIsMaster(true);
-        }
-      } else {
-        setCurrentUser(null);
-        setIsMaster(false);
-      }
-    })();
-  }, []);
 
   useEffect(() => {
     fetchAllData();
@@ -394,7 +366,7 @@ const AdminDashboard = () => {
   const handleStatusChange = async (leadId, newStatus) => {
     await updateLead(leadId, { status: newStatus });
     toast({ title: 'Status do lead atualizado!' });
-    fetchAllData();
+    fetchAllData({ showLoading: false });
   };
 
   const handleDeleteLead = async () => {
@@ -402,7 +374,7 @@ const AdminDashboard = () => {
     await deleteLead(leadToDelete);
     toast({ title: 'Lead removido com sucesso.' });
     setLeadToDelete(null);
-    fetchAllData();
+    fetchAllData({ showLoading: false });
   };
 
   const leadsForCSV = (leadsData) =>
@@ -449,7 +421,7 @@ const AdminDashboard = () => {
         !currentStatus ? 'adicionado aos' : 'removido dos'
       } destaques!`,
     });
-    fetchAllData();
+    fetchAllData({ showLoading: false });
   };
 
   const handleAddTestimonial = async (e) => {
@@ -461,12 +433,12 @@ const AdminDashboard = () => {
       testimonial_text: '',
       car_sold: '',
     });
-    fetchAllData();
+    fetchAllData({ showLoading: false });
   };
   const handleDeleteTestimonial = async (id) => {
     await deleteTestimonial(id);
     toast({ title: 'Depoimento removido.' });
-    fetchAllData();
+    fetchAllData({ showLoading: false });
   };
 
   const handlePhotoUpload = (e) => {
@@ -485,75 +457,6 @@ const AdminDashboard = () => {
     } else {
       setPhotosToUpload((prev) => prev.filter((_, i) => i !== index));
     }
-  };
-
-  // === MATCH LOGIC ===
-  const normalize = (s) =>
-    String(s || '')
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9\s]/gi, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .toLowerCase();
-
-  const findMatchesForCar = (car, requests = []) => {
-    const nBrand = normalize(car.brand);
-    const nModel = normalize(car.model);
-    const year = car.year ? Number(car.year) : null;
-    const body = normalize(car.body_type);
-    const fuel = normalize(car.fuel);
-    const transmission = normalize(car.transmission);
-
-    const matches = [];
-    for (const req of requests) {
-      if (!req) continue;
-      // só dá match automático em "pedido"
-      if (req.type !== 'pedido') continue;
-
-      let score = 0;
-
-      const reqBrand = normalize(req.brand);
-      const reqModel = normalize(req.model);
-      const reqBody = normalize(req.body_type);
-      const reqFuel = normalize(req.fuel);
-      const reqTrans = normalize(req.transmission);
-
-      // marca
-      if (reqBrand && reqBrand === nBrand) score += 30;
-      else if (!reqBrand) score += 5; // não colocou marca
-
-      // modelo
-      if (reqModel && reqModel === nModel) score += 40;
-      else if (!reqModel) score += 5;
-
-      // ano
-      const reqYearMin = req.year_min ? Number(req.year_min) : null;
-      const reqYearMax = req.year_max ? Number(req.year_max) : null;
-      const reqYearExact = req.year_exact ? Number(req.year_exact) : null;
-      let yearOk = true;
-      if (reqYearExact && year) {
-        yearOk = year === reqYearExact;
-      } else if (year && (reqYearMin || reqYearMax)) {
-        if (reqYearMin && year < reqYearMin) yearOk = false;
-        if (reqYearMax && year > reqYearMax) yearOk = false;
-      }
-      if (yearOk) score += 15;
-
-      // carroceria
-      if (reqBody && reqBody === body) score += 5;
-
-      // combustível
-      if (reqFuel && reqFuel === fuel) score += 5;
-
-      // câmbio
-      if (reqTrans && reqTrans === transmission) score += 5;
-
-      if (score >= 40) {
-        matches.push({ ...req, match_score: score });
-      }
-    }
-    return matches.sort((a, b) => b.match_score - a.match_score);
   };
 
   const handleAddCar = async (e) => {
@@ -584,7 +487,7 @@ const AdminDashboard = () => {
         ...newCar,
         photo_urls: photoUrls,
         main_photo_url: photoUrls[mainPhotoIndex] || null,
-        price: parseFloat(newCar.price || 0),
+        price: newCar.price ? Number(newCar.price) : 0,
         is_available: true,
       };
       const { data: addedCar, error } = await addCar(carData);
@@ -598,12 +501,6 @@ const AdminDashboard = () => {
         setCars((prevCars) =>
           sortCarsActiveFirst([...(prevCars || []), addedCar])
         );
-        // MATCH: checa pedidos
-        const matches = findMatchesForCar(addedCar, customerRequests);
-        if (matches.length > 0) {
-          setMatchResults(matches);
-          setMatchModalOpen(true);
-        }
         setNewCar({
           brand: '',
           model: '',
@@ -692,7 +589,7 @@ const AdminDashboard = () => {
       }
       const { error } = await updateCar(finalCarData.id, {
         ...finalCarData,
-        price: parseFloat(finalCarData.price || 0),
+        price: finalCarData.price ? Number(finalCarData.price) : 0,
       });
       if (error) {
         toast({
@@ -774,7 +671,7 @@ const AdminDashboard = () => {
     setSaleForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  // --- FILTROS (Admin - VEÍCULOS) — inclui PLACA
+  // FILTROS (Admin - VEÍCULOS)
   const brandOptions = useMemo(() => {
     const brands = Array.from(
       new Set(
@@ -811,6 +708,34 @@ const AdminDashboard = () => {
     });
   }, [cars, carSearch, brandFilter]);
 
+  // DEMANDS filtrados
+  const filteredDemands = useMemo(() => {
+    let list = [...(demands || [])];
+    if (demandsFilter.type !== 'all') {
+      list = list.filter((d) => d.type === demandsFilter.type);
+    }
+    if (demandsFilter.q) {
+      const q = demandsFilter.q.toLowerCase();
+      list = list.filter((d) => {
+        const txt = `${d.client_name || ''} ${d.brand || ''} ${
+          d.model || ''
+        } ${d.lead_source || ''}`.toLowerCase();
+        return txt.includes(q);
+      });
+    }
+    list.sort((a, b) => {
+      if (demandsFilter.order === 'asc') {
+        return (
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        );
+      }
+      return (
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+    });
+    return list;
+  }, [demands, demandsFilter]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex justify-center items-center">
@@ -827,33 +752,12 @@ const AdminDashboard = () => {
   ).length;
   const vendidosCount = (cars || []).filter((c) => c.is_sold === true).length;
 
-  // FILTROS PEDIDOS / OFERECIDOS
-  const filteredRequests = (customerRequests || [])
-    .filter((r) => {
-      if (requestFilterType === 'all') return true;
-      return r.type === requestFilterType;
-    })
-    .filter((r) => {
-      if (!requestSearch) return true;
-      const s = requestSearch.toLowerCase();
-      return (
-        (r.client_name || '').toLowerCase().includes(s) ||
-        (r.brand || '').toLowerCase().includes(s) ||
-        (r.model || '').toLowerCase().includes(s) ||
-        (r.lead_source || '').toLowerCase().includes(s)
-      );
-    })
-    .sort((a, b) => {
-      if (requestOrder === 'oldest') {
-        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-      }
-      if (requestOrder === 'price') {
-        return (b.price_max || 0) - (a.price_max || 0);
-      }
-      // newest
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-    });
+  const isAdminLike =
+    currentAdminUser &&
+    currentAdminUser.access_roles &&
+    ['admin', 'owner'].includes(currentAdminUser.access_roles.slug);
 
+  // ---------------------- RENDER -------------------------
   return (
     <div className="relative isolate min-h-screen bg-gray-50 text-gray-800 pt-28">
       <Helmet>
@@ -872,22 +776,22 @@ const AdminDashboard = () => {
             </Button>
           </div>
 
-          {/* MENU EM ORDEM CERTA */}
-          <div className="flex flex-wrap gap-2 mb-8 border-b pb-2">
+          {/* TABS ORDENADAS */}
+          <div className="flex flex-wrap gap-4 mb-8 border-b">
             <button
-              className={`px-4 py-2 font-semibold rounded-t-lg ${
+              className={`px-4 py-2 font-semibold ${
                 activeTab === 'leads'
-                  ? 'border-b-2 border-yellow-500 text-yellow-500 bg-white'
+                  ? 'border-b-2 border-yellow-500 text-yellow-500'
                   : 'text-gray-500 hover:text-gray-900'
               }`}
               onClick={() => setActiveTab('leads')}
             >
-              <Users className="inline mr-2" /> Leads
+              <MessageSquare className="inline mr-2" /> Leads
             </button>
             <button
-              className={`px-4 py-2 font-semibold rounded-t-lg ${
+              className={`px-4 py-2 font-semibold ${
                 activeTab === 'cars'
-                  ? 'border-b-2 border-yellow-500 text-yellow-500 bg-white'
+                  ? 'border-b-2 border-yellow-500 text-yellow-500'
                   : 'text-gray-500 hover:text-gray-900'
               }`}
               onClick={() => setActiveTab('cars')}
@@ -895,9 +799,9 @@ const AdminDashboard = () => {
               <Car className="inline mr-2" /> Veículos
             </button>
             <button
-              className={`px-4 py-2 font-semibold rounded-t-lg ${
+              className={`px-4 py-2 font-semibold ${
                 activeTab === 'testimonials'
-                  ? 'border-b-2 border-yellow-500 text-yellow-500 bg-white'
+                  ? 'border-b-2 border-yellow-500 text-yellow-500'
                   : 'text-gray-500 hover:text-gray-900'
               }`}
               onClick={() => setActiveTab('testimonials')}
@@ -905,9 +809,9 @@ const AdminDashboard = () => {
               <MessageSquare className="inline mr-2" /> Depoimentos
             </button>
             <button
-              className={`px-4 py-2 font-semibold rounded-t-lg ${
+              className={`px-4 py-2 font-semibold ${
                 activeTab === 'gestao'
-                  ? 'border-b-2 border-yellow-500 text-yellow-500 bg-white'
+                  ? 'border-b-2 border-yellow-500 text-yellow-500'
                   : 'text-gray-500 hover:text-gray-900'
               }`}
               onClick={() => setActiveTab('gestao')}
@@ -915,9 +819,9 @@ const AdminDashboard = () => {
               <FileText className="inline mr-2" /> Gestão
             </button>
             <button
-              className={`px-4 py-2 font-semibold rounded-t-lg ${
+              className={`px-4 py-2 font-semibold ${
                 activeTab === 'matriz'
-                  ? 'border-b-2 border-yellow-500 text-yellow-500 bg-white'
+                  ? 'border-b-2 border-yellow-500 text-yellow-500'
                   : 'text-gray-500 hover:text-gray-900'
               }`}
               onClick={() => setActiveTab('matriz')}
@@ -925,35 +829,33 @@ const AdminDashboard = () => {
               <BarChart2 className="inline mr-2" /> Matriz
             </button>
             <button
-              className={`px-4 py-2 font-semibold rounded-t-lg ${
-                activeTab === 'requests'
-                  ? 'border-b-2 border-yellow-500 text-yellow-500 bg-white'
+              className={`px-4 py-2 font-semibold ${
+                activeTab === 'demands'
+                  ? 'border-b-2 border-yellow-500 text-yellow-500'
                   : 'text-gray-500 hover:text-gray-900'
               }`}
-              onClick={() => setActiveTab('requests')}
+              onClick={() => setActiveTab('demands')}
             >
-              <AlertCircle className="inline mr-2" /> Pedidos / Oferecidos
+              <ListChecks className="inline mr-2" /> Pedidos / Oferecidos
             </button>
             <button
-              className={`px-4 py-2 font-semibold rounded-t-lg ${
+              className={`px-4 py-2 font-semibold ${
                 activeTab === 'reports'
-                  ? 'border-b-2 border-yellow-500 text-yellow-500 bg-white'
+                  ? 'border-b-2 border-yellow-500 text-yellow-500'
                   : 'text-gray-500 hover:text-gray-900'
               }`}
               onClick={() => setActiveTab('reports')}
             >
               <BarChart2 className="inline mr-2" /> Relatórios
             </button>
-
-            {/* aparece só se for master */}
-            {isMaster && (
+            {isAdminLike && (
               <button
-                className={`px-4 py-2 font-semibold rounded-t-lg ${
+                className={`px-4 py-2 font-semibold ${
                   activeTab === 'access'
-                    ? 'border-b-2 border-yellow-500 text-yellow-500 bg-white'
+                    ? 'border-b-2 border-yellow-500 text-yellow-500'
                     : 'text-gray-500 hover:text-gray-900'
                 }`}
-                onClick={() => navigate('/dashboard/acessos')}
+                onClick={() => setActiveTab('access')}
               >
                 <Shield className="inline mr-2" /> Gestão de acessos
               </button>
@@ -1121,7 +1023,7 @@ const AdminDashboard = () => {
                       type="button"
                       onClick={() => fileInputRef.current && fileInputRef.current.click()}
                     >
-                      <ImageIcon className="mr-2 h-4 w-4" /> Adicionar Fotos
+                      Adicionar Fotos
                     </Button>
                     <input
                       type="file"
@@ -1147,7 +1049,7 @@ const AdminDashboard = () => {
                           />
                           {mainPhotoIndex === index && (
                             <div className="absolute top-1 right-1 bg-yellow-500 text-black rounded-full p-1">
-                              <Check className="h-3 w-3" />
+                              ✔
                             </div>
                           )}
                           <button
@@ -1174,7 +1076,7 @@ const AdminDashboard = () => {
                 </form>
               </div>
 
-              {/* NOVO BLOCO: Estoque / Vendidos */}
+              {/* Estoque */}
               <div className="flex justify-between items-center mb-6">
                 <div>
                   <h2 className="text-2xl font-semibold flex items-center">
@@ -1183,9 +1085,7 @@ const AdminDashboard = () => {
                   </h2>
                   <p className="text-sm text-gray-500 mt-1">
                     Veículos vendidos:{' '}
-                    <span className="font-semibold text-red-500">
-                      {vendidosCount}
-                    </span>
+                    <span className="font-semibold text-red-500">{vendidosCount}</span>
                   </p>
                 </div>
 
@@ -1200,7 +1100,7 @@ const AdminDashboard = () => {
                 </Button>
               </div>
 
-              {/* CONTROLES DE FILTRO — inclui PLACA */}
+              {/* Filtros veículos */}
               <div className="flex flex-col md:flex-row gap-3 items-center mb-4">
                 <input
                   placeholder="Pesquisar marca, modelo ou PLACA..."
@@ -1290,12 +1190,10 @@ const AdminDashboard = () => {
                                 if (!raw) {
                                   return 'Vendido -';
                                 }
-
                                 const clean = String(raw).replace('T', ' ').trim();
                                 const y = clean.slice(0, 4);
                                 const m = clean.slice(5, 7);
                                 const d = clean.slice(8, 10);
-
                                 if (!y || !m || !d) {
                                   return `Vendido em ${raw} - ${
                                     car.sale_price
@@ -1306,7 +1204,6 @@ const AdminDashboard = () => {
                                       : '-'
                                   }`;
                                 }
-
                                 const dataBR = `${d}/${m}/${y}`;
                                 const preco = car.sale_price
                                   ? new Intl.NumberFormat('pt-BR', {
@@ -1314,7 +1211,6 @@ const AdminDashboard = () => {
                                       currency: 'BRL',
                                     }).format(car.sale_price)
                                   : '-';
-
                                 return `Vendido em ${dataBR} - ${preco}`;
                               })()}
                             </p>
@@ -1333,13 +1229,13 @@ const AdminDashboard = () => {
                               : 'Adicionar aos destaques'
                           }
                         >
-                          <Star
-                            className={`h-5 w-5 transition-colors ${
+                          <span
+                            className={`inline-block h-5 w-5 rounded-full ${
                               car.is_featured
-                                ? 'text-yellow-500 fill-yellow-500'
-                                : 'text-gray-400 hover:text-yellow-500'
+                                ? 'bg-yellow-400'
+                                : 'bg-gray-200 hover:bg-yellow-200'
                             }`}
-                          />
+                          ></span>
                         </Button>
                         <Button
                           variant="ghost"
@@ -1355,48 +1251,21 @@ const AdminDashboard = () => {
                             onClick={() => openSaleDialog(car)}
                             className="flex items-center gap-2"
                           >
-                            <svg
-                              className="h-4 w-4"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                            >
-                              <path
-                                d="M3 12h18"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-                            </svg>
                             Marcar como vendido
                           </Button>
                         ) : (
-                          <div className="flex items-center gap-2">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() =>
-                                unmarkCarAsSold(car.id, {
-                                  deleteAllSales: true,
-                                }).then(() => fetchAllData())
-                              }
-                              title="Reverter venda"
-                            >
-                              <svg
-                                className="h-4 w-4 text-gray-600"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                              >
-                                <path
-                                  d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h7"
-                                  stroke="currentColor"
-                                  strokeWidth="1.5"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                />
-                              </svg>
-                            </Button>
-                          </div>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() =>
+                              unmarkCarAsSold(car.id, {
+                                deleteAllSales: true,
+                              }).then(() => fetchAllData({ showLoading: false }))
+                            }
+                            title="Reverter venda"
+                          >
+                            Reabrir
+                          </Button>
                         )}
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
@@ -1449,149 +1318,12 @@ const AdminDashboard = () => {
                 cars={cars}
                 platforms={platforms}
                 onOpenGestaoForCar={(car) => {
-                  setSelectedCar(car);
-                  setIsGestaoOpen(true);
-                  setTimeout(() => {
-                    toast({
-                      title: `Abrindo gestão do veículo ${car.brand} ${car.model}`,
-                    });
-                  }, 300);
+                  toast({
+                    title: `Abrindo gestão do veículo ${car.brand} ${car.model}`,
+                  });
+                  setActiveTab('gestao');
                 }}
               />
-            </div>
-          )}
-
-          {/* PEDIDOS / OFERECIDOS */}
-          {activeTab === 'requests' && (
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-xl border">
-              <div className="flex flex-wrap gap-3 items-center justify-between mb-6">
-                <div>
-                  <h2 className="text-2xl font-semibold flex items-center gap-2">
-                    <AlertCircle className="text-yellow-500" /> Pedidos / Oferecidos
-                  </h2>
-                  <p className="text-sm text-gray-500 mt-1">
-                    {customerRequests.length} registro(s) encontrados
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <div className="relative">
-                    <Search className="h-4 w-4 text-gray-400 absolute left-2 top-2.5" />
-                    <input
-                      value={requestSearch}
-                      onChange={(e) => setRequestSearch(e.target.value)}
-                      placeholder="Buscar cliente, modelo, fonte..."
-                      className="pl-8 pr-2 py-1.5 border rounded-md text-sm"
-                    />
-                  </div>
-                  <select
-                    value={requestFilterType}
-                    onChange={(e) => setRequestFilterType(e.target.value)}
-                    className="border rounded-md text-sm py-1.5 px-2"
-                  >
-                    <option value="all">Todos</option>
-                    <option value="pedido">Somente pedidos</option>
-                    <option value="oferecido">Somente oferecidos</option>
-                  </select>
-                  <select
-                    value={requestOrder}
-                    onChange={(e) => setRequestOrder(e.target.value)}
-                    className="border rounded-md text-sm py-1.5 px-2"
-                  >
-                    <option value="newest">Mais recentes</option>
-                    <option value="oldest">Mais antigos</option>
-                    <option value="price">Maior valor</option>
-                  </select>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      fetchCustomerRequests();
-                      toast({ title: 'Atualizado.' });
-                    }}
-                  >
-                    <Filter className="h-4 w-4 mr-1" /> Atualizar
-                  </Button>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {filteredRequests.map((req) => (
-                  <div
-                    key={req.id}
-                    className={`rounded-2xl border shadow-sm p-4 bg-white/90 ${
-                      req.type === 'pedido'
-                        ? 'border-yellow-400/80'
-                        : 'border-gray-200'
-                    }`}
-                  >
-                    <div className="flex justify-between items-center mb-2">
-                      <span
-                        className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                          req.type === 'pedido'
-                            ? 'bg-yellow-100 text-yellow-700'
-                            : 'bg-slate-100 text-slate-700'
-                        }`}
-                      >
-                        {req.type === 'pedido' ? 'PEDIDO' : 'OFERECIDO'}
-                      </span>
-                      {req.match_score ? (
-                        <span className="text-xs font-semibold text-green-600">
-                          MATCH {req.match_score}%
-                        </span>
-                      ) : null}
-                    </div>
-                    <h3 className="text-lg font-bold text-gray-900">
-                      {req.client_name || '—'}
-                    </h3>
-                    <p className="text-sm text-gray-500 mb-2">
-                      {req.client_contact || '—'}
-                    </p>
-                    <p className="text-sm">
-                      <span className="font-medium text-gray-700">Carro: </span>
-                      {req.brand || '—'} {req.model || ''}{' '}
-                      {req.version ? `(${req.version})` : ''}
-                    </p>
-                    <p className="text-sm">
-                      <span className="font-medium text-gray-700">Carroceria: </span>
-                      {req.body_type || '—'}
-                    </p>
-                    <p className="text-sm">
-                      <span className="font-medium text-gray-700">Combustível: </span>
-                      {req.fuel || '—'}
-                    </p>
-                    <p className="text-sm">
-                      <span className="font-medium text-gray-700">Câmbio: </span>
-                      {req.transmission || '—'}
-                    </p>
-                    <p className="text-sm">
-                      <span className="font-medium text-gray-700">Ano: </span>
-                      {req.year_exact
-                        ? req.year_exact
-                        : req.year_min || req.year_max
-                        ? `${req.year_min || '...'} → ${req.year_max || '...'}`
-                        : '—'}
-                    </p>
-                    <p className="text-sm mt-2">
-                      <span className="font-medium text-gray-700">Valor: </span>
-                      {req.price_min || req.price_max
-                        ? `R$ ${req.price_min || '...'} → R$ ${req.price_max || '...'}`
-                        : '—'}
-                    </p>
-                    <p className="text-xs text-gray-400 mt-2">
-                      Fonte: {req.lead_source || '—'} |{' '}
-                      {req.created_at
-                        ? new Date(req.created_at).toLocaleString('pt-BR')
-                        : '—'}
-                    </p>
-                  </div>
-                ))}
-              </div>
-
-              {filteredRequests.length === 0 && (
-                <div className="text-center py-10 text-gray-400 text-sm">
-                  Nenhum pedido / oferecido encontrado.
-                </div>
-              )}
             </div>
           )}
 
@@ -1608,14 +1340,14 @@ const AdminDashboard = () => {
                     value={newTestimonial.client_name}
                     onChange={handleNewTestimonialInputChange}
                     placeholder="Nome do Cliente *"
-                    className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none"
+                    className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none"
                   />
                   <input
                     name="car_sold"
                     value={newTestimonial.car_sold}
                     onChange={handleNewTestimonialInputChange}
                     placeholder="Carro (Ex: BMW X5 2021)"
-                    className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none"
+                    className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none"
                   />
                   <textarea
                     name="testimonial_text"
@@ -1623,7 +1355,7 @@ const AdminDashboard = () => {
                     onChange={handleNewTestimonialInputChange}
                     placeholder="Texto do depoimento *"
                     rows={4}
-                    className="w-full p-3 bg-white border border-gray-300 rounded-lg"
+                    className="w-full p-3 bg-white border border-gray-200 rounded-lg"
                   />
                   <Button className="w-full bg-yellow-400 text-black hover:bg-yellow-500 font-bold py-3">
                     Salvar Depoimento
@@ -1666,18 +1398,449 @@ const AdminDashboard = () => {
             </>
           )}
 
+          {/* PEDIDOS / OFERECIDOS */}
+          {activeTab === 'demands' && (
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-xl border">
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h2 className="text-xl font-semibold flex items-center gap-2">
+                    <ListChecks className="text-yellow-500" />
+                    Pedidos / Oferecidos
+                  </h2>
+                  <p className="text-sm text-gray-500">
+                    Registre quem pediu carro e quem ofereceu. Match é automático.
+                  </p>
+                </div>
+                <div className="flex gap-3">
+                  <div className="flex items-center gap-2">
+                    <Search className="text-gray-400 w-4 h-4" />
+                    <input
+                      value={demandsFilter.q}
+                      onChange={(e) =>
+                        setDemandsFilter((prev) => ({ ...prev, q: e.target.value }))
+                      }
+                      className="border rounded px-2 py-1 text-sm"
+                      placeholder="Buscar cliente, modelo, fonte..."
+                    />
+                  </div>
+                  <select
+                    value={demandsFilter.type}
+                    onChange={(e) =>
+                      setDemandsFilter((prev) => ({ ...prev, type: e.target.value }))
+                    }
+                    className="border rounded px-2 py-1 text-sm"
+                  >
+                    <option value="all">Todos</option>
+                    <option value="pedido">Somente pedidos</option>
+                    <option value="oferecido">Somente oferecidos</option>
+                  </select>
+                  <select
+                    value={demandsFilter.order}
+                    onChange={(e) =>
+                      setDemandsFilter((prev) => ({ ...prev, order: e.target.value }))
+                    }
+                    className="border rounded px-2 py-1 text-sm"
+                  >
+                    <option value="desc">Mais recentes</option>
+                    <option value="asc">Mais antigos</option>
+                  </select>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fetchAllData({ showLoading: false })}
+                  >
+                    <RefreshCw className="w-4 h-4 mr-1" /> Atualizar
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setEditingDemand(null);
+                      setIsDemandModalOpen(true);
+                    }}
+                    className="bg-yellow-400 text-black hover:bg-yellow-500"
+                  >
+                    + Novo
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-4 gap-4 mb-4">
+                <div className="bg-white rounded-xl border p-4">
+                  <p className="text-xs text-gray-500">TOTAL</p>
+                  <p className="text-2xl font-bold text-gray-900">{demands.length}</p>
+                </div>
+                <div className="bg-white rounded-xl border p-4">
+                  <p className="text-xs text-gray-500">PEDIDOS</p>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {demands.filter((d) => d.type === 'pedido').length}
+                  </p>
+                </div>
+                <div className="bg-white rounded-xl border p-4">
+                  <p className="text-xs text-gray-500">OFERECIDOS</p>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {demands.filter((d) => d.type === 'oferecido').length}
+                  </p>
+                </div>
+                <div className="bg-white rounded-xl border p-4">
+                  <p className="text-xs text-gray-500">COM MATCH</p>
+                  <p className="text-2xl font-bold text-green-600">
+                    {demands.filter((d) => d.matched_car_id).length}
+                  </p>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto rounded-xl border">
+                <table className="min-w-full bg-white rounded-xl">
+                  <thead>
+                    <tr className="text-left text-xs text-gray-500 uppercase bg-gray-50">
+                      <th className="py-3 px-4">Tipo</th>
+                      <th className="py-3 px-4">Cliente</th>
+                      <th className="py-3 px-4">Contato</th>
+                      <th className="py-3 px-4">Marca/Modelo</th>
+                      <th className="py-3 px-4">Faixa Valor</th>
+                      <th className="py-3 px-4">Data</th>
+                      <th className="py-3 px-4">Origem</th>
+                      <th className="py-3 px-4 text-right">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredDemands.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan="8"
+                          className="py-6 text-center text-sm text-gray-500"
+                        >
+                          Nenhum pedido / oferecido encontrado.
+                        </td>
+                      </tr>
+                    )}
+                    {filteredDemands.map((d) => (
+                      <tr key={d.id} className="border-t">
+                        <td className="py-3 px-4">
+                          <span
+                            className={`px-3 py-1 text-xs rounded-full ${
+                              d.type === 'pedido'
+                                ? 'bg-yellow-100 text-yellow-700'
+                                : 'bg-blue-100 text-blue-700'
+                            }`}
+                          >
+                            {d.type === 'pedido'
+                              ? 'Pedido (procura carro)'
+                              : 'Oferecido (quer vender)'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">{d.client_name}</td>
+                        <td className="py-3 px-4">{d.client_contact}</td>
+                        <td className="py-3 px-4">
+                          {d.brand} {d.model}
+                        </td>
+                        <td className="py-3 px-4">
+                          {d.price_min || d.price_max
+                            ? `${d.price_min ? `R$ ${d.price_min}` : ''}${
+                                d.price_min && d.price_max ? ' - ' : ''
+                              }${d.price_max ? `R$ ${d.price_max}` : ''}`
+                            : '-'}
+                        </td>
+                        <td className="py-3 px-4">
+                          {d.lead_date
+                            ? new Date(d.lead_date).toISOString().slice(0, 10)
+                            : '-'}
+                        </td>
+                        <td className="py-3 px-4">{d.lead_source || '-'}</td>
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex justify-end gap-3">
+                            <button
+                              onClick={() => {
+                                setEditingDemand(d);
+                                setIsDemandModalOpen(true);
+                              }}
+                              className="text-blue-600 hover:underline text-sm"
+                            >
+                              Editar
+                            </button>
+                            <button
+                              onClick={async () => {
+                                await deleteCustomerDemandOffer(d.id);
+                                toast({ title: 'Registro removido.' });
+                                fetchAllData({ showLoading: false });
+                              }}
+                              className="text-red-500 hover:underline text-sm"
+                            >
+                              Excluir
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* MODAL DE CADASTRO DE DEMAND */}
+              <Dialog open={isDemandModalOpen} onOpenChange={setIsDemandModalOpen}>
+                <DialogContent className="max-w-3xl bg-white text-gray-900">
+                  <DialogHeader>
+                    <DialogTitle>
+                      {editingDemand ? 'Editar pedido / oferecido' : 'Novo pedido / oferecido'}
+                    </DialogTitle>
+                  </DialogHeader>
+                  <form
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      const formData = new FormData(e.target);
+                      const payload = {
+                        type: formData.get('type') || 'pedido',
+                        client_name: formData.get('client_name') || null,
+                        client_contact: formData.get('client_contact') || null,
+                        brand: formData.get('brand') || null,
+                        model: formData.get('model') || null,
+                        body_type: formData.get('body_type') || null,
+                        fuel: formData.get('fuel') || null,
+                        transmission: formData.get('transmission') || null,
+                        price_min: formData.get('price_min')
+                          ? Number(formData.get('price_min'))
+                          : null,
+                        price_max: formData.get('price_max')
+                          ? Number(formData.get('price_max'))
+                          : null,
+                        year_min: formData.get('year_min')
+                          ? Number(formData.get('year_min'))
+                          : null,
+                        year_max: formData.get('year_max')
+                          ? Number(formData.get('year_max'))
+                          : null,
+                        year_exact: formData.get('year_exact')
+                          ? Number(formData.get('year_exact'))
+                          : null,
+                        lead_date: formData.get('lead_date') || null,
+                        lead_source: formData.get('lead_source') || null,
+                        notes: formData.get('notes') || null,
+                      };
+                      if (payload.type === 'oferecido') {
+                        // oferecido tem ano exato
+                        payload.year_min = null;
+                        payload.year_max = null;
+                      }
+
+                      if (editingDemand) {
+                        await updateCustomerDemandOffer(editingDemand.id, payload);
+                        toast({ title: 'Registro atualizado.' });
+                      } else {
+                        await addCustomerDemandOffer(payload);
+                        toast({ title: 'Registro criado.' });
+                      }
+                      setIsDemandModalOpen(false);
+                      setEditingDemand(null);
+                      fetchAllData({ showLoading: false });
+                    }}
+                    className="space-y-4 max-h-[70vh] overflow-y-auto"
+                  >
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm font-medium">Tipo</label>
+                        <select
+                          name="type"
+                          defaultValue={editingDemand?.type || 'pedido'}
+                          className="w-full border rounded px-2 py-2"
+                        >
+                          <option value="pedido">Pedido (procura carro)</option>
+                          <option value="oferecido">Oferecido (tem o carro)</option>
+                        </select>
+                      </div>
+                      <div></div>
+                      <div>
+                        <label className="text-sm font-medium">Cliente</label>
+                        <input
+                          name="client_name"
+                          defaultValue={editingDemand?.client_name || ''}
+                          className="w-full border rounded px-2 py-2"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium">Contato</label>
+                        <input
+                          name="client_contact"
+                          defaultValue={editingDemand?.client_contact || ''}
+                          className="w-full border rounded px-2 py-2"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium">Marca</label>
+                        <input
+                          name="brand"
+                          defaultValue={editingDemand?.brand || ''}
+                          className="w-full border rounded px-2 py-2"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium">Modelo</label>
+                        <input
+                          name="model"
+                          defaultValue={editingDemand?.model || ''}
+                          className="w-full border rounded px-2 py-2"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium">Carroceria</label>
+                        <select
+                          name="body_type"
+                          defaultValue={editingDemand?.body_type || ''}
+                          className="w-full border rounded px-2 py-2"
+                        >
+                          <option value="">-</option>
+                          <option value="SUV">SUV</option>
+                          <option value="Sedan">Sedan</option>
+                          <option value="Hatch">Hatch</option>
+                          <option value="Picape">Picape</option>
+                          <option value="Esportivo">Esportivo</option>
+                          <option value="Outro">Outro</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium">Combustível</label>
+                        <select
+                          name="fuel"
+                          defaultValue={editingDemand?.fuel || ''}
+                          className="w-full border rounded px-2 py-2"
+                        >
+                          <option value="">-</option>
+                          <option value="Flex">Flex</option>
+                          <option value="Gasolina">Gasolina</option>
+                          <option value="Diesel">Diesel</option>
+                          <option value="Elétrico">Elétrico</option>
+                          <option value="Híbrido">Híbrido</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium">Câmbio</label>
+                        <select
+                          name="transmission"
+                          defaultValue={editingDemand?.transmission || ''}
+                          className="w-full border rounded px-2 py-2"
+                        >
+                          <option value="">-</option>
+                          <option value="Automático">Automático</option>
+                          <option value="Manual">Manual</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium">Valor mín (R$)</label>
+                        <input
+                          name="price_min"
+                          type="number"
+                          defaultValue={editingDemand?.price_min || ''}
+                          className="w-full border rounded px-2 py-2"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium">Valor máx (R$)</label>
+                        <input
+                          name="price_max"
+                          type="number"
+                          defaultValue={editingDemand?.price_max || ''}
+                          className="w-full border rounded px-2 py-2"
+                        />
+                      </div>
+
+                      {/* se for pedido: ano min/max. se for oferecido: ano exato. vamos mostrar os 3 e tratar no submit */}
+                      <div>
+                        <label className="text-sm font-medium">Ano mín</label>
+                        <input
+                          name="year_min"
+                          type="number"
+                          defaultValue={editingDemand?.year_min || ''}
+                          className="w-full border rounded px-2 py-2"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium">Ano máx</label>
+                        <input
+                          name="year_max"
+                          type="number"
+                          defaultValue={editingDemand?.year_max || ''}
+                          className="w-full border rounded px-2 py-2"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium">Ano exato</label>
+                        <input
+                          name="year_exact"
+                          type="number"
+                          defaultValue={editingDemand?.year_exact || ''}
+                          className="w-full border rounded px-2 py-2"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium">Data</label>
+                        <input
+                          name="lead_date"
+                          type="date"
+                          defaultValue={
+                            editingDemand?.lead_date
+                              ? editingDemand.lead_date.slice(0, 10)
+                              : new Date().toISOString().slice(0, 10)
+                          }
+                          className="w-full border rounded px-2 py-2"
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="text-sm font-medium">Origem</label>
+                        <input
+                          name="lead_source"
+                          defaultValue={editingDemand?.lead_source || ''}
+                          className="w-full border rounded px-2 py-2"
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="text-sm font-medium">Observações</label>
+                        <textarea
+                          name="notes"
+                          defaultValue={editingDemand?.notes || ''}
+                          rows={3}
+                          className="w-full border rounded px-2 py-2"
+                        />
+                      </div>
+                    </div>
+
+                    <DialogFooter>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => setIsDemandModalOpen(false)}
+                      >
+                        Cancelar
+                      </Button>
+                      <Button
+                        type="submit"
+                        className="bg-yellow-400 text-black hover:bg-yellow-500"
+                      >
+                        Salvar
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            </div>
+          )}
+
           {/* RELATÓRIOS */}
           {activeTab === 'reports' && (
             <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-xl border">
               <Reports />
             </div>
           )}
+
+          {/* GESTÃO DE ACESSOS */}
+          {activeTab === 'access' && isAdminLike && (
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-xl border">
+              <AccessControl />
+            </div>
+          )}
         </motion.div>
       </div>
 
-      {/* EDIT DIALOG (usa FormFields com PLACA) */}
+      {/* EDIT CAR DIALOG */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="bg-white text-gray-900 max-w-4xl">
+        <DialogContent className="bg-white text-gray-900">
           <DialogHeader>
             <DialogTitle>Editar Veículo</DialogTitle>
           </DialogHeader>
@@ -1735,7 +1898,7 @@ const AdminDashboard = () => {
                   onClick={() => fileInputRef.current && fileInputRef.current.click()}
                   className="bg-transparent border border-yellow-500 text-yellow-500 hover:bg-yellow-500 hover:text-black text-xs px-3 py-1.5 h-auto"
                 >
-                  <ImageIcon className="mr-2 h-4 w-4" /> Adicionar
+                  Adicionar
                 </Button>
               </div>
               <DialogFooter className="pt-4">
@@ -1846,7 +2009,7 @@ const AdminDashboard = () => {
                       });
                     } else {
                       toast({ title: 'Veículo marcado como vendido!' });
-                      await fetchAllData();
+                      await fetchAllData({ showLoading: false });
                       setSaleDialogOpen(false);
                       setCarToSell(null);
                     }
@@ -1865,50 +2028,6 @@ const AdminDashboard = () => {
               </Button>
             </DialogFooter>
           </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* MATCH MODAL */}
-      <Dialog open={matchModalOpen} onOpenChange={setMatchModalOpen}>
-        <DialogContent className="bg-white text-gray-900 max-w-3xl border-4 border-yellow-400 shadow-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-green-600 text-2xl">
-              <AlertCircle className="text-yellow-500" /> Encontramos cliente(s) para esse carro!
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 max-h-[60vh] overflow-y-auto">
-            {matchResults.map((m) => (
-              <div
-                key={m.id}
-                className="border rounded-xl p-3 bg-yellow-50/70 flex justify-between items-center"
-              >
-                <div>
-                  <p className="font-bold text-gray-900">
-                    {m.client_name} — {m.client_contact}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    Procurava: {m.brand} {m.model}{' '}
-                    {m.year_exact
-                      ? `(${m.year_exact})`
-                      : m.year_min || m.year_max
-                      ? `(de ${m.year_min || '...'} até ${m.year_max || '...'})`
-                      : ''}
-                  </p>
-                </div>
-                <span className="text-sm font-bold text-green-700">
-                  {m.match_score}% match
-                </span>
-              </div>
-            ))}
-          </div>
-          <DialogFooter>
-            <Button
-              onClick={() => setMatchModalOpen(false)}
-              className="bg-yellow-400 text-black hover:bg-yellow-500"
-            >
-              Fechar
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

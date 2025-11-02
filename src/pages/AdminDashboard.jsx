@@ -1,11 +1,5 @@
 // src/pages/AdminDashboard.jsx
-import React, {
-  useState,
-  useEffect,
-  useRef,
-  useCallback,
-  useMemo,
-} from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Helmet } from 'react-helmet';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -20,9 +14,13 @@ import {
   Users,
   Image as ImageIcon,
   FileText,
+  Check,
+  Star,
   BarChart2,
   Shield,
+  AlertCircle,
   Search,
+  Filter,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
@@ -42,8 +40,6 @@ import {
   getPlatforms,
   markCarAsSold,
   unmarkCarAsSold,
-  getPublicationsForCars,
-  getExpensesForCars,
 } from '@/lib/car-api';
 import {
   AlertDialog,
@@ -67,10 +63,8 @@ import BackgroundShape from '@/components/BackgroundShape';
 import VehicleManager from '@/components/VehicleManager';
 import Reports from '@/pages/Reports';
 import OverviewBoard from '@/components/OverviewBoard';
-import AccessControl from '@/pages/AccessControl'; // vamos navegar pra ele
-// ======================================================
-// FORM FIELDS (inclui PLACA)
-// ======================================================
+
+// ---------- FORM FIELDS (inclui PLACA) ----------
 const FormFields = React.memo(({ carData, onChange, carOptions }) => (
   <>
     <input
@@ -210,36 +204,11 @@ const FormFields = React.memo(({ carData, onChange, carOptions }) => (
 ));
 
 const AdminDashboard = () => {
-  // abas
   const [activeTab, setActiveTab] = useState('leads');
-
-  // dados base
   const [cars, setCars] = useState([]);
   const [leads, setLeads] = useState([]);
   const [testimonials, setTestimonials] = useState([]);
   const [platforms, setPlatforms] = useState([]);
-
-  // pedidos / oferecidos
-  const [requestsOffers, setRequestsOffers] = useState([]);
-  const [isReqModalOpen, setIsReqModalOpen] = useState(false);
-  const [editingReq, setEditingReq] = useState(null);
-  const [reqFilterType, setReqFilterType] = useState('all');
-  const [reqSearch, setReqSearch] = useState('');
-
-  // match popup
-  const [matchModal, setMatchModal] = useState({
-    open: false,
-    matches: [],
-    car: null,
-  });
-
-  // usuário atual / permissões
-  const [currentUser, setCurrentUser] = useState(null);
-  const [currentUserPerms, setCurrentUserPerms] = useState({
-    roles: [],
-    permissions: [],
-  });
-
   const [loading, setLoading] = useState(true);
   const [leadFilters, setLeadFilters] = useState({
     status: '',
@@ -247,8 +216,13 @@ const AdminDashboard = () => {
     endDate: '',
   });
   const [leadToDelete, setLeadToDelete] = useState(null);
+  const [newTestimonial, setNewTestimonial] = useState({
+    client_name: '',
+    testimonial_text: '',
+    car_sold: '',
+  });
 
-  // carro novo / edição
+  // inclui plate no estado do novo carro
   const [newCar, setNewCar] = useState({
     brand: '',
     model: '',
@@ -265,15 +239,13 @@ const AdminDashboard = () => {
     color: '',
     is_blindado: false,
   });
+
   const [editingCar, setEditingCar] = useState(null);
   const [photosToUpload, setPhotosToUpload] = useState([]);
   const [photosToDelete, setPhotosToDelete] = useState([]);
   const [mainPhotoIndex, setMainPhotoIndex] = useState(0);
-  const fileInputRef = useRef(null);
-
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [carToDelete, setCarToDelete] = useState(null);
-
   const [saleDialogOpen, setSaleDialogOpen] = useState(false);
   const [carToSell, setCarToSell] = useState(null);
   const [saleForm, setSaleForm] = useState({
@@ -282,18 +254,31 @@ const AdminDashboard = () => {
     sale_date: '',
     notes: '',
   });
+  const fileInputRef = useRef(null);
+  const navigate = useNavigate();
 
-  // filtros de carros
+  // filtros (VEÍCULOS)
   const [carSearch, setCarSearch] = useState('');
   const [brandFilter, setBrandFilter] = useState('');
 
-  // para overview / gestão direta
+  // MATRIZ -> abrir gestão (mantive)
   const [selectedCar, setSelectedCar] = useState(null);
   const [isGestaoOpen, setIsGestaoOpen] = useState(false);
 
-  const navigate = useNavigate();
+  // PERMISSÃO
+  const [currentUser, setCurrentUser] = useState(null);
+  const [isMaster, setIsMaster] = useState(false);
 
-  // opções fixas
+  // PEDIDOS / OFERECIDOS
+  const [customerRequests, setCustomerRequests] = useState([]);
+  const [requestFilterType, setRequestFilterType] = useState('all'); // all | pedido | oferecido
+  const [requestSearch, setRequestSearch] = useState('');
+  const [requestOrder, setRequestOrder] = useState('newest'); // newest | oldest | price
+
+  // MATCH POPUP
+  const [matchModalOpen, setMatchModalOpen] = useState(false);
+  const [matchResults, setMatchResults] = useState([]);
+
   const carOptions = {
     transmissions: ['Automático', 'Manual'],
     bodyTypes: ['SUV', 'Sedan', 'Hatch', 'Picape', 'Esportivo', 'Outro'],
@@ -318,42 +303,6 @@ const AdminDashboard = () => {
     'Descartado',
   ];
 
-  // ============================================================
-  // CARREGA USUÁRIO E PERMISSÕES
-  // ============================================================
-  useEffect(() => {
-    (async () => {
-      try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        if (user) {
-          setCurrentUser(user);
-          const { data: permData } = await supabase
-            .from('vw_app_user_permissions')
-            .select('*')
-            .eq('user_id', user.id);
-          const row = Array.isArray(permData) ? permData[0] : permData;
-          if (row) {
-            setCurrentUserPerms({
-              roles: row.roles || [],
-              permissions: row.permissions || [],
-            });
-          }
-        }
-      } catch (err) {
-        console.error('Erro carregando usuário/permissões:', err);
-      }
-    })();
-  }, []);
-
-  const canSeeAccessTab =
-    (currentUserPerms.permissions || []).includes('admin:full') ||
-    (currentUserPerms.roles || []).includes('super_admin');
-
-  // ============================================================
-  // FETCH PRINCIPAL
-  // ============================================================
   const sortCarsActiveFirst = (list = []) => {
     return [...list].sort((a, b) => {
       const aActive = a.is_available === false ? 0 : 1;
@@ -365,53 +314,83 @@ const AdminDashboard = () => {
     });
   };
 
+  const fetchCustomerRequests = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('customer_requests')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) {
+        console.error('Erro ao buscar customer_requests:', error);
+        setCustomerRequests([]);
+      } else {
+        setCustomerRequests(data || []);
+      }
+    } catch (err) {
+      console.error('Erro geral ao buscar customer_requests:', err);
+      setCustomerRequests([]);
+    }
+  }, []);
+
   const fetchAllData = useCallback(
     async (opts = { showLoading: true }) => {
       if (opts.showLoading) setLoading(true);
       try {
-        const [
-          carsData,
-          testimonialsData,
-          leadsData,
-          platformsData,
-          reqOffData,
-        ] = await Promise.all([
-          getCars(),
-          getTestimonials(),
-          getLeads(leadFilters),
-          getPlatforms(),
-          supabase
-            .from('client_requests_offers')
-            .select('*')
-            .order('created_at', { ascending: false }),
-        ]);
-
+        const [carsData, testimonialsData, leadsData, platformsData] =
+          await Promise.all([
+            getCars(),
+            getTestimonials(),
+            getLeads(leadFilters),
+            getPlatforms(),
+          ]);
         setCars(sortCarsActiveFirst(carsData || []));
         setTestimonials(testimonialsData || []);
         setLeads(leadsData || []);
         setPlatforms(platformsData || []);
-        setRequestsOffers(reqOffData.data || []);
+        await fetchCustomerRequests();
       } catch (err) {
         console.error('Erro fetchAllData:', err);
         setCars([]);
         setTestimonials([]);
         setLeads([]);
         setPlatforms([]);
-        setRequestsOffers([]);
       } finally {
         if (opts.showLoading) setLoading(false);
       }
     },
-    [leadFilters]
+    [leadFilters, fetchCustomerRequests]
   );
+
+  // pega usuário e papel
+  useEffect(() => {
+    (async () => {
+      const { data: auth } = await supabase.auth.getUser();
+      if (auth?.user) {
+        setCurrentUser(auth.user);
+        // pega papel
+        const { data: roleRows } = await supabase
+          .from('user_roles')
+          .select('*')
+          .eq('user_id', auth.user.id)
+          .limit(1)
+          .maybeSingle();
+        if (roleRows) {
+          setIsMaster(roleRows.role_slug === 'admin' || roleRows.is_master === true);
+        } else {
+          // se não tiver registro de papel, considera master (pra não travar você)
+          setIsMaster(true);
+        }
+      } else {
+        setCurrentUser(null);
+        setIsMaster(false);
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     fetchAllData();
   }, [fetchAllData]);
 
-  // ============================================================
-  // LEADS
-  // ============================================================
   const handleStatusChange = async (leadId, newStatus) => {
     await updateLead(leadId, { status: newStatus });
     toast({ title: 'Status do lead atualizado!' });
@@ -439,18 +418,12 @@ const AdminDashboard = () => {
       notas: lead.notes,
     }));
 
-  // ============================================================
-  // LOGOUT
-  // ============================================================
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    localStorage.removeItem('autenticco_admin_login_at');
     navigate('/admin');
   };
 
-  // ============================================================
-  // INPUTS GENÉRICOS
-  // ============================================================
+  // input genérico (suporta checkbox)
   const handleInputChange = (e, setStateFunc) => {
     const { name, type, checked, value } = e.target;
     const finalValue = type === 'checkbox' ? checked : value;
@@ -464,19 +437,20 @@ const AdminDashboard = () => {
     (e) => handleInputChange(e, setEditingCar),
     []
   );
-
-  // ============================================================
-  // TESTIMONIALS
-  // ============================================================
-  const [newTestimonial, setNewTestimonial] = useState({
-    client_name: '',
-    testimonial_text: '',
-    car_sold: '',
-  });
   const handleNewTestimonialInputChange = useCallback(
     (e) => handleInputChange(e, setNewTestimonial),
     []
   );
+
+  const handleToggleFeatured = async (carId, currentStatus) => {
+    await updateCar(carId, { is_featured: !currentStatus });
+    toast({
+      title: `Veículo ${
+        !currentStatus ? 'adicionado aos' : 'removido dos'
+      } destaques!`,
+    });
+    fetchAllData();
+  };
 
   const handleAddTestimonial = async (e) => {
     e.preventDefault();
@@ -495,9 +469,6 @@ const AdminDashboard = () => {
     fetchAllData();
   };
 
-  // ============================================================
-  // FOTOS
-  // ============================================================
   const handlePhotoUpload = (e) => {
     const files = Array.from(e.target.files || []);
     setPhotosToUpload((prev) => [...prev, ...files]);
@@ -516,91 +487,79 @@ const AdminDashboard = () => {
     }
   };
 
-  // ============================================================
-  // MATCH DE PEDIDOS/OFERECIDOS AO CADASTRAR CARRO
-  // ============================================================
-  const checkMatchForNewCar = async (car) => {
-    try {
-      // pega todos os pedidos/oferecidos
-      const { data: reqs } = await supabase
-        .from('client_requests_offers')
-        .select('*');
+  // === MATCH LOGIC ===
+  const normalize = (s) =>
+    String(s || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9\s]/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
 
-      if (!reqs || reqs.length === 0) return;
+  const findMatchesForCar = (car, requests = []) => {
+    const nBrand = normalize(car.brand);
+    const nModel = normalize(car.model);
+    const year = car.year ? Number(car.year) : null;
+    const body = normalize(car.body_type);
+    const fuel = normalize(car.fuel);
+    const transmission = normalize(car.transmission);
 
-      // regra bem simples de match
-      const matches = reqs
-        .map((r) => {
-          let score = 0;
+    const matches = [];
+    for (const req of requests) {
+      if (!req) continue;
+      // só dá match automático em "pedido"
+      if (req.type !== 'pedido') continue;
 
-          if (
-            r.brand &&
-            car.brand &&
-            r.brand.trim().toLowerCase() === car.brand.trim().toLowerCase()
-          ) {
-            score += 30;
-          }
-          if (
-            r.model &&
-            car.model &&
-            r.model.trim().toLowerCase() === car.model.trim().toLowerCase()
-          ) {
-            score += 30;
-          }
-          if (r.body_type && car.body_type && r.body_type === car.body_type) {
-            score += 15;
-          }
-          if (r.fuel && car.fuel && r.fuel === car.fuel) {
-            score += 10;
-          }
-          if (r.transmission && car.transmission && r.transmission === car.transmission) {
-            score += 10;
-          }
-          // ano
-          if (r.type === 'pedido') {
-            // pedido → tem faixa
-            const ano = Number(car.year);
-            const min = r.year_min ? Number(r.year_min) : null;
-            const max = r.year_max ? Number(r.year_max) : null;
-            if (ano) {
-              if ((min && ano < min) || (max && ano > max)) {
-                // fora da faixa
-              } else {
-                score += 10;
-              }
-            }
-          } else if (r.type === 'oferecido') {
-            // oferecido → ano exato
-            if (r.year_exact && car.year && Number(r.year_exact) === Number(car.year)) {
-              score += 10;
-            }
-          }
+      let score = 0;
 
-          return { ...r, score };
-        })
-        .filter((m) => m.score >= 50)
-        .sort((a, b) => b.score - a.score);
+      const reqBrand = normalize(req.brand);
+      const reqModel = normalize(req.model);
+      const reqBody = normalize(req.body_type);
+      const reqFuel = normalize(req.fuel);
+      const reqTrans = normalize(req.transmission);
 
-      if (matches.length > 0) {
-        setMatchModal({
-          open: true,
-          matches,
-          car,
-        });
+      // marca
+      if (reqBrand && reqBrand === nBrand) score += 30;
+      else if (!reqBrand) score += 5; // não colocou marca
+
+      // modelo
+      if (reqModel && reqModel === nModel) score += 40;
+      else if (!reqModel) score += 5;
+
+      // ano
+      const reqYearMin = req.year_min ? Number(req.year_min) : null;
+      const reqYearMax = req.year_max ? Number(req.year_max) : null;
+      const reqYearExact = req.year_exact ? Number(req.year_exact) : null;
+      let yearOk = true;
+      if (reqYearExact && year) {
+        yearOk = year === reqYearExact;
+      } else if (year && (reqYearMin || reqYearMax)) {
+        if (reqYearMin && year < reqYearMin) yearOk = false;
+        if (reqYearMax && year > reqYearMax) yearOk = false;
       }
-    } catch (err) {
-      console.error('Erro checkMatchForNewCar:', err);
+      if (yearOk) score += 15;
+
+      // carroceria
+      if (reqBody && reqBody === body) score += 5;
+
+      // combustível
+      if (reqFuel && reqFuel === fuel) score += 5;
+
+      // câmbio
+      if (reqTrans && reqTrans === transmission) score += 5;
+
+      if (score >= 40) {
+        matches.push({ ...req, match_score: score });
+      }
     }
+    return matches.sort((a, b) => b.match_score - a.match_score);
   };
 
-  // ============================================================
-  // ADD CAR
-  // ============================================================
   const handleAddCar = async (e) => {
     e.preventDefault();
     setLoading(true);
     try {
-      // upload fotos
       const photoUrls = [];
       for (const file of photosToUpload) {
         const fileName = `${newCar.brand}/${Date.now()}_${file.name}`;
@@ -621,7 +580,6 @@ const AdminDashboard = () => {
         } = supabase.storage.from('car_photos').getPublicUrl(data.path);
         photoUrls.push(publicUrl);
       }
-
       const carData = {
         ...newCar,
         photo_urls: photoUrls,
@@ -629,7 +587,6 @@ const AdminDashboard = () => {
         price: parseFloat(newCar.price || 0),
         is_available: true,
       };
-
       const { data: addedCar, error } = await addCar(carData);
       if (error) {
         toast({
@@ -638,11 +595,15 @@ const AdminDashboard = () => {
           variant: 'destructive',
         });
       } else {
-        // atualiza lista
         setCars((prevCars) =>
           sortCarsActiveFirst([...(prevCars || []), addedCar])
         );
-        // limpa form
+        // MATCH: checa pedidos
+        const matches = findMatchesForCar(addedCar, customerRequests);
+        if (matches.length > 0) {
+          setMatchResults(matches);
+          setMatchModalOpen(true);
+        }
         setNewCar({
           brand: '',
           model: '',
@@ -663,9 +624,6 @@ const AdminDashboard = () => {
         setMainPhotoIndex(0);
         if (fileInputRef.current) fileInputRef.current.value = '';
         toast({ title: 'Veículo adicionado!' });
-
-        // checar MATCH
-        await checkMatchForNewCar(addedCar);
       }
     } catch (err) {
       console.error('Erro handleAddCar:', err);
@@ -679,9 +637,6 @@ const AdminDashboard = () => {
     }
   };
 
-  // ============================================================
-  // EDIT CAR
-  // ============================================================
   const handleEditCarClick = (car) => {
     setPhotosToUpload([]);
     setPhotosToDelete([]);
@@ -765,9 +720,6 @@ const AdminDashboard = () => {
     }
   };
 
-  // ============================================================
-  // DELETE CAR
-  // ============================================================
   const handleDeleteCar = async (id) => {
     setLoading(true);
     try {
@@ -803,14 +755,11 @@ const AdminDashboard = () => {
     }
   };
 
-  // ============================================================
-  // MARCAR COMO VENDIDO
-  // ============================================================
+  // --- VENDAS: abrir modal
   const openSaleDialog = (car) => {
     setCarToSell(car);
     setSaleForm({
-      platform_id:
-        car.sold_platform_id || (platforms[0] && platforms[0].id) || '',
+      platform_id: car.sold_platform_id || (platforms[0] && platforms[0].id) || '',
       sale_price: car.sale_price || '',
       sale_date: car.sold_at
         ? car.sold_at.slice(0, 10)
@@ -819,14 +768,13 @@ const AdminDashboard = () => {
     });
     setSaleDialogOpen(true);
   };
+
   const handleSaleFormChange = (e) => {
     const { name, value } = e.target;
     setSaleForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  // ============================================================
-  // FILTROS (carros)
-  // ============================================================
+  // --- FILTROS (Admin - VEÍCULOS) — inclui PLACA
   const brandOptions = useMemo(() => {
     const brands = Array.from(
       new Set(
@@ -863,135 +811,6 @@ const AdminDashboard = () => {
     });
   }, [cars, carSearch, brandFilter]);
 
-  // ============================================================
-  // PEDIDOS / OFERECIDOS - FUNÇÕES
-  // ============================================================
-  const openNewRequest = () => {
-    setEditingReq({
-      type: 'pedido',
-      client_name: '',
-      client_contact: '',
-      brand: '',
-      model: '',
-      version: '',
-      transmission: '',
-      body_type: '',
-      fuel: '',
-      year_min: '',
-      year_max: '',
-      year_exact: '',
-      price_min: '',
-      price_max: '',
-      lead_date: new Date().toISOString().slice(0, 10),
-      lead_source: '',
-      notes: '',
-    });
-    setIsReqModalOpen(true);
-  };
-
-  const saveRequestOffer = async () => {
-    if (!editingReq) return;
-    try {
-      const payload = {
-        ...editingReq,
-      };
-      // normaliza
-      if (payload.type === 'oferecido') {
-        // ano exato
-        payload.year_min = null;
-        payload.year_max = null;
-      }
-      if (payload.type === 'pedido') {
-        payload.year_exact = null;
-      }
-
-      if (editingReq.id) {
-        const { error } = await supabase
-          .from('client_requests_offers')
-          .update(payload)
-          .eq('id', editingReq.id);
-        if (error) {
-          toast({
-            title: 'Erro ao atualizar registro',
-            description: error.message,
-            variant: 'destructive',
-          });
-          return;
-        }
-        toast({ title: 'Registro atualizado!' });
-      } else {
-        const { error } = await supabase
-          .from('client_requests_offers')
-          .insert([payload]);
-        if (error) {
-          toast({
-            title: 'Erro ao salvar registro',
-            description: error.message,
-            variant: 'destructive',
-          });
-          return;
-        }
-        toast({ title: 'Registro criado!' });
-      }
-      setIsReqModalOpen(false);
-      setEditingReq(null);
-      fetchAllData({ showLoading: false });
-    } catch (err) {
-      toast({
-        title: 'Erro ao salvar',
-        description: String(err),
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const deleteRequestOffer = async (id) => {
-    try {
-      const { error } = await supabase
-        .from('client_requests_offers')
-        .delete()
-        .eq('id', id);
-      if (error) {
-        toast({
-          title: 'Erro ao excluir',
-          description: error.message,
-          variant: 'destructive',
-        });
-        return;
-      }
-      toast({ title: 'Excluído!' });
-      fetchAllData({ showLoading: false });
-    } catch (err) {
-      toast({
-        title: 'Erro ao excluir',
-        description: String(err),
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const filteredRequestsOffers = useMemo(() => {
-    let list = requestsOffers || [];
-    if (reqFilterType !== 'all') {
-      list = list.filter((r) => r.type === reqFilterType);
-    }
-    if (reqSearch.trim() !== '') {
-      const term = reqSearch.trim().toLowerCase();
-      list = list.filter((r) => {
-        return (
-          (r.client_name || '').toLowerCase().includes(term) ||
-          (r.brand || '').toLowerCase().includes(term) ||
-          (r.model || '').toLowerCase().includes(term) ||
-          (r.client_contact || '').toLowerCase().includes(term)
-        );
-      });
-    }
-    return list;
-  }, [requestsOffers, reqFilterType, reqSearch]);
-
-  // ============================================================
-  // RENDER
-  // ============================================================
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex justify-center items-center">
@@ -1008,6 +827,33 @@ const AdminDashboard = () => {
   ).length;
   const vendidosCount = (cars || []).filter((c) => c.is_sold === true).length;
 
+  // FILTROS PEDIDOS / OFERECIDOS
+  const filteredRequests = (customerRequests || [])
+    .filter((r) => {
+      if (requestFilterType === 'all') return true;
+      return r.type === requestFilterType;
+    })
+    .filter((r) => {
+      if (!requestSearch) return true;
+      const s = requestSearch.toLowerCase();
+      return (
+        (r.client_name || '').toLowerCase().includes(s) ||
+        (r.brand || '').toLowerCase().includes(s) ||
+        (r.model || '').toLowerCase().includes(s) ||
+        (r.lead_source || '').toLowerCase().includes(s)
+      );
+    })
+    .sort((a, b) => {
+      if (requestOrder === 'oldest') {
+        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      }
+      if (requestOrder === 'price') {
+        return (b.price_max || 0) - (a.price_max || 0);
+      }
+      // newest
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+
   return (
     <div className="relative isolate min-h-screen bg-gray-50 text-gray-800 pt-28">
       <Helmet>
@@ -1016,45 +862,22 @@ const AdminDashboard = () => {
       <BackgroundShape />
 
       <div className="relative z-10 w-full px-4 sm:px-6 lg:px-12 py-12">
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
-          {/* TOPO */}
+        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
           <div className="flex justify-between items-center mb-8">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">
-                Painel de <span className="text-yellow-500">Controle</span>
-              </h1>
-              {currentUser && (
-                <p className="text-xs text-gray-500 mt-1">
-                  Logado como {currentUser.email}
-                </p>
-              )}
-            </div>
-
-            <div className="flex gap-3">
-              {canSeeAccessTab && (
-                <Button
-                  variant="outline"
-                  onClick={() => navigate('/dashboard/acessos')}
-                  className="flex items-center gap-2"
-                >
-                  <Shield className="w-4 h-4" /> Acessos
-                </Button>
-              )}
-              <Button onClick={handleLogout} variant="destructive">
-                <LogOut className="mr-2 h-4 w-4" /> Sair
-              </Button>
-            </div>
+            <h1 className="text-3xl font-bold text-gray-900">
+              Painel de <span className="text-yellow-500">Controle</span>
+            </h1>
+            <Button onClick={handleLogout} variant="destructive">
+              <LogOut className="mr-2 h-4 w-4" /> Sair
+            </Button>
           </div>
 
-          {/* ABAS */}
-          <div className="flex space-x-4 mb-8 border-b overflow-x-auto">
+          {/* MENU EM ORDEM CERTA */}
+          <div className="flex flex-wrap gap-2 mb-8 border-b pb-2">
             <button
-              className={`px-4 py-2 font-semibold ${
+              className={`px-4 py-2 font-semibold rounded-t-lg ${
                 activeTab === 'leads'
-                  ? 'border-b-2 border-yellow-500 text-yellow-500'
+                  ? 'border-b-2 border-yellow-500 text-yellow-500 bg-white'
                   : 'text-gray-500 hover:text-gray-900'
               }`}
               onClick={() => setActiveTab('leads')}
@@ -1062,9 +885,9 @@ const AdminDashboard = () => {
               <Users className="inline mr-2" /> Leads
             </button>
             <button
-              className={`px-4 py-2 font-semibold ${
+              className={`px-4 py-2 font-semibold rounded-t-lg ${
                 activeTab === 'cars'
-                  ? 'border-b-2 border-yellow-500 text-yellow-500'
+                  ? 'border-b-2 border-yellow-500 text-yellow-500 bg-white'
                   : 'text-gray-500 hover:text-gray-900'
               }`}
               onClick={() => setActiveTab('cars')}
@@ -1072,9 +895,19 @@ const AdminDashboard = () => {
               <Car className="inline mr-2" /> Veículos
             </button>
             <button
-              className={`px-4 py-2 font-semibold ${
+              className={`px-4 py-2 font-semibold rounded-t-lg ${
+                activeTab === 'testimonials'
+                  ? 'border-b-2 border-yellow-500 text-yellow-500 bg-white'
+                  : 'text-gray-500 hover:text-gray-900'
+              }`}
+              onClick={() => setActiveTab('testimonials')}
+            >
+              <MessageSquare className="inline mr-2" /> Depoimentos
+            </button>
+            <button
+              className={`px-4 py-2 font-semibold rounded-t-lg ${
                 activeTab === 'gestao'
-                  ? 'border-b-2 border-yellow-500 text-yellow-500'
+                  ? 'border-b-2 border-yellow-500 text-yellow-500 bg-white'
                   : 'text-gray-500 hover:text-gray-900'
               }`}
               onClick={() => setActiveTab('gestao')}
@@ -1082,9 +915,9 @@ const AdminDashboard = () => {
               <FileText className="inline mr-2" /> Gestão
             </button>
             <button
-              className={`px-4 py-2 font-semibold ${
+              className={`px-4 py-2 font-semibold rounded-t-lg ${
                 activeTab === 'matriz'
-                  ? 'border-b-2 border-yellow-500 text-yellow-500'
+                  ? 'border-b-2 border-yellow-500 text-yellow-500 bg-white'
                   : 'text-gray-500 hover:text-gray-900'
               }`}
               onClick={() => setActiveTab('matriz')}
@@ -1092,35 +925,39 @@ const AdminDashboard = () => {
               <BarChart2 className="inline mr-2" /> Matriz
             </button>
             <button
-              className={`px-4 py-2 font-semibold ${
+              className={`px-4 py-2 font-semibold rounded-t-lg ${
+                activeTab === 'requests'
+                  ? 'border-b-2 border-yellow-500 text-yellow-500 bg-white'
+                  : 'text-gray-500 hover:text-gray-900'
+              }`}
+              onClick={() => setActiveTab('requests')}
+            >
+              <AlertCircle className="inline mr-2" /> Pedidos / Oferecidos
+            </button>
+            <button
+              className={`px-4 py-2 font-semibold rounded-t-lg ${
                 activeTab === 'reports'
-                  ? 'border-b-2 border-yellow-500 text-yellow-500'
+                  ? 'border-b-2 border-yellow-500 text-yellow-500 bg-white'
                   : 'text-gray-500 hover:text-gray-900'
               }`}
               onClick={() => setActiveTab('reports')}
             >
               <BarChart2 className="inline mr-2" /> Relatórios
             </button>
-            <button
-              className={`px-4 py-2 font-semibold ${
-                activeTab === 'pedidos'
-                  ? 'border-b-2 border-yellow-500 text-yellow-500'
-                  : 'text-gray-500 hover:text-gray-900'
-              }`}
-              onClick={() => setActiveTab('pedidos')}
-            >
-              <MessageSquare className="inline mr-2" /> Pedidos / Oferecidos
-            </button>
-            <button
-              className={`px-4 py-2 font-semibold ${
-                activeTab === 'testimonials'
-                  ? 'border-b-2 border-yellow-500 text-yellow-500'
-                  : 'text-gray-500 hover:text-gray-900'
-              }`}
-              onClick={() => setActiveTab('testimonials')}
-            >
-              <MessageSquare className="inline mr-2" /> Depoimentos
-            </button>
+
+            {/* aparece só se for master */}
+            {isMaster && (
+              <button
+                className={`px-4 py-2 font-semibold rounded-t-lg ${
+                  activeTab === 'access'
+                    ? 'border-b-2 border-yellow-500 text-yellow-500 bg-white'
+                    : 'text-gray-500 hover:text-gray-900'
+                }`}
+                onClick={() => navigate('/dashboard/acessos')}
+              >
+                <Shield className="inline mr-2" /> Gestão de acessos
+              </button>
+            )}
           </div>
 
           {/* LEADS */}
@@ -1128,16 +965,11 @@ const AdminDashboard = () => {
             <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-xl border">
               <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
                 <div className="text-lg font-bold">
-                  Exibindo{' '}
-                  <span className="text-yellow-500">{leads.length}</span>{' '}
-                  lead(s)
+                  Exibindo <span className="text-yellow-500">{leads.length}</span> lead(s)
                 </div>
                 <div className="flex flex-wrap items-center justify-center gap-4">
                   <div className="flex gap-2 items-center">
-                    <label
-                      htmlFor="startDate"
-                      className="text-sm font-medium"
-                    >
+                    <label htmlFor="startDate" className="text-sm font-medium">
                       De:
                     </label>
                     <input
@@ -1146,10 +978,7 @@ const AdminDashboard = () => {
                       name="startDate"
                       value={leadFilters.startDate}
                       onChange={(e) =>
-                        setLeadFilters((f) => ({
-                          ...f,
-                          startDate: e.target.value,
-                        }))
+                        setLeadFilters((f) => ({ ...f, startDate: e.target.value }))
                       }
                       className="bg-white border-gray-300 rounded-md p-2 h-10 text-sm"
                     />
@@ -1164,10 +993,7 @@ const AdminDashboard = () => {
                       name="endDate"
                       value={leadFilters.endDate}
                       onChange={(e) =>
-                        setLeadFilters((f) => ({
-                          ...f,
-                          endDate: e.target.value,
-                        }))
+                        setLeadFilters((f) => ({ ...f, endDate: e.target.value }))
                       }
                       className="bg-white border-gray-300 rounded-md p-2 h-10 text-sm"
                     />
@@ -1175,10 +1001,7 @@ const AdminDashboard = () => {
                   <select
                     value={leadFilters.status}
                     onChange={(e) =>
-                      setLeadFilters((f) => ({
-                        ...f,
-                        status: e.target.value,
-                      }))
+                      setLeadFilters((f) => ({ ...f, status: e.target.value }))
                     }
                     className="bg-white border-gray-300 rounded-md p-2 h-10 text-sm"
                   >
@@ -1216,9 +1039,7 @@ const AdminDashboard = () => {
                             {lead.lead_type}
                           </span>
                         </p>
-                        <p className="text-gray-600 truncate">
-                          {lead.client_contact}
-                        </p>
+                        <p className="text-gray-600 truncate">{lead.client_contact}</p>
                         {lead.cars && lead.cars.slug && (
                           <p className="text-sm mt-2">
                             Interesse:{' '}
@@ -1235,9 +1056,7 @@ const AdminDashboard = () => {
                       <div className="flex items-center gap-1">
                         <select
                           value={lead.status}
-                          onChange={(e) =>
-                            handleStatusChange(lead.id, e.target.value)
-                          }
+                          onChange={(e) => handleStatusChange(lead.id, e.target.value)}
                           className="bg-gray-100 border-gray-300 rounded p-2 text-sm flex-shrink-0"
                         >
                           {statusOptions.map((s) => (
@@ -1248,9 +1067,7 @@ const AdminDashboard = () => {
                         </select>
                         <AlertDialog
                           open={leadToDelete === lead.id}
-                          onOpenChange={(isOpen) =>
-                            !isOpen && setLeadToDelete(null)
-                          }
+                          onOpenChange={(isOpen) => !isOpen && setLeadToDelete(null)}
                         >
                           <AlertDialogTrigger asChild>
                             <Button
@@ -1263,17 +1080,13 @@ const AdminDashboard = () => {
                           </AlertDialogTrigger>
                           <AlertDialogContent className="bg-white">
                             <AlertDialogHeader>
-                              <AlertDialogTitle>
-                                Tem certeza?
-                              </AlertDialogTitle>
+                              <AlertDialogTitle>Tem certeza?</AlertDialogTitle>
                               <AlertDialogDescription>
                                 Esta ação removerá o lead permanentemente.
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
-                              <AlertDialogCancel>
-                                Cancelar
-                              </AlertDialogCancel>
+                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
                               <AlertDialogAction onClick={handleDeleteLead}>
                                 Sim, Excluir
                               </AlertDialogAction>
@@ -1293,8 +1106,7 @@ const AdminDashboard = () => {
             <>
               <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-8 mb-6 shadow-xl border">
                 <h2 className="text-2xl font-semibold mb-6 flex items-center">
-                  <PlusCircle className="mr-3 text-yellow-500" /> Adicionar
-                  Novo Veículo
+                  <PlusCircle className="mr-3 text-yellow-500" /> Adicionar Novo Veículo
                 </h2>
                 <form onSubmit={handleAddCar} className="space-y-6">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -1307,9 +1119,7 @@ const AdminDashboard = () => {
                   <div>
                     <Button
                       type="button"
-                      onClick={() =>
-                        fileInputRef.current && fileInputRef.current.click()
-                      }
+                      onClick={() => fileInputRef.current && fileInputRef.current.click()}
                     >
                       <ImageIcon className="mr-2 h-4 w-4" /> Adicionar Fotos
                     </Button>
@@ -1332,9 +1142,7 @@ const AdminDashboard = () => {
                             src={URL.createObjectURL(file)}
                             alt={`Preview ${index}`}
                             className={`h-24 w-24 object-cover rounded-lg ${
-                              mainPhotoIndex === index
-                                ? 'ring-2 ring-yellow-500'
-                                : ''
+                              mainPhotoIndex === index ? 'ring-2 ring-yellow-500' : ''
                             }`}
                           />
                           {mainPhotoIndex === index && (
@@ -1392,7 +1200,7 @@ const AdminDashboard = () => {
                 </Button>
               </div>
 
-              {/* CONTROLES DE FILTRO */}
+              {/* CONTROLES DE FILTRO — inclui PLACA */}
               <div className="flex flex-col md:flex-row gap-3 items-center mb-4">
                 <input
                   placeholder="Pesquisar marca, modelo ou PLACA..."
@@ -1403,9 +1211,7 @@ const AdminDashboard = () => {
                 <select
                   value={brandFilter || 'ALL'}
                   onChange={(e) =>
-                    setBrandFilter(
-                      e.target.value === 'ALL' ? '' : e.target.value
-                    )
+                    setBrandFilter(e.target.value === 'ALL' ? '' : e.target.value)
                   }
                   className="w-full md:w-1/4 p-2 border rounded"
                 >
@@ -1474,10 +1280,7 @@ const AdminDashboard = () => {
                             }).format(car.price || 0)}
                           </p>
                           <p className="text-xs text-gray-600 mt-1">
-                            Placa:{' '}
-                            <span className="font-medium">
-                              {car.plate || '-'}
-                            </span>
+                            Placa: <span className="font-medium">{car.plate || '-'}</span>
                           </p>
 
                           {car.is_available === false && (
@@ -1487,12 +1290,12 @@ const AdminDashboard = () => {
                                 if (!raw) {
                                   return 'Vendido -';
                                 }
-                                const clean = String(raw)
-                                  .replace('T', ' ')
-                                  .trim();
+
+                                const clean = String(raw).replace('T', ' ').trim();
                                 const y = clean.slice(0, 4);
                                 const m = clean.slice(5, 7);
                                 const d = clean.slice(8, 10);
+
                                 if (!y || !m || !d) {
                                   return `Vendido em ${raw} - ${
                                     car.sale_price
@@ -1503,6 +1306,7 @@ const AdminDashboard = () => {
                                       : '-'
                                   }`;
                                 }
+
                                 const dataBR = `${d}/${m}/${y}`;
                                 const preco = car.sale_price
                                   ? new Intl.NumberFormat('pt-BR', {
@@ -1510,6 +1314,7 @@ const AdminDashboard = () => {
                                       currency: 'BRL',
                                     }).format(car.sale_price)
                                   : '-';
+
                                 return `Vendido em ${dataBR} - ${preco}`;
                               })()}
                             </p>
@@ -1521,33 +1326,20 @@ const AdminDashboard = () => {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() =>
-                            updateCar(car.id, {
-                              is_featured: !car.is_featured,
-                            }).then(() => fetchAllData({ showLoading: false }))
-                          }
+                          onClick={() => handleToggleFeatured(car.id, car.is_featured)}
                           title={
                             car.is_featured
                               ? 'Remover dos destaques'
                               : 'Adicionar aos destaques'
                           }
                         >
-                          <svg
+                          <Star
                             className={`h-5 w-5 transition-colors ${
                               car.is_featured
                                 ? 'text-yellow-500 fill-yellow-500'
                                 : 'text-gray-400 hover:text-yellow-500'
                             }`}
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            strokeWidth="1.5"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.402c.499.036.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.5a.562.562 0 01-.84-.61l1.285-5.386a.563.563 0 00-.182-.557L3.04 10.345a.563.563 0 01.321-.988l5.518-.402a.563.563 0 00.475-.345l2.125-5.111z"
-                            />
-                          </svg>
+                          />
                         </Button>
                         <Button
                           variant="ghost"
@@ -1618,17 +1410,13 @@ const AdminDashboard = () => {
                           </AlertDialogTrigger>
                           <AlertDialogContent className="bg-white">
                             <AlertDialogHeader>
-                              <AlertDialogTitle>
-                                Tem certeza?
-                              </AlertDialogTitle>
+                              <AlertDialogTitle>Tem certeza?</AlertDialogTitle>
                               <AlertDialogDescription>
                                 Esta ação removerá o veículo.
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
-                              <AlertDialogCancel>
-                                Cancelar
-                              </AlertDialogCancel>
+                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
                               <AlertDialogAction
                                 onClick={() => handleDeleteCar(carToDelete?.id)}
                               >
@@ -1673,120 +1461,137 @@ const AdminDashboard = () => {
             </div>
           )}
 
-          {/* RELATÓRIOS */}
-          {activeTab === 'reports' && (
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-xl border">
-              <Reports />
-            </div>
-          )}
-
           {/* PEDIDOS / OFERECIDOS */}
-          {activeTab === 'pedidos' && (
+          {activeTab === 'requests' && (
             <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-xl border">
-              <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-6">
+              <div className="flex flex-wrap gap-3 items-center justify-between mb-6">
                 <div>
                   <h2 className="text-2xl font-semibold flex items-center gap-2">
-                    <MessageSquare className="text-yellow-500" />
-                    Pedidos / Oferecidos
+                    <AlertCircle className="text-yellow-500" /> Pedidos / Oferecidos
                   </h2>
-                  <p className="text-xs text-gray-500">
-                    Clientes que pediram carro e pessoas que ofereceram carro.
+                  <p className="text-sm text-gray-500 mt-1">
+                    {customerRequests.length} registro(s) encontrados
                   </p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <div className="relative">
-                    <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <Search className="h-4 w-4 text-gray-400 absolute left-2 top-2.5" />
                     <input
-                      value={reqSearch}
-                      onChange={(e) => setReqSearch(e.target.value)}
-                      placeholder="Buscar por cliente, modelo..."
-                      className="pl-9 pr-3 py-2 rounded-lg border border-gray-200 text-sm"
+                      value={requestSearch}
+                      onChange={(e) => setRequestSearch(e.target.value)}
+                      placeholder="Buscar cliente, modelo, fonte..."
+                      className="pl-8 pr-2 py-1.5 border rounded-md text-sm"
                     />
                   </div>
                   <select
-                    value={reqFilterType}
-                    onChange={(e) => setReqFilterType(e.target.value)}
-                    className="border rounded-lg px-3 py-2 text-sm"
+                    value={requestFilterType}
+                    onChange={(e) => setRequestFilterType(e.target.value)}
+                    className="border rounded-md text-sm py-1.5 px-2"
                   >
                     <option value="all">Todos</option>
-                    <option value="pedido">Pedidos</option>
-                    <option value="oferecido">Oferecidos</option>
+                    <option value="pedido">Somente pedidos</option>
+                    <option value="oferecido">Somente oferecidos</option>
                   </select>
-                  <Button onClick={openNewRequest}>
-                    <PlusCircle className="w-4 h-4 mr-2" />
-                    Novo
+                  <select
+                    value={requestOrder}
+                    onChange={(e) => setRequestOrder(e.target.value)}
+                    className="border rounded-md text-sm py-1.5 px-2"
+                  >
+                    <option value="newest">Mais recentes</option>
+                    <option value="oldest">Mais antigos</option>
+                    <option value="price">Maior valor</option>
+                  </select>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      fetchCustomerRequests();
+                      toast({ title: 'Atualizado.' });
+                    }}
+                  >
+                    <Filter className="h-4 w-4 mr-1" /> Atualizar
                   </Button>
                 </div>
               </div>
 
-              <div className="space-y-3 max-h-[520px] overflow-y-auto pr-2">
-                {filteredRequestsOffers.map((r) => (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {filteredRequests.map((req) => (
                   <div
-                    key={r.id}
-                    className="border rounded-xl p-4 flex items-center justify-between gap-4 bg-white"
+                    key={req.id}
+                    className={`rounded-2xl border shadow-sm p-4 bg-white/90 ${
+                      req.type === 'pedido'
+                        ? 'border-yellow-400/80'
+                        : 'border-gray-200'
+                    }`}
                   >
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                        {r.client_name || 'Sem nome'}
-                        <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] uppercase ${
-                            r.type === 'pedido'
-                              ? 'bg-blue-50 text-blue-600'
-                              : 'bg-green-50 text-green-600'
-                          }`}
-                        >
-                          {r.type}
+                    <div className="flex justify-between items-center mb-2">
+                      <span
+                        className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                          req.type === 'pedido'
+                            ? 'bg-yellow-100 text-yellow-700'
+                            : 'bg-slate-100 text-slate-700'
+                        }`}
+                      >
+                        {req.type === 'pedido' ? 'PEDIDO' : 'OFERECIDO'}
+                      </span>
+                      {req.match_score ? (
+                        <span className="text-xs font-semibold text-green-600">
+                          MATCH {req.match_score}%
                         </span>
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {r.client_contact || '-'}
-                      </p>
-                      <p className="text-xs text-gray-600 mt-1">
-                        {r.brand} {r.model}{' '}
-                        {r.version ? `- ${r.version}` : ''}
-                      </p>
-                      <p className="text-[10px] text-gray-400 mt-1 flex gap-2 flex-wrap">
-                        {r.body_type && <span>Carroceria: {r.body_type}</span>}
-                        {r.fuel && <span>Combustível: {r.fuel}</span>}
-                        {r.transmission && <span>Câmbio: {r.transmission}</span>}
-                        {r.type === 'pedido' && (r.year_min || r.year_max) && (
-                          <span>
-                            Ano: {r.year_min || '-'} até {r.year_max || '-'}
-                          </span>
-                        )}
-                        {r.type === 'oferecido' && r.year_exact && (
-                          <span>Ano: {r.year_exact}</span>
-                        )}
-                      </p>
+                      ) : null}
                     </div>
-                    <div className="flex gap-2">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => {
-                          setEditingReq(r);
-                          setIsReqModalOpen(true);
-                        }}
-                      >
-                        <Edit className="w-4 h-4 text-blue-500" />
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => deleteRequestOffer(r.id)}
-                      >
-                        <Trash2 className="w-4 h-4 text-red-500" />
-                      </Button>
-                    </div>
+                    <h3 className="text-lg font-bold text-gray-900">
+                      {req.client_name || '—'}
+                    </h3>
+                    <p className="text-sm text-gray-500 mb-2">
+                      {req.client_contact || '—'}
+                    </p>
+                    <p className="text-sm">
+                      <span className="font-medium text-gray-700">Carro: </span>
+                      {req.brand || '—'} {req.model || ''}{' '}
+                      {req.version ? `(${req.version})` : ''}
+                    </p>
+                    <p className="text-sm">
+                      <span className="font-medium text-gray-700">Carroceria: </span>
+                      {req.body_type || '—'}
+                    </p>
+                    <p className="text-sm">
+                      <span className="font-medium text-gray-700">Combustível: </span>
+                      {req.fuel || '—'}
+                    </p>
+                    <p className="text-sm">
+                      <span className="font-medium text-gray-700">Câmbio: </span>
+                      {req.transmission || '—'}
+                    </p>
+                    <p className="text-sm">
+                      <span className="font-medium text-gray-700">Ano: </span>
+                      {req.year_exact
+                        ? req.year_exact
+                        : req.year_min || req.year_max
+                        ? `${req.year_min || '...'} → ${req.year_max || '...'}`
+                        : '—'}
+                    </p>
+                    <p className="text-sm mt-2">
+                      <span className="font-medium text-gray-700">Valor: </span>
+                      {req.price_min || req.price_max
+                        ? `R$ ${req.price_min || '...'} → R$ ${req.price_max || '...'}`
+                        : '—'}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-2">
+                      Fonte: {req.lead_source || '—'} |{' '}
+                      {req.created_at
+                        ? new Date(req.created_at).toLocaleString('pt-BR')
+                        : '—'}
+                    </p>
                   </div>
                 ))}
-
-                {filteredRequestsOffers.length === 0 && (
-                  <p className="text-center text-gray-400 text-sm py-10">
-                    Nenhum registro ainda.
-                  </p>
-                )}
               </div>
+
+              {filteredRequests.length === 0 && (
+                <div className="text-center py-10 text-gray-400 text-sm">
+                  Nenhum pedido / oferecido encontrado.
+                </div>
+              )}
             </div>
           )}
 
@@ -1795,13 +1600,9 @@ const AdminDashboard = () => {
             <>
               <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-8 mb-12 shadow-xl border">
                 <h2 className="text-2xl font-semibold mb-6 flex items-center">
-                  <PlusCircle className="mr-3 text-yellow-500" /> Adicionar Novo
-                  Depoimento
+                  <PlusCircle className="mr-3 text-yellow-500" /> Adicionar Novo Depoimento
                 </h2>
-                <form
-                  onSubmit={handleAddTestimonial}
-                  className="space-y-6"
-                >
+                <form onSubmit={handleAddTestimonial} className="space-y-6">
                   <input
                     name="client_name"
                     value={newTestimonial.client_name}
@@ -1832,8 +1633,8 @@ const AdminDashboard = () => {
 
               <div>
                 <h2 className="text-2xl font-semibold mb-6 flex items-center">
-                  <MessageSquare className="mr-3 text-yellow-500" /> Depoimentos
-                  Cadastrados ({testimonials.length})
+                  <MessageSquare className="mr-3 text-yellow-500" /> Depoimentos Cadastrados (
+                  {testimonials.length})
                 </h2>
                 <div className="space-y-4">
                   {testimonials.map((item) => (
@@ -1843,9 +1644,7 @@ const AdminDashboard = () => {
                       className="bg-white rounded-2xl p-4 flex items-center justify-between shadow border"
                     >
                       <div>
-                        <p className="italic text-gray-600">
-                          "{item.testimonial_text}"
-                        </p>
+                        <p className="italic text-gray-600">"{item.testimonial_text}"</p>
                         <p className="font-bold mt-2 text-gray-800">
                           {item.client_name} -{' '}
                           <span className="text-sm font-normal text-gray-500">
@@ -1866,12 +1665,19 @@ const AdminDashboard = () => {
               </div>
             </>
           )}
+
+          {/* RELATÓRIOS */}
+          {activeTab === 'reports' && (
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-xl border">
+              <Reports />
+            </div>
+          )}
         </motion.div>
       </div>
 
-      {/* EDIT DIALOG */}
+      {/* EDIT DIALOG (usa FormFields com PLACA) */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="bg-white text-gray-900">
+        <DialogContent className="bg-white text-gray-900 max-w-4xl">
           <DialogHeader>
             <DialogTitle>Editar Veículo</DialogTitle>
           </DialogHeader>
@@ -1888,9 +1694,7 @@ const AdminDashboard = () => {
                 />
               </div>
               <div className="space-y-2">
-                <label className="font-medium text-sm text-gray-700">
-                  Fotos
-                </label>
+                <label className="font-medium text-sm text-gray-700">Fotos</label>
                 <div className="flex flex-wrap gap-4 p-2 bg-gray-100 rounded-lg min-h-[112px]">
                   {editingCar.photo_urls &&
                     editingCar.photo_urls.map((url, index) => (
@@ -1928,20 +1732,14 @@ const AdminDashboard = () => {
                 </div>
                 <Button
                   type="button"
-                  onClick={() =>
-                    fileInputRef.current && fileInputRef.current.click()
-                  }
+                  onClick={() => fileInputRef.current && fileInputRef.current.click()}
                   className="bg-transparent border border-yellow-500 text-yellow-500 hover:bg-yellow-500 hover:text-black text-xs px-3 py-1.5 h-auto"
                 >
                   <ImageIcon className="mr-2 h-4 w-4" /> Adicionar
                 </Button>
               </div>
               <DialogFooter className="pt-4">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => setIsEditDialogOpen(false)}
-                >
+                <Button type="button" variant="ghost" onClick={() => setIsEditDialogOpen(false)}>
                   Cancelar
                 </Button>
                 <Button
@@ -1963,14 +1761,9 @@ const AdminDashboard = () => {
           <DialogHeader>
             <DialogTitle>Registrar Venda</DialogTitle>
           </DialogHeader>
-          <form
-            onSubmit={(e) => e.preventDefault()}
-            className="space-y-4"
-          >
+          <form onSubmit={(e) => e.preventDefault()} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Veículo
-              </label>
+              <label className="block text-sm font-medium text-gray-700">Veículo</label>
               <div className="mt-1 text-sm">
                 {carToSell
                   ? `${carToSell.brand} ${carToSell.model} (${carToSell.year})`
@@ -1978,9 +1771,7 @@ const AdminDashboard = () => {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Plataforma
-              </label>
+              <label className="block text-sm font-medium text-gray-700">Plataforma</label>
               <select
                 name="platform_id"
                 value={saleForm.platform_id}
@@ -2010,9 +1801,7 @@ const AdminDashboard = () => {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Data da venda
-                </label>
+                <label className="block text-sm font-medium text-gray-700">Data da venda</label>
                 <input
                   name="sale_date"
                   value={saleForm.sale_date}
@@ -2023,9 +1812,7 @@ const AdminDashboard = () => {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Notas (opcional)
-              </label>
+              <label className="block text-sm font-medium text-gray-700">Notas (opcional)</label>
               <textarea
                 name="notes"
                 value={saleForm.notes}
@@ -2035,11 +1822,7 @@ const AdminDashboard = () => {
               />
             </div>
             <DialogFooter>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setSaleDialogOpen(false)}
-              >
+              <Button type="button" variant="ghost" onClick={() => setSaleDialogOpen(false)}>
                 Cancelar
               </Button>
               <Button
@@ -2085,283 +1868,49 @@ const AdminDashboard = () => {
         </DialogContent>
       </Dialog>
 
-      {/* MODAL PEDIDOS/OFER - FORM */}
-      <Dialog open={isReqModalOpen} onOpenChange={setIsReqModalOpen}>
-        <DialogContent className="bg-white max-w-3xl max-h-[90vh] overflow-y-auto">
+      {/* MATCH MODAL */}
+      <Dialog open={matchModalOpen} onOpenChange={setMatchModalOpen}>
+        <DialogContent className="bg-white text-gray-900 max-w-3xl border-4 border-yellow-400 shadow-2xl">
           <DialogHeader>
-            <DialogTitle>
-              {editingReq?.id ? 'Editar registro' : 'Novo pedido / oferecido'}
+            <DialogTitle className="flex items-center gap-2 text-green-600 text-2xl">
+              <AlertCircle className="text-yellow-500" /> Encontramos cliente(s) para esse carro!
             </DialogTitle>
           </DialogHeader>
-          {editingReq && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs text-gray-500">Tipo</label>
-                <select
-                  value={editingReq.type}
-                  onChange={(e) =>
-                    setEditingReq((prev) => ({ ...prev, type: e.target.value }))
-                  }
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
-                >
-                  <option value="pedido">Pedido (cliente quer comprar)</option>
-                  <option value="oferecido">Oferecido (cliente tem carro)</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-xs text-gray-500">Data do lead</label>
-                <input
-                  type="date"
-                  value={editingReq.lead_date || ''}
-                  onChange={(e) =>
-                    setEditingReq((prev) => ({
-                      ...prev,
-                      lead_date: e.target.value,
-                    }))
-                  }
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-gray-500">Cliente</label>
-                <input
-                  value={editingReq.client_name || ''}
-                  onChange={(e) =>
-                    setEditingReq((prev) => ({
-                      ...prev,
-                      client_name: e.target.value,
-                    }))
-                  }
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
-                  placeholder="Nome"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-gray-500">Contato</label>
-                <input
-                  value={editingReq.client_contact || ''}
-                  onChange={(e) =>
-                    setEditingReq((prev) => ({
-                      ...prev,
-                      client_contact: e.target.value,
-                    }))
-                  }
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
-                  placeholder="WhatsApp / Tel"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-gray-500">Marca</label>
-                <input
-                  value={editingReq.brand || ''}
-                  onChange={(e) =>
-                    setEditingReq((prev) => ({
-                      ...prev,
-                      brand: e.target.value,
-                    }))
-                  }
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-gray-500">Modelo</label>
-                <input
-                  value={editingReq.model || ''}
-                  onChange={(e) =>
-                    setEditingReq((prev) => ({
-                      ...prev,
-                      model: e.target.value,
-                    }))
-                  }
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-gray-500">Versão</label>
-                <input
-                  value={editingReq.version || ''}
-                  onChange={(e) =>
-                    setEditingReq((prev) => ({
-                      ...prev,
-                      version: e.target.value,
-                    }))
-                  }
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-gray-500">Carroceria</label>
-                <input
-                  value={editingReq.body_type || ''}
-                  onChange={(e) =>
-                    setEditingReq((prev) => ({
-                      ...prev,
-                      body_type: e.target.value,
-                    }))
-                  }
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
-                  placeholder="SUV, Sedan..."
-                />
-              </div>
-              <div>
-                <label className="text-xs text-gray-500">Combustível</label>
-                <input
-                  value={editingReq.fuel || ''}
-                  onChange={(e) =>
-                    setEditingReq((prev) => ({
-                      ...prev,
-                      fuel: e.target.value,
-                    }))
-                  }
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
-                  placeholder="Flex, Gasolina..."
-                />
-              </div>
-              <div>
-                <label className="text-xs text-gray-500">Câmbio</label>
-                <input
-                  value={editingReq.transmission || ''}
-                  onChange={(e) =>
-                    setEditingReq((prev) => ({
-                      ...prev,
-                      transmission: e.target.value,
-                    }))
-                  }
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
-                  placeholder="Automático, Manual"
-                />
-              </div>
-
-              {/* ano pedido */}
-              {editingReq.type === 'pedido' && (
-                <>
-                  <div>
-                    <label className="text-xs text-gray-500">
-                      Ano mínimo
-                    </label>
-                    <input
-                      type="number"
-                      value={editingReq.year_min || ''}
-                      onChange={(e) =>
-                        setEditingReq((prev) => ({
-                          ...prev,
-                          year_min: e.target.value,
-                        }))
-                      }
-                      className="w-full border rounded-lg px-3 py-2 text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-500">
-                      Ano máximo
-                    </label>
-                    <input
-                      type="number"
-                      value={editingReq.year_max || ''}
-                      onChange={(e) =>
-                        setEditingReq((prev) => ({
-                          ...prev,
-                          year_max: e.target.value,
-                        }))
-                      }
-                      className="w-full border rounded-lg px-3 py-2 text-sm"
-                    />
-                  </div>
-                </>
-              )}
-
-              {/* ano oferecido */}
-              {editingReq.type === 'oferecido' && (
+          <div className="space-y-3 max-h-[60vh] overflow-y-auto">
+            {matchResults.map((m) => (
+              <div
+                key={m.id}
+                className="border rounded-xl p-3 bg-yellow-50/70 flex justify-between items-center"
+              >
                 <div>
-                  <label className="text-xs text-gray-500">
-                    Ano do carro
-                  </label>
-                  <input
-                    type="number"
-                    value={editingReq.year_exact || ''}
-                    onChange={(e) =>
-                      setEditingReq((prev) => ({
-                        ...prev,
-                        year_exact: e.target.value,
-                      }))
-                    }
-                    className="w-full border rounded-lg px-3 py-2 text-sm"
-                  />
+                  <p className="font-bold text-gray-900">
+                    {m.client_name} — {m.client_contact}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    Procurava: {m.brand} {m.model}{' '}
+                    {m.year_exact
+                      ? `(${m.year_exact})`
+                      : m.year_min || m.year_max
+                      ? `(de ${m.year_min || '...'} até ${m.year_max || '...'})`
+                      : ''}
+                  </p>
                 </div>
-              )}
-
-              <div className="md:col-span-2">
-                <label className="text-xs text-gray-500">Observações</label>
-                <textarea
-                  value={editingReq.notes || ''}
-                  onChange={(e) =>
-                    setEditingReq((prev) => ({
-                      ...prev,
-                      notes: e.target.value,
-                    }))
-                  }
-                  rows={3}
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
-                />
+                <span className="text-sm font-bold text-green-700">
+                  {m.match_score}% match
+                </span>
               </div>
-            </div>
-          )}
-          <DialogFooter className="mt-4">
-            <Button variant="ghost" onClick={() => setIsReqModalOpen(false)}>
-              Cancelar
-            </Button>
+            ))}
+          </div>
+          <DialogFooter>
             <Button
-              onClick={saveRequestOffer}
+              onClick={() => setMatchModalOpen(false)}
               className="bg-yellow-400 text-black hover:bg-yellow-500"
             >
-              Salvar
+              Fechar
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* MODAL: MATCH DESTACADO */}
-      {matchModal.open && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full mx-4 p-6 border-4 border-yellow-400 animate-pulse">
-            <h2 className="text-2xl font-bold text-gray-900 mb-3 flex items-center gap-2">
-              🎉 MATCH ENCONTRADO!
-            </h2>
-            <p className="text-sm text-gray-600 mb-4">
-              O veículo <strong>{matchModal.car?.brand} {matchModal.car?.model}</strong> bateu com os seguintes pedidos/ofertas:
-            </p>
-            <div className="space-y-2 max-h-48 overflow-y-auto">
-              {matchModal.matches.map((m) => (
-                <div
-                  key={m.id}
-                  className="border rounded-lg p-3 bg-yellow-50 flex items-center justify-between"
-                >
-                  <div>
-                    <p className="text-sm font-semibold">{m.client_name}</p>
-                    <p className="text-xs text-gray-600">{m.client_contact}</p>
-                    <p className="text-[11px] text-gray-400 mt-1">
-                      {m.type} — {m.brand} {m.model}
-                    </p>
-                  </div>
-                  <span className="text-xs bg-yellow-400 text-black px-3 py-1 rounded-full font-bold">
-                    {m.score}%
-                  </span>
-                </div>
-              ))}
-            </div>
-            <div className="mt-5 text-right">
-              <Button
-                onClick={() =>
-                  setMatchModal({ open: false, matches: [], car: null })
-                }
-                className="bg-yellow-400 text-black hover:bg-yellow-500"
-              >
-                Fechar
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

@@ -37,7 +37,7 @@ export const getFeaturedCars = async () => {
     .select('*')
     .eq('is_featured', true)
     .order('created_at', { ascending: false })
-    .limit(4); // mantém 4 pra não quebrar o site
+    .limit(4);
   if (error) console.error('Erro ao buscar carros em destaque:', error);
   return data || [];
 };
@@ -56,9 +56,7 @@ export const getCarBySlug = async (slug) => {
 };
 
 export const addCar = async (carData) => {
-  // nome pronto
-  const carName = `${carData.brand} ${carData.model}`.trim();
-  // slug único
+  const carName = `${carData.brand} ${carData.model}`;
   const slug = `${(carData.brand || '')
     .toLowerCase()
     .replace(/ /g, '-')}-${(carData.model || '')
@@ -71,7 +69,7 @@ export const addCar = async (carData) => {
     slug,
     is_available: true,
     is_sold: false,
-    // AQUI O AJUSTE: usa entry_at, não entered_at
+    // ATENÇÃO: sua tabela tem "entry_at" e NÃO "entered_at"
     entry_at: carData.entry_at || new Date().toISOString(),
   };
 
@@ -102,7 +100,7 @@ export const deleteCar = async (id) => {
   return { data, error };
 };
 
-// marcar/editar data de entrada (usa entry_at, que é o que tem no banco)
+// marcar/editar data de entrada
 export const setCarEnteredAt = async (id, enteredAtISO) => {
   return updateCar(id, { entry_at: enteredAtISO });
 };
@@ -210,7 +208,10 @@ export const deleteLead = async (id) => {
 */
 
 /**
- * IMPORTANTE: formato antigo — ordena por nome
+ * IMPORTANTE: voltamos ao formato ANTIGO
+ * - pega todas as plataformas
+ * - ordena por NOME (não por order)
+ * - porque VehicleManager e o modal de gestão dependem disso
  */
 export const getPlatforms = async () => {
   const { data, error } = await supabase
@@ -238,6 +239,10 @@ export const addPlatform = async (name) => {
   return data;
 };
 
+/**
+ * NOVA: usada só pela MATRIZ para gravar a ordem no banco.
+ * Recebe array de plataformas (já na nova ordem) e atualiza um por um.
+ */
 export const updatePlatformOrder = async (orderedPlatforms = []) => {
   try {
     for (const item of orderedPlatforms) {
@@ -604,7 +609,7 @@ export const getLatestChecklistTemplate = async () => {
   }
 };
 
-// legado, não usado mais
+// legado: não usamos mais
 export const addChecklistItem = async () => {
   console.warn('[LEGADO] addChecklistItem chamado — checklist foi desativado. Ignorando.');
   return { data: null, error: null };
@@ -616,6 +621,9 @@ export const addChecklistItem = async () => {
   =========================================================
 */
 
+/**
+ * Lista todos os checklists de um carro
+ */
 export const getVehicleChecklists = async (carId) => {
   if (!carId) return [];
   const { data, error } = await supabase
@@ -630,6 +638,9 @@ export const getVehicleChecklists = async (carId) => {
   return data || [];
 };
 
+/**
+ * Cria checklist novo
+ */
 export const addVehicleChecklist = async (payload) => {
   const { data, error } = await supabase
     .from('vehicle_checklists')
@@ -640,6 +651,9 @@ export const addVehicleChecklist = async (payload) => {
   return { data, error };
 };
 
+/**
+ * Atualiza checklist existente
+ */
 export const updateVehicleChecklist = async (id, patch) => {
   const { data, error } = await supabase
     .from('vehicle_checklists')
@@ -651,6 +665,9 @@ export const updateVehicleChecklist = async (id, patch) => {
   return { data, error };
 };
 
+/**
+ * Remove checklist (se precisar)
+ */
 export const deleteVehicleChecklist = async (id) => {
   const { data, error } = await supabase
     .from('vehicle_checklists')
@@ -662,76 +679,51 @@ export const deleteVehicleChecklist = async (id) => {
 
 /*
   =========================================================
-  P E D I D O S  /  O F E R E C I D O S
+  P E D I D O S   /   O F E R E C I D O S   (match)
   =========================================================
-  Tabela: client_requests
-  Colunas que o dashboard está usando:
-  - id (uuid)
-  - type ('pedido' | 'oferecido')
-  - client_name
-  - client_contact
-  - brand
-  - model
-  - body_type
-  - fuel
-  - transmission
-  - price_min
-  - price_max
-  - year_min
-  - year_max
-  - year_exact
-  - lead_date (date)
-  - lead_source
-  - notes
-  - matched_car_id (uuid -> cars.id)
-  - created_at
+  Essas são as funções que o AdminDashboard NOVO está esperando.
+  Não mexem no resto do sistema.
 */
 
-export const getClientRequests = async () => {
+export const getCustomerDemandsOffers = async () => {
   const { data, error } = await supabase
-    .from('client_requests')
+    .from('customer_demands_offers')
     .select('*')
     .order('created_at', { ascending: false });
   if (error) {
-    console.error('Erro ao buscar client_requests:', error);
+    console.error('Erro ao buscar pedidos/oferecidos:', error);
     return [];
   }
   return data || [];
 };
 
-export const addClientRequest = async (payload) => {
+export const addCustomerDemandOffer = async (payload) => {
   const { data, error } = await supabase
-    .from('client_requests')
+    .from('customer_demands_offers')
     .insert([payload])
     .select()
     .single();
-  if (error) {
-    console.error('Erro ao adicionar client_request:', error);
-  }
+  if (error) console.error('Erro ao adicionar pedido/oferecido:', error);
   return { data, error };
 };
 
-export const updateClientRequest = async (id, patch) => {
+export const updateCustomerDemandOffer = async (id, payload) => {
   const { data, error } = await supabase
-    .from('client_requests')
-    .update(patch)
+    .from('customer_demands_offers')
+    .update(payload)
     .eq('id', id)
     .select()
     .single();
-  if (error) {
-    console.error('Erro ao atualizar client_request:', error);
-  }
+  if (error) console.error('Erro ao atualizar pedido/oferecido:', error);
   return { data, error };
 };
 
-export const deleteClientRequest = async (id) => {
+export const deleteCustomerDemandOffer = async (id) => {
   const { data, error } = await supabase
-    .from('client_requests')
+    .from('customer_demands_offers')
     .delete()
     .eq('id', id);
-  if (error) {
-    console.error('Erro ao deletar client_request:', error);
-  }
+  if (error) console.error('Erro ao deletar pedido/oferecido:', error);
   return { data, error };
 };
 

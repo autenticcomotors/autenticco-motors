@@ -72,6 +72,9 @@ import VehicleManager from '@/components/VehicleManager';
 import Reports from '@/pages/Reports';
 import OverviewBoard from '@/components/OverviewBoard';
 
+// >>> NOVO IMPORT (apenas isso)
+import QuoteGenerator from '@/pages/QuoteGenerator';
+
 // ---------- FORM FIELDS (inclui PLACA) ----------
 const FormFields = React.memo(({ carData, onChange, carOptions }) => (
   <>
@@ -1019,6 +1022,18 @@ const AdminDashboard = () => {
             >
               <ListChecks className="inline mr-2" /> Pedidos / Oferecidos
             </button>
+
+            {/* >>> NOVA ABA: ORÇAMENTOS */}
+            <button
+              className={`px-4 py-2 font-semibold ${
+                activeTab === 'quotes'
+                  ? 'border-b-2 border-yellow-500 text-yellow-500'
+                  : 'text-gray-500 hover:text-gray-900'
+              }`}
+              onClick={() => setActiveTab('quotes')}
+            >
+              <FileText className="inline mr-2" /> Orçamentos
+            </button>
           </div>
 
           {/* LEADS */}
@@ -1785,6 +1800,13 @@ const AdminDashboard = () => {
                   </tbody>
                 </table>
               </div>
+            </div>
+          )}
+
+          {/* >>> NOVA SEÇÃO: ORÇAMENTOS */}
+          {activeTab === 'quotes' && (
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-xl border">
+              <QuoteGenerator />
             </div>
           )}
         </motion.div>

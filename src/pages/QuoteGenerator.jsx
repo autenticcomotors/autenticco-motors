@@ -7,17 +7,65 @@ import { Printer, Plus, Copy, Trash2 } from 'lucide-react';
 import { generateQuotePDF } from '@/lib/quote-print';
 
 const currencyBR = (v) =>
-  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
-    isNaN(Number(v)) ? 0 : Number(v)
-  );
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
+    .format(isNaN(Number(v)) ? 0 : Number(v));
 
-const DEFAULT_LABELS = [
-  'OLX',
-  'Webmotors',
-  'MercadoLivre',
-  'Facebook/Instagram',
-  'Google Ads',
-];
+const DEFAULT_LABELS = ['OLX', 'Webmotors', 'MercadoLivre', 'Facebook/Instagram', 'Google Ads'];
+
+// ——— helper robusto: extrai custos do objeto do carro por chaves comuns
+function extractCostsFromCar(car) {
+  if (!car) return [];
+
+  // mapeamento amigável por “palavras” na chave
+  const map = [
+    { match: ['olx'], label: 'OLX' },
+    { match: ['webmotors'], label: 'Webmotors' },
+    { match: ['mercadolivre', 'ml'], label: 'MercadoLivre' },
+    { match: ['facebook', 'instagram', 'meta'], label: 'Facebook/Instagram' },
+    { match: ['google'], label: 'Google Ads' },
+    { match: ['frete', 'transport'], label: 'Frete' },
+    { match: ['lavag'], label: 'Lavagem' },
+    { match: ['manut', 'revis'], label: 'Manutenção' },
+    { match: ['doc', 'despach'], label: 'Documentos/Despachante' },
+    { match: ['laudo', 'cautel'], label: 'Laudo Cautelar' },
+    { match: ['taxa', 'fee'], label: 'Taxas' },
+    { match: ['extra'], label: 'Gastos extras' },
+  ];
+
+  const out = {};
+  const add = (label, amount) => {
+    const v = Number(amount);
+    if (!isFinite(v) || v === 0) return;
+    out[label] = (out[label] || 0) + v;
+  };
+
+  // 1) varre chaves numéricas do objeto
+  for (const [k, v] of Object.entries(car)) {
+    const n = Number(v);
+    if (!isFinite(n) || n === 0) continue;
+    const key = String(k).toLowerCase();
+    const hit = map.find((m) => m.match.some((w) => key.includes(w)));
+    if (hit) add(hit.label, n);
+  }
+
+  // 2) arrays comuns: costs / expenses / ad_costs
+  const arrays = ['costs', 'expenses', 'ad_costs', 'gastos', 'custos'];
+  arrays.forEach((arrKey) => {
+    const arr = car[arrKey];
+    if (Array.isArray(arr)) {
+      arr.forEach((item) => {
+        const label = String(item?.label || item?.name || '').trim();
+        const amount = Number(item?.amount ?? item?.value ?? 0);
+        if (label && isFinite(amount)) add(label, amount);
+      });
+    }
+  });
+
+  // 3) retorna como lista ordenada
+  return Object.entries(out)
+    .map(([label, amount]) => ({ id: crypto.randomUUID(), label, amount }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
+}
 
 const QuoteGenerator = () => {
   // ====== Dados do veículo / cabeçalho ======
@@ -77,10 +125,7 @@ const QuoteGenerator = () => {
   };
 
   const addItem = () => {
-    setItems((prev) => [
-      ...prev,
-      { id: crypto.randomUUID(), label: '', amount: '' },
-    ]);
+    setItems((prev) => [...prev, { id: crypto.randomUUID(), label: '', amount: '' }]);
   };
 
   const removeItem = (id) => {
@@ -99,46 +144,36 @@ const QuoteGenerator = () => {
     });
   };
 
-  // Pré-preenche com dados do veículo (se houver) + mantém editável
+  // Pré-preenche com dados do veículo — AGORA SUBSTITUI A LISTA ATUAL
   const preloadFromVehicle = () => {
-    if (!selectedCar && !manualVehicle) {
+    const car = selectedCar;
+    if (!manualVehicle && !car) {
       toast({ title: 'Selecione um veículo do estoque ou marque "Digitar manualmente".' });
       return;
     }
 
-    // monta título a partir do veículo se não setado manualmente
-    if (!manualVehicle && selectedCar) {
-      const name = `${selectedCar.brand || ''} ${selectedCar.model || ''} ${
-        selectedCar.year ? `(${selectedCar.year})` : ''
-      }`.trim();
+    if (!manualVehicle && car) {
+      const name = `${car.brand || ''} ${car.model || ''} ${
+        car.year ? `(${car.year})` : ''
+      } ${car.plate ? `• ${car.plate}` : ''}`.trim();
       if (!vehicleText) setVehicleText(name);
     }
 
-    // tenta ler campos comuns do objeto do veículo (se existirem)
-    const possible = [];
-    const src = selectedCar || {};
-    const mapCandidates = [
-      ['Lavagem', src.wash_cost],
-      ['Manutenção', src.maintenance_cost],
-      ['Frete', src.shipping_cost],
-      ['Documentos/Despachante', src.docs_cost],
-      ['Laudo Cautelar', src.inspection_cost],
-      ['Taxas', src.fee_cost],
-    ];
-    mapCandidates.forEach(([label, val]) => {
-      if (val !== undefined && val !== null && val !== '') {
-        possible.push({ id: crypto.randomUUID(), label, amount: String(val) });
-      }
+    const extracted = extractCostsFromCar(car || {});
+    // sempre garante as labels padrão no topo (vazias se não vierem do carro)
+    const baseTraffic = DEFAULT_LABELS.map((l) => {
+      const found = extracted.find((e) => e.label.toLowerCase() === l.toLowerCase());
+      return { id: crypto.randomUUID(), label: l, amount: found ? String(found.amount) : '' };
     });
 
-    // mantemos labels padrão de tráfego (editáveis)
-    const baseTraffic = DEFAULT_LABELS.map((l) => ({
-      id: crypto.randomUUID(),
-      label: l,
-      amount: '',
-    }));
+    // merge: padrões + demais custos únicos (sem duplicar)
+    const rest = extracted.filter(
+      (e) => !DEFAULT_LABELS.some((l) => l.toLowerCase() === e.label.toLowerCase())
+    ).map((e) => ({ id: crypto.randomUUID(), label: e.label, amount: String(e.amount) }));
 
-    const merged = [...baseTraffic, ...possible];
+    const merged = [...baseTraffic, ...rest];
+
+    // *** SUBSTITUI lista atual ***
     setItems(merged.length ? merged : baseTraffic);
     toast({ title: 'Itens carregados do veículo (editáveis).' });
   };
@@ -155,7 +190,7 @@ const QuoteGenerator = () => {
           ? vehicleText
           : `${selectedCar.brand || ''} ${selectedCar.model || ''}${
               selectedCar.year ? ` (${selectedCar.year})` : ''
-            }`.trim(),
+            }${selectedCar.plate ? ` • ${selectedCar.plate}` : ''}`.trim(),
       period,
       notes,
       items: items.map((it) => ({
@@ -163,10 +198,7 @@ const QuoteGenerator = () => {
         amount: Number(String(it.amount).replace(',', '.')) || 0,
       })),
       total,
-      theme: {
-        primary: '#FACC15', // amarelo
-        dark: '#111111', // quase preto
-      },
+      theme: { primary: '#FACC15', dark: '#111111' },
     };
 
     try {
@@ -326,7 +358,7 @@ const QuoteGenerator = () => {
           </div>
 
           {/* Cabeçalho das colunas */}
-          <div className="grid grid-cols-[1fr,140px,110px] gap-2 items-center text-xs font-semibold text-gray-600 mb-2">
+          <div className="grid grid-cols-[1fr,160px,152px] gap-2 items-center text-xs font-semibold text-gray-600 mb-2">
             <div>Item</div>
             <div>Preço (R$)</div>
             <div className="text-right">Ações</div>
@@ -337,7 +369,7 @@ const QuoteGenerator = () => {
             {items.map((it) => (
               <div
                 key={it.id}
-                className="grid grid-cols-[1fr,140px,110px] gap-2 items-center"
+                className="grid grid-cols-[1fr,160px,152px] gap-2 items-center"
               >
                 <input
                   className="border rounded-md p-2 text-sm"
@@ -352,7 +384,7 @@ const QuoteGenerator = () => {
                   placeholder="0,00"
                   inputMode="decimal"
                 />
-                <div className="flex justify-end gap-2">
+                <div className="flex justify-end gap-2 whitespace-nowrap">
                   <Button
                     type="button"
                     onClick={() => duplicateItem(it.id)}

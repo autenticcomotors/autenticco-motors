@@ -1,161 +1,212 @@
 // src/lib/quote-print.js
-// Gera uma janela de impressão (Imprimir/Salvar em PDF) com visual preto/amarelo, tabela alinhada e total.
-// Sem dependências externas.
 
-const esc = (s = '') =>
-  String(s || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+// Utilitário simples p/ moeda BR
+const currencyBR = (v = 0) =>
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v) || 0);
 
-const Money = (v) =>
-  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
-    .format(Number(v || 0));
-
-export const openQuotePrint = (docData) => {
-  const {
-    title,
-    vehicle,
-    periodText,
-    items = [],
-    total = 0,
-    brand = 'AutenTicco Motors',
-    site = 'www.autenticcomotors.com',
-    whatsapp = '(11) 97507-1300',
-    instagram = '@autenticcomotors',
-    docId = '#0000',
-    dateBR = '',
-    notes = '',
-  } = docData || {};
+/**
+ * Gera um "PDF" via janela de impressão do browser com layout próprio.
+ * @param {{
+ *  logoUrl?: string,
+ *  siteUrl?: string,
+ *  social?: string[],
+ *  title: string,
+ *  vehicle: string,
+ *  period: string,
+ *  notes?: string,
+ *  items: {label:string, amount:number}[],
+ *  total: number,
+ *  theme?: {primary?: string, dark?: string}
+ * }} data
+ */
+export async function generateQuotePDF(data) {
+  // Defaults de tema
+  const primary = data?.theme?.primary || '#FACC15'; // amarelo
+  const dark = data?.theme?.dark || '#111111';
 
   // Monta linhas da tabela
-  const rowsHtml = (items || [])
-    .map((it) => {
-      const label = esc(it.label || '');
-      const val = Money(it.amountNumber || 0);
-      return `
+  const rows = (data.items || [])
+    .map(
+      (it) => `
         <tr>
-          <td class="td-left">${label}</td>
-          <td class="td-right">${val}</td>
-        </tr>
-      `;
-    })
+          <td class="td-left">${escapeHTML(it.label || '')}</td>
+          <td class="td-right">${currencyBR(it.amount || 0)}</td>
+        </tr>`
+    )
     .join('');
 
-  const win = window.open('', '_blank', 'noopener,noreferrer,width=900,height=700');
-  if (!win) return;
-
-  const logoUrlCandidate = `${window.location.origin}/logo.png`;
-
-  win.document.write(`
+  const html = `
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8" />
-<title>${esc(title)} — ${esc(brand)}</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>${escapeHTML(data.title || 'Relatório de Custos')}</title>
 <style>
-  @page { size: A4; margin: 20mm; }
-  body { font-family: Arial, Helvetica, sans-serif; color: #111; }
-  .header {
-    display: flex; align-items: center; justify-content: space-between; gap: 12px;
-    border-bottom: 4px solid #111; padding-bottom: 12px; margin-bottom: 18px;
+  :root{
+    --primary:${primary};
+    --dark:${dark};
   }
-  .brand {
-    display: flex; align-items: center; gap: 12px;
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family: ui-sans-serif, -apple-system, Segoe UI, Roboto, Ubuntu, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+    color:#111827; background:#fff;
   }
-  .brand .logo {
-    width: 56px; height: 56px; border-radius: 8px; background: #111; display:flex; align-items:center; justify-content:center;
+  .wrap{max-width:880px;margin:24px auto;padding:24px 20px 64px;border:1px solid #e5e7eb;border-radius:16px}
+  header{
+    display:flex;align-items:center;gap:16px;border-bottom:4px solid var(--primary);padding-bottom:16px;margin-bottom:20px;
   }
-  .brand .logo img { max-width: 56px; max-height: 56px; display: block; }
-  .brand .name { font-weight: 900; font-size: 20px; letter-spacing: 0.2px; }
-  .meta { text-align: right; font-size: 12px; color: #444; }
-  .title {
-    background: #ffd400; color: #000; padding: 10px 14px; border-radius: 10px;
-    font-weight: 800; font-size: 18px; display:inline-block; margin-bottom: 8px;
+  .brand{
+    display:flex;align-items:center;gap:12px;
   }
-  .subtitle { font-size: 13px; color: #444; margin: 0 0 14px 0; }
-  .pill { display:inline-block; background:#111; color:#fff; padding:4px 10px; border-radius:999px; font-size:12px; font-weight:700; }
-  .section { margin-top: 10px; }
-  table { width: 100%; border-collapse: separate; border-spacing: 0; }
-  th { text-align: left; padding: 8px 10px; background: #111; color: #fff; font-weight: 800; font-size: 12px; }
-  td { padding: 8px 10px; font-size: 13px; vertical-align: top; }
-  .td-left { border-left: 2px solid #111; border-right: 1px solid #eee; }
-  .td-right { text-align: right; border-right: 2px solid #111; }
-  tr:nth-child(odd) td { background: #fafafa; }
-  tr:last-child td { border-bottom: 2px solid #111; }
-  .total {
-    margin-top: 10px; text-align: right; font-weight: 900; font-size: 18px;
+  .brand img{height:56px;width:auto;object-fit:contain;}
+  .brand h1{margin:0;font-size:22px;line-height:1.2;font-weight:900;color:#111;}
+  .muted{color:#6b7280;font-size:12px}
+  .meta{
+    margin-top:8px;font-size:13px;color:#111;
   }
-  .notes { margin-top: 8px; font-size: 12px; color: #444; }
-  .footer {
-    margin-top: 18px; border-top: 4px solid #111; padding-top: 10px; font-size: 12px; color: #222;
-    display:flex; align-items:center; justify-content:space-between; gap:12px;
+  h2.title{
+    margin:0 0 12px 0;font-size:20px;font-weight:800;color:#111;
   }
-  .footer .links { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
-  .badge { display:inline-block; background:#ffd400; color:#000; padding:2px 8px; border-radius:999px; font-weight:800; }
-  .muted { color:#666; }
-  .nowrap { white-space: nowrap; }
-  .small { font-size: 11px; }
+  .box{
+    border:1px solid #e5e7eb;border-radius:12px;padding:14px;margin-bottom:14px;background:#fff;
+  }
+  .label{font-size:12px;color:#6b7280;margin-bottom:6px}
+  .value{font-size:14px;color:#111}
+  table{
+    width:100%;border-collapse:separate;border-spacing:0; margin-top:10px; border:1px solid #e5e7eb; border-radius:12px; overflow:hidden;
+  }
+  thead th{
+    background: #111; color:#fff; text-align:left; padding:10px 12px; font-size:12px; letter-spacing:.02em;
+  }
+  tbody td{
+    padding:10px 12px; border-top:1px solid #f3f4f6; font-size:14px;
+  }
+  .td-left{width:70%;}
+  .td-right{text-align:right;width:30%;}
+  tfoot td{
+    padding:14px 12px; background:#f9fafb; font-weight:800; border-top:1px solid #e5e7eb;
+  }
+  .total-label{text-align:right;}
+  .total-value{text-align:right; color:#111;}
+  .badge{
+    display:inline-block;background:var(--primary);color:#000;font-weight:800;font-size:11px;padding:4px 8px;border-radius:999px
+  }
+  footer{
+    position:fixed;left:0;right:0;bottom:0;border-top:2px solid var(--primary);
+    background:#fff;padding:8px 16px;font-size:12px;color:#111;display:flex;justify-content:space-between;align-items:center;
+  }
+  .social{display:flex;gap:10px;align-items:center;}
+  .social span{font-size:12px;color:#374151}
+  @media print{
+    body{background:#fff;}
+    .wrap{border:none;margin:0;padding:20px 12mm 20mm 12mm;}
+    footer{position:fixed;}
+  }
 </style>
 </head>
 <body>
-  <header class="header">
-    <div class="brand">
-      <div class="logo">
-        <img src="${logoUrlCandidate}" alt="Logo" onerror="this.style.display='none';this.parentElement.style.background='#ffd400';this.parentElement.textContent='A';this.parentElement.style.fontWeight='900';this.parentElement.style.color='#000';" />
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        ${data.logoUrl ? `<img src="${escapeAttr(data.logoUrl)}" alt="logo" />` : ''}
+        <div>
+          <h1>AutenTicco Motors</h1>
+          <div class="muted">${escapeHTML(data.siteUrl || 'autenticcomotors.com.br')}</div>
+        </div>
       </div>
-      <div class="name">${esc(brand)}</div>
-    </div>
-    <div class="meta">
-      <div><span class="badge">${esc(docId)}</span></div>
-      <div class="small muted">Data: ${esc(dateBR)}</div>
-    </div>
-  </header>
+      <div style="margin-left:auto;text-align:right">
+        <div class="badge">Documento</div>
+        <div class="muted">Gerado em ${new Date().toLocaleString('pt-BR')}</div>
+      </div>
+    </header>
 
-  <main>
-    <div class="title">${esc(title)}</div>
-    <div class="subtitle">
-      <strong>Veículo:</strong> ${esc(vehicle)}
-      ${periodText ? ` • <span class="pill">${esc(periodText)}</span>` : ''}
+    <h2 class="title">${escapeHTML(data.title || 'Relatório de Custos')}</h2>
+
+    <div class="box">
+      <div class="label">Veículo</div>
+      <div class="value">${escapeHTML(data.vehicle || '-')}</div>
     </div>
 
-    <section class="section">
-      <table>
-        <thead>
-          <tr>
-            <th>Descrição</th>
-            <th class="nowrap" style="text-align:right;">Valor (R$)</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rowsHtml}
-        </tbody>
-      </table>
-
-      <div class="total">Total: ${esc(Money(total))}</div>
-      ${notes ? `<div class="notes"><strong>Obs.:</strong> ${esc(notes)}</div>` : ''}
-    </section>
-  </main>
-
-  <footer class="footer">
-    <div class="links">
-      <span>Site: <strong>${esc(site)}</strong></span>
-      <span>WhatsApp: <strong>${esc(whatsapp)}</strong></span>
-      <span>Instagram: <strong>${esc(instagram)}</strong></span>
+    <div class="box" style="display:flex; gap:16px; flex-wrap:wrap">
+      <div style="flex:1 1 240px">
+        <div class="label">Período</div>
+        <div class="value">${escapeHTML(data.period || 'até vender')}</div>
+      </div>
+      <div style="flex:1 1 240px">
+        <div class="label">Total</div>
+        <div class="value" style="font-weight:900">${currencyBR(data.total || 0)}</div>
+      </div>
     </div>
-    <div class="muted small">Documento gerado automaticamente.</div>
+
+    <table>
+      <thead>
+        <tr><th>Item</th><th style="text-align:right">Preço (R$)</th></tr>
+      </thead>
+      <tbody>
+        ${rows || `<tr><td class="td-left">—</td><td class="td-right">${currencyBR(0)}</td></tr>`}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td class="total-label">Total</td>
+          <td class="total-value">${currencyBR(data.total || 0)}</td>
+        </tr>
+      </tfoot>
+    </table>
+
+    ${
+      data.notes
+        ? `<div class="box" style="margin-top:14px">
+             <div class="label">Observações</div>
+             <div class="value" style="white-space:pre-wrap">${escapeHTML(data.notes)}</div>
+           </div>`
+        : ''
+    }
+  </div>
+
+  <footer>
+    <div><strong>AutenTicco Motors</strong> • ${escapeHTML(data.siteUrl || 'autenticcomotors.com.br')}</div>
+    <div class="social">
+      ${(data.social || []).map((s) => `<span>${escapeHTML(s)}</span>`).join('')}
+    </div>
   </footer>
 
   <script>
-    window.onload = () => {
-      setTimeout(() => { window.print(); }, 300);
-    };
+    // espera assets carregarem e dispara print
+    (function(){
+      function go(){
+        try{ window.focus(); }catch(e){}
+        setTimeout(function(){ window.print(); }, 180);
+      }
+      if (document.readyState === 'complete') go();
+      else window.addEventListener('load', go);
+    })();
   </script>
 </body>
 </html>
-  `);
+`;
 
-  win.document.close();
-};
+  // Abre a janela e escreve o HTML
+  const printWindow = window.open('', '_blank', 'noopener,noreferrer');
+  if (!printWindow) throw new Error('Pop-up bloqueado. Permita pop-ups para gerar o PDF.');
+
+  printWindow.document.open();
+  printWindow.document.write(html);
+  printWindow.document.close();
+
+  // resolve após um pequeno atraso (não bloqueia sua UI)
+  await new Promise((r) => setTimeout(r, 250));
+}
+
+// helpers de segurança simples
+function escapeHTML(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+function escapeAttr(str){
+  return String(str || '').replace(/"/g, '&quot;');
+}
 

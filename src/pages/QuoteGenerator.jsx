@@ -1,533 +1,398 @@
-// src/pages/QuoteGenerator.jsx
 import React, { useEffect, useMemo, useState } from 'react';
 import { Helmet } from 'react-helmet';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
-import {
-  getCars,
-  getPublicationsByCar,
-  getExpensesByCar,
-  getPlatforms,
-} from '@/lib/car-api';
-import { openQuotePrint } from '@/lib/quote-print';
+import { getCars } from '@/lib/car-api';
+import { Printer, Plus, Copy, Trash2 } from 'lucide-react';
+import { generateQuotePDF } from '@/lib/quote-print';
 
-const Money = (v) =>
-  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
-    .format(Number(v || 0));
-
-const normalize = (s = '') => String(s || '').toLowerCase();
-
-const GROUP_IS_AD = (platformName = '') => {
-  const n = normalize(platformName);
-  return (
-    n.includes('olx') ||
-    n.includes('webmotors') ||
-    n.includes('mercado') ||
-    n.includes('icarros') ||
-    n.includes('usados') ||
-    n.includes('market')
+const currencyBR = (v) =>
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+    isNaN(Number(v)) ? 0 : Number(v)
   );
-};
 
-const DEFAULT_DOC_LINES = [
-  { label: 'Pesquisa de débitos', amount: '' },
-  { label: 'Laudo Cautelar', amount: '' },
-  { label: 'Laudo ECV', amount: '' },
-  { label: 'Taxa de transferência', amount: '' },
-  { label: 'Despachante', amount: '' },
-  { label: 'Logística / Frete', amount: '' },
+const DEFAULT_LABELS = [
+  'OLX',
+  'Webmotors',
+  'MercadoLivre',
+  'Facebook/Instagram',
+  'Google Ads',
 ];
 
-const GuessTrafficBucket = (s = '') => {
-  const n = normalize(s);
-  if (n.includes('google')) return 'Google Ads';
-  if (n.includes('facebook') || n.includes('instagram') || n.includes('meta')) {
-    return 'Facebook/Instagram';
-  }
-  return null;
-};
-
 const QuoteGenerator = () => {
-  const [loading, setLoading] = useState(false);
-
-  // Dados base
+  // ====== Dados do veículo / cabeçalho ======
   const [cars, setCars] = useState([]);
-  const [platforms, setPlatforms] = useState([]);
+  const [manualVehicle, setManualVehicle] = useState(false);
+  const [vehicleId, setVehicleId] = useState('');
+  const [vehicleText, setVehicleText] = useState('');
+  const [period, setPeriod] = useState('até vender'); // pré-preenchido
 
-  // Veículo (dropdown) OU manual
-  const [useManualVehicle, setUseManualVehicle] = useState(false);
-  const [selectedCarId, setSelectedCarId] = useState('');
-  const [manualVehicle, setManualVehicle] = useState('');
-
-  // Título
-  const [titleMode, setTitleMode] = useState('ads'); // 'ads' | 'docs' | 'custom'
+  // título
+  const [titleMode, setTitleMode] = useState('custom'); // ads | docs | custom
   const [customTitle, setCustomTitle] = useState('');
+  const effectiveTitle = useMemo(() => {
+    if (titleMode === 'ads') return 'Tabela de Custos — Anúncios e Tráfego Pago';
+    if (titleMode === 'docs') return 'Documentação';
+    return customTitle || 'Relatório de Custos';
+  }, [titleMode, customTitle]);
 
-  // Período (pré "até vender")
-  const [periodText, setPeriodText] = useState('até vender');
-
-  // Itens do orçamento
-  const [items, setItems] = useState([
-    // { label:'', amount:'' }
-  ]);
-
-  // Observações (opcional)
+  // observações
   const [notes, setNotes] = useState('');
 
-  // Carregado de pubs/expenses quando seleciona veículo
+  // ====== Itens / valores ======
+  const [items, setItems] = useState(
+    DEFAULT_LABELS.map((label) => ({ id: crypto.randomUUID(), label, amount: '' }))
+  );
+
+  // total
   const total = useMemo(
     () =>
       items.reduce((acc, it) => {
-        const v = Number(
-          String(it.amount || '').replace('.', '').replace(',', '.'),
-        );
-        return acc + (isFinite(v) ? v : 0);
+        const n = Number(String(it.amount).replace(',', '.'));
+        return acc + (isNaN(n) ? 0 : n);
       }, 0),
-    [items],
+    [items]
   );
 
-  // Carrega base
+  // ====== Carrega carros ======
   useEffect(() => {
-    const run = async () => {
+    (async () => {
       try {
-        setLoading(true);
-        const [carsRes, platformsRes] = await Promise.all([
-          getCars({ includeSold: true }),
-          getPlatforms(),
-        ]);
-        setCars(carsRes || []);
-        setPlatforms(platformsRes || []);
-      } catch (e) {
-        console.error(e);
-        toast({
-          title: 'Erro ao carregar dados',
-          description: e.message || String(e),
-          variant: 'destructive',
-        });
-      } finally {
-        setLoading(false);
+        const data = await getCars();
+        setCars((data || []).filter(Boolean));
+      } catch (err) {
+        console.error(err);
       }
-    };
-    run();
+    })();
   }, []);
 
-  // Troca de preset: preenche linhas padrão de Documentação
-  useEffect(() => {
-    if (titleMode === 'docs') {
-      setItems([...DEFAULT_DOC_LINES]);
-    }
-    if (titleMode === 'ads') {
-      // ao alternar para ADS, não mexe nos itens ainda; o botão "Pré-preencher" faz isso
-      if (items.length === 0) {
-        setItems([
-          { label: 'Facebook/Instagram', amount: '' },
-          { label: 'Google Ads', amount: '' },
-        ]);
-      }
-    }
-  }, [titleMode]); // eslint-disable-line
-
+  // ====== Helpers ======
   const selectedCar = useMemo(
-    () => (cars || []).find((c) => String(c.id) === String(selectedCarId)) || null,
-    [cars, selectedCarId],
+    () => (vehicleId ? (cars || []).find((c) => c.id === vehicleId) : null),
+    [vehicleId, cars]
   );
 
-  const handleAddItem = () => {
-    setItems((prev) => [...prev, { label: '', amount: '' }]);
+  const handleItemChange = (id, field, value) => {
+    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, [field]: value } : it)));
   };
 
-  const handleDupItem = (idx) => {
+  const addItem = () => {
+    setItems((prev) => [
+      ...prev,
+      { id: crypto.randomUUID(), label: '', amount: '' },
+    ]);
+  };
+
+  const removeItem = (id) => {
+    setItems((prev) => prev.filter((it) => it.id !== id));
+  };
+
+  const duplicateItem = (id) => {
     setItems((prev) => {
-      const at = prev[idx];
-      if (!at) return prev;
-      const copy = { ...at };
-      const arr = [...prev];
-      arr.splice(idx + 1, 0, copy);
-      return arr;
+      const idx = prev.findIndex((it) => it.id === id);
+      if (idx < 0) return prev;
+      const base = prev[idx];
+      const dup = { ...base, id: crypto.randomUUID() };
+      const clone = [...prev];
+      clone.splice(idx + 1, 0, dup);
+      return clone;
     });
   };
 
-  const handleDelItem = (idx) => {
-    setItems((prev) => prev.filter((_, i) => i !== idx));
-  };
-
-  const handleChangeItem = (idx, patch) => {
-    setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
-  };
-
-  const handlePrefillFromData = async () => {
-    if (!selectedCar && !useManualVehicle) {
-      toast({
-        title: 'Selecione um veículo',
-        description: 'Ou alterne para “Digitar manualmente”.',
-      });
+  // Pré-preenche com dados do veículo (se houver) + mantém editável
+  const preloadFromVehicle = () => {
+    if (!selectedCar && !manualVehicle) {
+      toast({ title: 'Selecione um veículo do estoque ou marque "Digitar manualmente".' });
       return;
     }
-    if (!selectedCar && useManualVehicle) {
-      // Modo manual: só garante linhas iniciais de tráfego
-      setItems([
-        { label: 'Facebook/Instagram', amount: '' },
-        { label: 'Google Ads', amount: '' },
-      ]);
-      toast({ title: 'Linhas de tráfego adicionadas (editáveis).' });
-      return;
+
+    // monta título a partir do veículo se não setado manualmente
+    if (!manualVehicle && selectedCar) {
+      const name = `${selectedCar.brand || ''} ${selectedCar.model || ''} ${
+        selectedCar.year ? `(${selectedCar.year})` : ''
+      }`.trim();
+      if (!vehicleText) setVehicleText(name);
     }
+
+    // tenta ler campos comuns do objeto do veículo (se existirem)
+    const possible = [];
+    const src = selectedCar || {};
+    const mapCandidates = [
+      ['Lavagem', src.wash_cost],
+      ['Manutenção', src.maintenance_cost],
+      ['Frete', src.shipping_cost],
+      ['Documentos/Despachante', src.docs_cost],
+      ['Laudo Cautelar', src.inspection_cost],
+      ['Taxas', src.fee_cost],
+    ];
+    mapCandidates.forEach(([label, val]) => {
+      if (val !== undefined && val !== null && val !== '') {
+        possible.push({ id: crypto.randomUUID(), label, amount: String(val) });
+      }
+    });
+
+    // mantemos labels padrão de tráfego (editáveis)
+    const baseTraffic = DEFAULT_LABELS.map((l) => ({
+      id: crypto.randomUUID(),
+      label: l,
+      amount: '',
+    }));
+
+    const merged = [...baseTraffic, ...possible];
+    setItems(merged.length ? merged : baseTraffic);
+    toast({ title: 'Itens carregados do veículo (editáveis).' });
+  };
+
+  // ====== PDF ======
+  const handleGenerate = async () => {
+    const payload = {
+      logoUrl: '/logo.png', // ajuste se necessário
+      siteUrl: 'https://autenticcomotors.com.br',
+      social: ['Instagram', 'Facebook', 'YouTube', 'TikTok'],
+      title: effectiveTitle,
+      vehicle:
+        manualVehicle || !selectedCar
+          ? vehicleText
+          : `${selectedCar.brand || ''} ${selectedCar.model || ''}${
+              selectedCar.year ? ` (${selectedCar.year})` : ''
+            }`.trim(),
+      period,
+      notes,
+      items: items.map((it) => ({
+        label: it.label || '',
+        amount: Number(String(it.amount).replace(',', '.')) || 0,
+      })),
+      total,
+      theme: {
+        primary: '#FACC15', // amarelo
+        dark: '#111111', // quase preto
+      },
+    };
 
     try {
-      setLoading(true);
-
-      const [pubs, exps] = await Promise.all([
-        getPublicationsByCar(selectedCar.id),
-        getExpensesByCar(selectedCar.id),
-      ]);
-
-      // 1) Publicações (anúncios) -> somar por plataforma “de anúncio”
-      const pubsByPlatform = {};
-      (pubs || []).forEach((p) => {
-        const pf = (platforms || []).find((pl) => pl.id === p.platform_id);
-        const name = pf?.name || 'Outro';
-        if (!GROUP_IS_AD(name)) return; // só marketplaces/anúncios
-        const spent = Number(p.spent || 0);
-        if (!pubsByPlatform[name]) pubsByPlatform[name] = 0;
-        pubsByPlatform[name] += isFinite(spent) ? spent : 0;
-      });
-
-      // 2) Gastos -> buckets de tráfego e outros custos relevantes
-      let trafficBuckets = { 'Facebook/Instagram': 0, 'Google Ads': 0 };
-      const otherCosts = {}; // ex.: lavagem, frete, manutenção etc.
-
-      (exps || []).forEach((e) => {
-        const cat = e.category || '';
-        const desc = e.description || '';
-        const bucket = GuessTrafficBucket(`${cat} ${desc}`);
-        const val = Number(e.amount || 0);
-        if (bucket) {
-          trafficBuckets[bucket] += isFinite(val) ? val : 0;
-          return;
-        }
-        // tenta agrupar “outros” por palavras-chave simples
-        const n = normalize(`${cat} ${desc}`);
-        let key = null;
-        if (n.includes('lavag')) key = 'Lavagem';
-        else if (n.includes('frete') || n.includes('logist')) key = 'Logística / Frete';
-        else if (n.includes('laudo') && n.includes('ecv')) key = 'Laudo ECV';
-        else if (n.includes('laudo')) key = 'Laudo Cautelar';
-        else if (n.includes('manuten') || n.includes('oficina')) key = 'Manutenção';
-        else if (n.includes('despach')) key = 'Despachante';
-        else if (n.includes('taxa') || n.includes('tarifa')) key = 'Taxas';
-        if (!key) return;
-        if (!otherCosts[key]) otherCosts[key] = 0;
-        otherCosts[key] += isFinite(val) ? val : 0;
-      });
-
-      // Monta array de itens (editável)
-      const next = [];
-
-      // Período textual já está no topo (“até vender” editável), não entra como item.
-
-      // Anúncios por plataforma
-      Object.entries(pubsByPlatform).forEach(([name, val]) => {
-        next.push({ label: String(name), amount: String(val.toFixed(2)).replace('.', ',') });
-      });
-
-      // Tráfego
-      Object.entries(trafficBuckets).forEach(([name, val]) => {
-        if (val > 0) {
-          next.push({ label: name, amount: String(val.toFixed(2)).replace('.', ',') });
-        } else {
-          // ainda assim incluir as linhas pré-preenchidas (valor em branco) para edição
-          next.push({ label: name, amount: '' });
-        }
-      });
-
-      // Outros custos mapeados por keywords
-      Object.entries(otherCosts).forEach(([name, val]) => {
-        next.push({ label: name, amount: String(val.toFixed(2)).replace('.', ',') });
-      });
-
-      // Se preset “Documentação”, substitui pelas linhas padrão (você pode alternar depois)
-      if (titleMode === 'docs') {
-        setItems([...DEFAULT_DOC_LINES]);
-      } else {
-        setItems(next.length ? next : [{ label: 'Facebook/Instagram', amount: '' }, { label: 'Google Ads', amount: '' }]);
-      }
-
-      toast({ title: 'Itens carregados do veículo (editáveis).' });
+      await generateQuotePDF(payload);
     } catch (e) {
       console.error(e);
       toast({
-        title: 'Erro ao pré-preencher',
-        description: e.message || String(e),
+        title: 'Falha ao gerar PDF',
+        description: String(e?.message || e),
         variant: 'destructive',
       });
-    } finally {
-      setLoading(false);
     }
-  };
-
-  const resolvedTitle = useMemo(() => {
-    if (titleMode === 'ads') return 'Tabela de Custos — Anúncios e Tráfego Pago';
-    if (titleMode === 'docs') return 'Documentação';
-    return customTitle || 'Orçamento';
-  }, [titleMode, customTitle]);
-
-  const resolvedVehicleLabel = useMemo(() => {
-    if (useManualVehicle) return manualVehicle || '';
-    if (!selectedCar) return '';
-    const parts = [
-      selectedCar.brand,
-      selectedCar.model,
-      selectedCar.year ? `• ${selectedCar.year}` : '',
-      selectedCar.plate ? `• Placa: ${selectedCar.plate}` : '',
-    ].filter(Boolean);
-    return parts.join(' ');
-  }, [useManualVehicle, manualVehicle, selectedCar]);
-
-  const handleGenerate = () => {
-    if (!resolvedTitle?.trim()) {
-      toast({ title: 'Defina um título para o documento.' });
-      return;
-    }
-    if (!resolvedVehicleLabel?.trim()) {
-      toast({ title: 'Informe o veículo (selecione ou digite manualmente).' });
-      return;
-    }
-    if (!items.length) {
-      toast({ title: 'Inclua pelo menos um item.' });
-      return;
-    }
-
-    const doc = {
-      title: resolvedTitle,
-      vehicle: resolvedVehicleLabel,
-      periodText: periodText || '',
-      items: items.map((it) => ({
-        label: String(it.label || '').trim(),
-        amountNumber: Number(String(it.amount || '').replace('.', '').replace(',', '.')) || 0,
-      })),
-      total,
-      // Cabeçalho/Rodapé
-      brand: 'AutenTicco Motors',
-      site: 'www.autenticcomotors.com',
-      whatsapp: '(11) 97507-1300',
-      instagram: '@autenticcomotors',
-      // ID + data
-      docId: `#${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Date.now().toString().slice(-4)}`,
-      dateBR: new Date().toLocaleDateString('pt-BR'),
-    };
-
-    openQuotePrint(doc);
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-[70vh]">
       <Helmet>
-        <title>Gerar Orçamento • AutenTicco Motors</title>
+        <title>Gerar Orçamento / Relatório de Custos • AutenTicco Motors</title>
       </Helmet>
 
-      <div className="max-w-6xl mx-auto p-4 md:p-8">
-        <div className="mb-6 flex items-center justify-between">
-          <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900">
-            Gerar Orçamento / Relatório de Custos
-          </h1>
-          <Button
-            onClick={handleGenerate}
-            className="bg-yellow-400 text-black hover:bg-yellow-500 font-bold"
-            disabled={loading}
-          >
-            GERAR DOCUMENTO
-          </Button>
+      <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 mb-6">
+        Gerar Orçamento / Relatório de Custos
+      </h1>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* ====== COL ESQUERDA ====== */}
+        <div className="space-y-4">
+          {/* veículo */}
+          <div className="border rounded-xl p-4 bg-white">
+            <p className="font-semibold mb-3">Veículo</p>
+            <div className="flex items-center gap-3 mb-3">
+              <input
+                id="manualVehicle"
+                type="checkbox"
+                checked={manualVehicle}
+                onChange={(e) => setManualVehicle(e.target.checked)}
+              />
+              <label htmlFor="manualVehicle" className="text-sm">
+                Digitar manualmente
+              </label>
+            </div>
+
+            {!manualVehicle ? (
+              <select
+                value={vehicleId}
+                onChange={(e) => setVehicleId(e.target.value)}
+                className="w-full border rounded-md p-2 mb-3"
+              >
+                <option value="">Selecione um veículo do estoque</option>
+                {(cars || []).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.brand} {c.model} {c.year ? `(${c.year})` : ''} {c.plate ? `• ${c.plate}` : ''}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                className="w-full border rounded-md p-2 mb-3"
+                placeholder="Ex.: Volkswagen T-Cross Highline 1.4 (2020)"
+                value={vehicleText}
+                onChange={(e) => setVehicleText(e.target.value)}
+              />
+            )}
+
+            <Button
+              onClick={preloadFromVehicle}
+              className="w-full bg-black text-white hover:bg-gray-800"
+              type="button"
+            >
+              Pré-preencher com dados do veículo
+            </Button>
+          </div>
+
+          {/* título */}
+          <div className="border rounded-xl p-4 bg-white">
+            <p className="font-semibold mb-3">Título do documento</p>
+
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="titleMode"
+                  value="ads"
+                  checked={titleMode === 'ads'}
+                  onChange={() => setTitleMode('ads')}
+                />
+                Tabela de Custos — Anúncios e Tráfego Pago
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="titleMode"
+                  value="docs"
+                  checked={titleMode === 'docs'}
+                  onChange={() => setTitleMode('docs')}
+                />
+                Documentação
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="titleMode"
+                  value="custom"
+                  checked={titleMode === 'custom'}
+                  onChange={() => setTitleMode('custom')}
+                />
+                Personalizado
+              </label>
+            </div>
+
+            <input
+              className="mt-3 w-full border rounded-md p-2"
+              placeholder="Digite o título"
+              disabled={titleMode !== 'custom'}
+              value={customTitle}
+              onChange={(e) => setCustomTitle(e.target.value)}
+            />
+          </div>
+
+          {/* período */}
+          <div className="border rounded-xl p-4 bg-white">
+            <p className="font-semibold mb-2">Período</p>
+            <input
+              className="w-full border rounded-md p-2"
+              placeholder='até vender (ou edite: "27/08/2025 a 14/10/2025")'
+              value={period}
+              onChange={(e) => setPeriod(e.target.value)}
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Deixe como “até vender” ou edite manualmente (ex.: 27/08/2025 a 14/10/2025).
+            </p>
+          </div>
+
+          {/* observações */}
+          <div className="border rounded-xl p-4 bg-white">
+            <p className="font-semibold mb-2">Observações (opcional)</p>
+            <textarea
+              className="w-full border rounded-md p-2 h-28"
+              placeholder="Ex.: Valores referentes ao período informado. Cotações sujeitas a atualização."
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Coluna esquerda: Configurações */}
-          <div className="lg:col-span-1 space-y-6">
-            <div className="bg-white rounded-2xl shadow border p-4">
-              <p className="text-sm font-semibold mb-3">Veículo</p>
+        {/* ====== COL DIREITA ====== */}
+        <div className="border rounded-xl p-4 bg-white">
+          <div className="flex items-center justify-between mb-3">
+            <p className="font-semibold">Itens do orçamento</p>
+            <Button
+              type="button"
+              onClick={addItem}
+              className="bg-yellow-400 text-black hover:bg-yellow-500 h-8 px-2 py-1 text-xs"
+            >
+              <Plus className="h-4 w-4 mr-1" /> Adicionar item
+            </Button>
+          </div>
 
-              <div className="flex items-center gap-2 mb-3">
+          {/* Cabeçalho das colunas */}
+          <div className="grid grid-cols-[1fr,140px,110px] gap-2 items-center text-xs font-semibold text-gray-600 mb-2">
+            <div>Item</div>
+            <div>Preço (R$)</div>
+            <div className="text-right">Ações</div>
+          </div>
+
+          {/* Linhas */}
+          <div className="space-y-2">
+            {items.map((it) => (
+              <div
+                key={it.id}
+                className="grid grid-cols-[1fr,140px,110px] gap-2 items-center"
+              >
                 <input
-                  id="useManual"
-                  type="checkbox"
-                  checked={useManualVehicle}
-                  onChange={(e) => setUseManualVehicle(e.target.checked)}
+                  className="border rounded-md p-2 text-sm"
+                  value={it.label}
+                  onChange={(e) => handleItemChange(it.id, 'label', e.target.value)}
+                  placeholder="Descrição do item"
                 />
-                <label htmlFor="useManual" className="text-sm">
-                  Digitar manualmente
-                </label>
-              </div>
-
-              {!useManualVehicle ? (
-                <div className="space-y-2">
-                  <select
-                    value={selectedCarId}
-                    onChange={(e) => setSelectedCarId(e.target.value)}
-                    className="w-full border rounded-lg px-3 py-2"
-                  >
-                    <option value="">Selecione um veículo</option>
-                    {(cars || []).map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.brand} {c.model} {c.year ? `• ${c.year}` : ''}{' '}
-                        {c.plate ? `• ${c.plate}` : ''}
-                      </option>
-                    ))}
-                  </select>
+                <input
+                  className="border rounded-md p-2 text-sm text-right"
+                  value={it.amount}
+                  onChange={(e) => handleItemChange(it.id, 'amount', e.target.value)}
+                  placeholder="0,00"
+                  inputMode="decimal"
+                />
+                <div className="flex justify-end gap-2">
                   <Button
-                    onClick={handlePrefillFromData}
-                    className="w-full bg-gray-900 text-white hover:bg-black"
-                    disabled={!selectedCarId || loading}
+                    type="button"
+                    onClick={() => duplicateItem(it.id)}
+                    className="h-8 px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-800"
                   >
-                    Pré-preencher com dados do veículo
+                    <Copy className="h-3.5 w-3.5 mr-1" />
+                    Duplicar
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => removeItem(it.id)}
+                    className="h-8 px-2 py-1 text-xs bg-red-500 hover:bg-red-600 text-white"
+                  >
+                    <Trash2 className="h-3.5 w-3.5 mr-1" />
+                    Excluir
                   </Button>
                 </div>
-              ) : (
-                <input
-                  value={manualVehicle}
-                  onChange={(e) => setManualVehicle(e.target.value)}
-                  placeholder="Ex.: Nissan Kicks 2022 • Placa ABC1D23"
-                  className="w-full border rounded-lg px-3 py-2"
-                />
-              )}
-            </div>
-
-            <div className="bg-white rounded-2xl shadow border p-4">
-              <p className="text-sm font-semibold mb-3">Título do documento</p>
-              <div className="space-y-2">
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="radio"
-                    name="titleMode"
-                    checked={titleMode === 'ads'}
-                    onChange={() => setTitleMode('ads')}
-                  />
-                  Tabela de Custos — Anúncios e Tráfego Pago
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="radio"
-                    name="titleMode"
-                    checked={titleMode === 'docs'}
-                    onChange={() => setTitleMode('docs')}
-                  />
-                  Documentação
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="radio"
-                    name="titleMode"
-                    checked={titleMode === 'custom'}
-                    onChange={() => setTitleMode('custom')}
-                  />
-                  Personalizado
-                </label>
-                {titleMode === 'custom' && (
-                  <input
-                    value={customTitle}
-                    onChange={(e) => setCustomTitle(e.target.value)}
-                    placeholder="Digite o título"
-                    className="w-full border rounded-lg px-3 py-2"
-                  />
-                )}
               </div>
-            </div>
+            ))}
+          </div>
 
-            <div className="bg-white rounded-2xl shadow border p-4">
-              <p className="text-sm font-semibold mb-3">Período</p>
-              <input
-                value={periodText}
-                onChange={(e) => setPeriodText(e.target.value)}
-                className="w-full border rounded-lg px-3 py-2"
-                placeholder="até vender"
-              />
-              <p className="text-xs text-gray-500 mt-2">
-                Deixe como “até vender” ou edite manualmente (ex.: 27/08/2025 a 14/10/2025).
-              </p>
-            </div>
-
-            <div className="bg-white rounded-2xl shadow border p-4">
-              <p className="text-sm font-semibold mb-3">Observações (opcional)</p>
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                rows={4}
-                className="w-full border rounded-lg px-3 py-2"
-                placeholder="Ex.: Valores referentes ao período informado. Cotações sujeitas a atualização."
-              />
+          {/* Total */}
+          <div className="mt-6 flex items-center justify-between">
+            <div />
+            <div className="text-right">
+              <p className="text-xs text-gray-500">Total</p>
+              <p className="text-2xl font-extrabold">{currencyBR(total)}</p>
             </div>
           </div>
 
-          {/* Coluna direita: Itens + Total */}
-          <div className="lg:col-span-2">
-            <div className="bg-white rounded-2xl shadow border p-4 md:p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold">Itens do orçamento</h2>
-                <div className="flex gap-2">
-                  <Button
-                    onClick={handleAddItem}
-                    className="bg-yellow-400 text-black hover:bg-yellow-500"
-                  >
-                    + Adicionar item
-                  </Button>
-                </div>
-              </div>
-
-              <div className="border rounded-lg divide-y">
-                {items.length === 0 && (
-                  <p className="p-4 text-sm text-gray-500">Sem itens ainda.</p>
-                )}
-                {items.map((it, idx) => (
-                  <div key={idx} className="p-3 grid grid-cols-12 gap-2">
-                    <input
-                      value={it.label}
-                      onChange={(e) =>
-                        handleChangeItem(idx, { label: e.target.value })
-                      }
-                      className="col-span-7 md:col-span-8 border rounded-lg px-3 py-2"
-                      placeholder="Descrição (ex.: Webmotors, Facebook/Instagram, Despachante...)"
-                    />
-                    <input
-                      value={it.amount}
-                      onChange={(e) =>
-                        handleChangeItem(idx, { amount: e.target.value })
-                      }
-                      className="col-span-3 md:col-span-2 border rounded-lg px-3 py-2 text-right"
-                      placeholder="0,00"
-                    />
-                    <div className="col-span-2 flex justify-end gap-2">
-                      <Button
-                        onClick={() => handleDupItem(idx)}
-                        className="bg-gray-100 text-gray-800 hover:bg-gray-200"
-                      >
-                        Duplicar
-                      </Button>
-                      <Button
-                        onClick={() => handleDelItem(idx)}
-                        className="bg-red-500 text-white hover:bg-red-600"
-                      >
-                        Excluir
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-6 flex items-center justify-end">
-                <div className="text-right">
-                  <p className="text-sm text-gray-500">Total</p>
-                  <p className="text-2xl font-extrabold">{Money(total)}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-6 flex items-center justify-end">
-              <Button
-                onClick={handleGenerate}
-                className="bg-yellow-400 text-black hover:bg-yellow-500 font-bold"
-                disabled={loading}
-              >
-                GERAR DOCUMENTO
-              </Button>
-            </div>
+          {/* Ação principal */}
+          <div className="mt-6 flex justify-end">
+            <Button
+              onClick={handleGenerate}
+              className="bg-yellow-400 text-black hover:bg-yellow-500"
+              type="button"
+            >
+              <Printer className="w-4 h-4 mr-2" />
+              GERAR DOCUMENTO
+            </Button>
           </div>
         </div>
       </div>

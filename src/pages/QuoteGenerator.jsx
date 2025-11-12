@@ -34,7 +34,7 @@ const mapExpenseLabel = (cat = '', desc = '') => {
   if (key.includes('doc') || key.includes('despach')) return 'Documentos/Despachante';
   if (key.includes('laudo') || key.includes('cautel') || key.includes('ecv')) return 'Laudo Cautelar';
   if (key.includes('taxa') || key.includes('fee')) return 'Taxas';
-  return cat?.trim() || 'Gastos extras';
+  return (cat || 'Gastos extras').trim();
 };
 
 const QuoteGenerator = () => {
@@ -122,9 +122,7 @@ const QuoteGenerator = () => {
       if (!vehicleText) setVehicleText(name);
     }
 
-    // 1) anúncios
     let pubs = [];
-    // 2) gastos
     let exps = [];
     try {
       if (car?.id) {
@@ -135,22 +133,19 @@ const QuoteGenerator = () => {
       console.error('Erro ao buscar pubs/expenses:', e);
     }
 
-    // 1) anúncios: UMA LINHA POR ANÚNCIO
+    // anúncios: UMA LINHA POR ANÚNCIO
     const adItems = (pubs || [])
       .map((p) => {
         const platform = mapPlatformLabel(p?.platform_name || p?.platform || p?.name);
         const labelExtra = p?.title || p?.reference || p?.listing_id || p?.id || '';
-        const label =
-          labelExtra && String(labelExtra).trim()
-            ? `${platform} — ${String(labelExtra).trim()}`
-            : platform;
+        const label = labelExtra ? `${platform} — ${String(labelExtra).trim()}` : platform;
         const val = Number(p?.spent || 0);
         if (!isFinite(val) || val <= 0) return null;
         return { id: crypto.randomUUID(), label, amount: String(val.toFixed(2)) };
       })
       .filter(Boolean);
 
-    // 2) gastos: agregados por categoria legível
+    // gastos: agregados por categoria legível
     const byCat = new Map();
     (exps || []).forEach((g) => {
       const label = mapExpenseLabel(g?.category, g?.description);
@@ -166,29 +161,31 @@ const QuoteGenerator = () => {
 
     const merged = [...adItems, ...expItems];
 
-    // Se não houver nada do carro, cai para labels padrão vazias
-    setItems(merged.length ? merged : DEFAULT_LABELS.map((l) => ({ id: crypto.randomUUID(), label: l, amount: '' })));
+    setItems(
+      merged.length ? merged : DEFAULT_LABELS.map((l) => ({ id: crypto.randomUUID(), label: l, amount: '' }))
+    );
     toast({ title: 'Itens carregados do veículo (editáveis).' });
   };
 
   // ====== PDF ======
   const handleGenerate = async () => {
     const payload = {
-      logoUrl: Logo, // usa import para garantir resolução de path
+      logoUrl: Logo,
       siteUrl: 'https://autenticcomotors.com.br',
       companyName: 'AutenTicco Motors',
       contact: {
-        address: 'São Paulo — SP',  // ajuste se quiser endereço completo
-        phone: '(11) 99999-9999',   // ajuste com seu número
+        phone: '(11) 97507-1300',
+        email: 'contato@autenticcomotors.com',
+        address: 'R. Vieira de Morais, 2110 - Sala 1015 - Campo Belo, São Paulo - SP',
         site: 'autenticcomotors.com.br',
       },
       title: effectiveTitle,
       vehicle:
         manualVehicle || !selectedCar
           ? (vehicleText || '-')
-          : `${selectedCar.brand || ''} ${selectedCar.model || ''}${selectedCar.year ? ` (${selectedCar.year})` : ''}${
-              selectedCar.plate ? ` • ${selectedCar.plate}` : ''
-            }`.trim(),
+          : `${selectedCar.brand || ''} ${selectedCar.model || ''}${
+              selectedCar.year ? ` (${selectedCar.year})` : ''
+            }${selectedCar.plate ? ` • ${selectedCar.plate}` : ''}`.trim(),
       period,
       notes,
       items: items.map((it) => ({

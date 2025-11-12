@@ -9,8 +9,9 @@ export async function generateQuotePDF(data) {
   const siteUrl = data?.siteUrl || 'https://autenticcomotors.com.br';
   const contact = data?.contact || {};
   const contactLine = [
-    contact.address ? `📍 ${contact.address}` : null,
     contact.phone ? `☎ ${contact.phone}` : null,
+    contact.email ? `✉ ${contact.email}` : null,
+    contact.address ? `📍 ${contact.address}` : null,
     contact.site ? `🌐 ${contact.site}` : null,
   ].filter(Boolean).join(' • ');
 
@@ -113,7 +114,7 @@ footer{
         ${data.logoUrl ? `<img src="${escapeAttr(data.logoUrl)}" alt="Logo" />` : ''}
         <div>
           <h1>${escapeHTML(company)}</h1>
-          <div class="site">${escapeHTML(siteUrl.replace(/^https?:\\/\\//,''))}</div>
+          <div class="site">${escapeHTML(siteUrl.replace(/^https?:\/\/(www\.)?/, ''))}</div>
         </div>
       </div>
       <div class="header-meta">
@@ -162,7 +163,7 @@ footer{
 
   <footer>
     <div class="footer-line-1">${escapeHTML(company)}</div>
-    <div class="footer-line-2">${escapeHTML(contactLine || siteUrl.replace(/^https?:\\/\\//,''))}</div>
+    <div class="footer-line-2">${escapeHTML(contactLine || siteUrl.replace(/^https?:\/\/(www\.)?/, ''))}</div>
   </footer>
 </body>
 </html>`;

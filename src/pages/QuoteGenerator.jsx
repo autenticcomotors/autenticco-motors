@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Helmet } from 'react-helmet';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
-import { getCars } from '@/lib/car-api';
+import { getCars, getPublicationsByCar, getExpensesByCar } from '@/lib/car-api';
 import { Printer, Plus, Copy, Trash2 } from 'lucide-react';
 import { generateQuotePDF } from '@/lib/quote-print';
 
@@ -12,71 +12,39 @@ const currencyBR = (v) =>
 
 const DEFAULT_LABELS = ['OLX', 'Webmotors', 'MercadoLivre', 'Facebook/Instagram', 'Google Ads'];
 
-// ——— helper robusto: extrai custos do objeto do carro por chaves comuns
-function extractCostsFromCar(car) {
-  if (!car) return [];
+const normalize = (s = '') => String(s || '').trim().toLowerCase();
 
-  // mapeamento amigável por “palavras” na chave
-  const map = [
-    { match: ['olx'], label: 'OLX' },
-    { match: ['webmotors'], label: 'Webmotors' },
-    { match: ['mercadolivre', 'ml'], label: 'MercadoLivre' },
-    { match: ['facebook', 'instagram', 'meta'], label: 'Facebook/Instagram' },
-    { match: ['google'], label: 'Google Ads' },
-    { match: ['frete', 'transport'], label: 'Frete' },
-    { match: ['lavag'], label: 'Lavagem' },
-    { match: ['manut', 'revis'], label: 'Manutenção' },
-    { match: ['doc', 'despach'], label: 'Documentos/Despachante' },
-    { match: ['laudo', 'cautel'], label: 'Laudo Cautelar' },
-    { match: ['taxa', 'fee'], label: 'Taxas' },
-    { match: ['extra'], label: 'Gastos extras' },
-  ];
+const mapPlatformLabel = (name = '') => {
+  const n = normalize(name);
+  if (n.includes('olx')) return 'OLX';
+  if (n.includes('webmotors')) return 'Webmotors';
+  if (n.includes('mercado')) return 'MercadoLivre';
+  if (n.includes('facebook') || n.includes('instagram') || n.includes('meta')) return 'Facebook/Instagram';
+  if (n.includes('google')) return 'Google Ads';
+  return name?.trim() || 'Outro';
+};
 
-  const out = {};
-  const add = (label, amount) => {
-    const v = Number(amount);
-    if (!isFinite(v) || v === 0) return;
-    out[label] = (out[label] || 0) + v;
-  };
-
-  // 1) varre chaves numéricas do objeto
-  for (const [k, v] of Object.entries(car)) {
-    const n = Number(v);
-    if (!isFinite(n) || n === 0) continue;
-    const key = String(k).toLowerCase();
-    const hit = map.find((m) => m.match.some((w) => key.includes(w)));
-    if (hit) add(hit.label, n);
-  }
-
-  // 2) arrays comuns: costs / expenses / ad_costs
-  const arrays = ['costs', 'expenses', 'ad_costs', 'gastos', 'custos'];
-  arrays.forEach((arrKey) => {
-    const arr = car[arrKey];
-    if (Array.isArray(arr)) {
-      arr.forEach((item) => {
-        const label = String(item?.label || item?.name || '').trim();
-        const amount = Number(item?.amount ?? item?.value ?? 0);
-        if (label && isFinite(amount)) add(label, amount);
-      });
-    }
-  });
-
-  // 3) retorna como lista ordenada
-  return Object.entries(out)
-    .map(([label, amount]) => ({ id: crypto.randomUUID(), label, amount }))
-    .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
-}
+const mapExpenseLabel = (cat = '', desc = '') => {
+  const key = `${normalize(cat)} ${normalize(desc)}`;
+  if (key.includes('frete') || key.includes('transport')) return 'Frete';
+  if (key.includes('lava')) return 'Lavagem';
+  if (key.includes('manut') || key.includes('revis')) return 'Manutenção';
+  if (key.includes('doc') || key.includes('despach')) return 'Documentos/Despachante';
+  if (key.includes('laudo') || key.includes('cautel') || key.includes('ecv')) return 'Laudo Cautelar';
+  if (key.includes('taxa') || key.includes('fee')) return 'Taxas';
+  return cat?.trim() || 'Gastos extras';
+};
 
 const QuoteGenerator = () => {
-  // ====== Dados do veículo / cabeçalho ======
+  // ====== Cabeçalho ======
   const [cars, setCars] = useState([]);
   const [manualVehicle, setManualVehicle] = useState(false);
   const [vehicleId, setVehicleId] = useState('');
   const [vehicleText, setVehicleText] = useState('');
-  const [period, setPeriod] = useState('até vender'); // pré-preenchido
+  const [period, setPeriod] = useState('até vender');
 
   // título
-  const [titleMode, setTitleMode] = useState('custom'); // ads | docs | custom
+  const [titleMode, setTitleMode] = useState('ads'); // ads | docs | custom
   const [customTitle, setCustomTitle] = useState('');
   const effectiveTitle = useMemo(() => {
     if (titleMode === 'ads') return 'Tabela de Custos — Anúncios e Tráfego Pago';
@@ -87,12 +55,10 @@ const QuoteGenerator = () => {
   // observações
   const [notes, setNotes] = useState('');
 
-  // ====== Itens / valores ======
+  // ====== Itens ======
   const [items, setItems] = useState(
     DEFAULT_LABELS.map((label) => ({ id: crypto.randomUUID(), label, amount: '' }))
   );
-
-  // total
   const total = useMemo(
     () =>
       items.reduce((acc, it) => {
@@ -114,7 +80,6 @@ const QuoteGenerator = () => {
     })();
   }, []);
 
-  // ====== Helpers ======
   const selectedCar = useMemo(
     () => (vehicleId ? (cars || []).find((c) => c.id === vehicleId) : null),
     [vehicleId, cars]
@@ -123,29 +88,21 @@ const QuoteGenerator = () => {
   const handleItemChange = (id, field, value) => {
     setItems((prev) => prev.map((it) => (it.id === id ? { ...it, [field]: value } : it)));
   };
-
-  const addItem = () => {
-    setItems((prev) => [...prev, { id: crypto.randomUUID(), label: '', amount: '' }]);
-  };
-
-  const removeItem = (id) => {
-    setItems((prev) => prev.filter((it) => it.id !== id));
-  };
-
+  const addItem = () => setItems((prev) => [...prev, { id: crypto.randomUUID(), label: '', amount: '' }]);
+  const removeItem = (id) => setItems((prev) => prev.filter((it) => it.id !== id));
   const duplicateItem = (id) => {
     setItems((prev) => {
       const idx = prev.findIndex((it) => it.id === id);
       if (idx < 0) return prev;
-      const base = prev[idx];
-      const dup = { ...base, id: crypto.randomUUID() };
+      const dup = { ...prev[idx], id: crypto.randomUUID() };
       const clone = [...prev];
       clone.splice(idx + 1, 0, dup);
       return clone;
     });
   };
 
-  // Pré-preenche com dados do veículo — AGORA SUBSTITUI A LISTA ATUAL
-  const preloadFromVehicle = () => {
+  // ====== Pré-preencher a partir do banco ======
+  const preloadFromVehicle = async () => {
     const car = selectedCar;
     if (!manualVehicle && !car) {
       toast({ title: 'Selecione um veículo do estoque ou marque "Digitar manualmente".' });
@@ -153,44 +110,67 @@ const QuoteGenerator = () => {
     }
 
     if (!manualVehicle && car) {
-      const name = `${car.brand || ''} ${car.model || ''} ${
-        car.year ? `(${car.year})` : ''
-      } ${car.plate ? `• ${car.plate}` : ''}`.trim();
+      const name = `${car.brand || ''} ${car.model || ''} ${car.year ? `(${car.year})` : ''} ${
+        car.plate ? `• ${car.plate}` : ''
+      }`.trim();
       if (!vehicleText) setVehicleText(name);
     }
 
-    const extracted = extractCostsFromCar(car || {});
-    // sempre garante as labels padrão no topo (vazias se não vierem do carro)
-    const baseTraffic = DEFAULT_LABELS.map((l) => {
-      const found = extracted.find((e) => e.label.toLowerCase() === l.toLowerCase());
-      return { id: crypto.randomUUID(), label: l, amount: found ? String(found.amount) : '' };
+    // 1) anúncios (vehicle_publications.spent)
+    let pubs = [];
+    // 2) gastos (vehicle_expenses.amount / category / description)
+    let exps = [];
+    try {
+      if (car?.id) {
+        pubs = await getPublicationsByCar(car.id); // [{ platform_name?, spent, ... }]
+        exps = await getExpensesByCar(car.id);     // [{ category, description, amount, ... }]
+      }
+    } catch (e) {
+      console.error('Erro ao buscar pubs/expenses:', e);
+    }
+
+    const map = new Map();
+
+    // começa com labels padrão (sem valores)
+    DEFAULT_LABELS.forEach((l) => map.set(l, 0));
+
+    // anúncios
+    (pubs || []).forEach((p) => {
+      const label = mapPlatformLabel(p?.platform_name || p?.platform || p?.name || 'Anúncio');
+      const val = Number(p?.spent || 0);
+      if (!isNaN(val) && val) map.set(label, (map.get(label) || 0) + val);
     });
 
-    // merge: padrões + demais custos únicos (sem duplicar)
-    const rest = extracted.filter(
-      (e) => !DEFAULT_LABELS.some((l) => l.toLowerCase() === e.label.toLowerCase())
-    ).map((e) => ({ id: crypto.randomUUID(), label: e.label, amount: String(e.amount) }));
+    // gastos
+    (exps || []).forEach((g) => {
+      const label = mapExpenseLabel(g?.category, g?.description);
+      const val = Number(g?.amount || g?.value || 0);
+      if (!isNaN(val) && val) map.set(label, (map.get(label) || 0) + val);
+    });
 
-    const merged = [...baseTraffic, ...rest];
+    // monta a lista e SUBSTITUI os itens
+    const merged = Array.from(map.entries()).map(([label, amount]) => ({
+      id: crypto.randomUUID(),
+      label,
+      amount: amount ? String(amount.toFixed(2)) : '',
+    }));
 
-    // *** SUBSTITUI lista atual ***
-    setItems(merged.length ? merged : baseTraffic);
+    setItems(merged);
     toast({ title: 'Itens carregados do veículo (editáveis).' });
   };
 
   // ====== PDF ======
   const handleGenerate = async () => {
     const payload = {
-      logoUrl: '/logo.png', // ajuste se necessário
+      logoUrl: '/logo.png', // se não existir, o layout usa fallback (marca d’água garante branding)
       siteUrl: 'https://autenticcomotors.com.br',
-      social: ['Instagram', 'Facebook', 'YouTube', 'TikTok'],
       title: effectiveTitle,
       vehicle:
         manualVehicle || !selectedCar
-          ? vehicleText
-          : `${selectedCar.brand || ''} ${selectedCar.model || ''}${
-              selectedCar.year ? ` (${selectedCar.year})` : ''
-            }${selectedCar.plate ? ` • ${selectedCar.plate}` : ''}`.trim(),
+          ? (vehicleText || '-')
+          : `${selectedCar.brand || ''} ${selectedCar.model || ''}${selectedCar.year ? ` (${selectedCar.year})` : ''}${
+              selectedCar.plate ? ` • ${selectedCar.plate}` : ''
+            }`.trim(),
       period,
       notes,
       items: items.map((it) => ({
@@ -236,9 +216,7 @@ const QuoteGenerator = () => {
                 checked={manualVehicle}
                 onChange={(e) => setManualVehicle(e.target.checked)}
               />
-              <label htmlFor="manualVehicle" className="text-sm">
-                Digitar manualmente
-              </label>
+              <label htmlFor="manualVehicle" className="text-sm">Digitar manualmente</label>
             </div>
 
             {!manualVehicle ? (
@@ -278,33 +256,15 @@ const QuoteGenerator = () => {
 
             <div className="space-y-2">
               <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="radio"
-                  name="titleMode"
-                  value="ads"
-                  checked={titleMode === 'ads'}
-                  onChange={() => setTitleMode('ads')}
-                />
+                <input type="radio" name="titleMode" value="ads" checked={titleMode === 'ads'} onChange={() => setTitleMode('ads')} />
                 Tabela de Custos — Anúncios e Tráfego Pago
               </label>
               <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="radio"
-                  name="titleMode"
-                  value="docs"
-                  checked={titleMode === 'docs'}
-                  onChange={() => setTitleMode('docs')}
-                />
+                <input type="radio" name="titleMode" value="docs" checked={titleMode === 'docs'} onChange={() => setTitleMode('docs')} />
                 Documentação
               </label>
               <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="radio"
-                  name="titleMode"
-                  value="custom"
-                  checked={titleMode === 'custom'}
-                  onChange={() => setTitleMode('custom')}
-                />
+                <input type="radio" name="titleMode" value="custom" checked={titleMode === 'custom'} onChange={() => setTitleMode('custom')} />
                 Personalizado
               </label>
             </div>
@@ -327,9 +287,7 @@ const QuoteGenerator = () => {
               value={period}
               onChange={(e) => setPeriod(e.target.value)}
             />
-            <p className="text-xs text-gray-500 mt-1">
-              Deixe como “até vender” ou edite manualmente (ex.: 27/08/2025 a 14/10/2025).
-            </p>
+            <p className="text-xs text-gray-500 mt-1">Deixe como “até vender” ou edite manualmente.</p>
           </div>
 
           {/* observações */}
@@ -357,8 +315,8 @@ const QuoteGenerator = () => {
             </Button>
           </div>
 
-          {/* Cabeçalho das colunas */}
-          <div className="grid grid-cols-[1fr,160px,152px] gap-2 items-center text-xs font-semibold text-gray-600 mb-2">
+          {/* Cabeçalho */}
+          <div className="grid grid-cols-[1fr,140px,92px] gap-2 items-center text-xs font-semibold text-gray-600 mb-2">
             <div>Item</div>
             <div>Preço (R$)</div>
             <div className="text-right">Ações</div>
@@ -367,10 +325,7 @@ const QuoteGenerator = () => {
           {/* Linhas */}
           <div className="space-y-2">
             {items.map((it) => (
-              <div
-                key={it.id}
-                className="grid grid-cols-[1fr,160px,152px] gap-2 items-center"
-              >
+              <div key={it.id} className="grid grid-cols-[1fr,140px,92px] gap-2 items-center">
                 <input
                   className="border rounded-md p-2 text-sm"
                   value={it.label}
@@ -384,23 +339,23 @@ const QuoteGenerator = () => {
                   placeholder="0,00"
                   inputMode="decimal"
                 />
-                <div className="flex justify-end gap-2 whitespace-nowrap">
-                  <Button
+                <div className="flex justify-end gap-2">
+                  <button
                     type="button"
+                    title="Duplicar"
                     onClick={() => duplicateItem(it.id)}
-                    className="h-8 px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-800"
+                    className="h-8 w-8 inline-flex items-center justify-center rounded border bg-gray-100 hover:bg-gray-200"
                   >
-                    <Copy className="h-3.5 w-3.5 mr-1" />
-                    Duplicar
-                  </Button>
-                  <Button
+                    <Copy className="h-4 w-4" />
+                  </button>
+                  <button
                     type="button"
+                    title="Excluir"
                     onClick={() => removeItem(it.id)}
-                    className="h-8 px-2 py-1 text-xs bg-red-500 hover:bg-red-600 text-white"
+                    className="h-8 w-8 inline-flex items-center justify-center rounded border bg-red-500 text-white hover:bg-red-600"
                   >
-                    <Trash2 className="h-3.5 w-3.5 mr-1" />
-                    Excluir
-                  </Button>
+                    <Trash2 className="h-4 w-4" />
+                  </button>
                 </div>
               </div>
             ))}
@@ -417,11 +372,7 @@ const QuoteGenerator = () => {
 
           {/* Ação principal */}
           <div className="mt-6 flex justify-end">
-            <Button
-              onClick={handleGenerate}
-              className="bg-yellow-400 text-black hover:bg-yellow-500"
-              type="button"
-            >
+            <Button onClick={handleGenerate} className="bg-yellow-400 text-black hover:bg-yellow-500" type="button">
               <Printer className="w-4 h-4 mr-2" />
               GERAR DOCUMENTO
             </Button>

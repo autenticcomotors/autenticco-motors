@@ -26,20 +26,7 @@ export async function generateQuotePDF(data) {
 :root{--primary:${primary};--dark:${dark};}
 *{box-sizing:border-box}
 body{margin:0;font-family:ui-sans-serif,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial,"Noto Sans",sans-serif;color:#111827;background:#fff}
-.wrap{max-width:900px;margin:24px auto;padding:28px 22px 64px;border:1px solid #e5e7eb;border-radius:16px;position:relative;overflow:hidden;}
-/* Marca d'água */
-.watermark{
-  position:absolute;inset:0;pointer-events:none;
-  background:
-    radial-gradient(ellipse at center, rgba(0,0,0,.04) 0%, rgba(0,0,0,0) 60%) center/120% 120% no-repeat;
-}
-.watermark::after{
-  content:"AUTENTICCO MOTORS";
-  position:absolute;left:50%;top:45%;
-  transform:translate(-50%,-50%) rotate(-18deg);
-  font-weight:900;letter-spacing:.18em;
-  font-size:68px;color:#000;opacity:.05;white-space:nowrap;
-}
+.wrap{max-width:900px;margin:24px auto;padding:28px 22px 62px;border:1px solid #e5e7eb;border-radius:16px;position:relative;}
 header{display:flex;align-items:center;gap:16px;border-bottom:4px solid var(--primary);padding-bottom:16px;margin-bottom:20px;}
 .brand{display:flex;align-items:center;gap:12px;}
 .brand img{height:56px;width:auto;object-fit:contain;border-radius:8px;background:#fff;}
@@ -47,7 +34,6 @@ header{display:flex;align-items:center;gap:16px;border-bottom:4px solid var(--pr
 .muted{color:#6b7280;font-size:12px}
 .h-badge{display:inline-flex;gap:8px;align-items:center}
 .h-pill{display:inline-block;background:var(--primary);color:#000;font-weight:800;font-size:11px;padding:4px 8px;border-radius:999px}
-.icon{display:inline-block;width:14px;height:14px;vertical-align:-2px;color:#111}
 /* títulos e boxes */
 h2.title{margin:0 0 12px 0;font-size:20px;font-weight:900;color:#111;}
 .box{border:1px solid #e5e7eb;border-radius:12px;padding:14px;margin-bottom:14px;background:#fff;}
@@ -67,11 +53,11 @@ footer{position:fixed;left:0;right:0;bottom:0;border-top:2px solid var(--primary
   .wrap{border:none;margin:0;padding:20px 12mm 20mm 12mm;}
   footer{position:fixed;}
 }
+.icon{display:inline-block;width:14px;height:14px;vertical-align:-2px;color:#111}
 </style>
 </head>
 <body>
   <div class="wrap">
-    <div class="watermark"></div>
     <header>
       <div class="brand">
         ${data.logoUrl ? `<img src="${escapeAttr(data.logoUrl)}" alt="logo" />` : ''}
@@ -121,13 +107,11 @@ footer{position:fixed;left:0;right:0;bottom:0;border-top:2px solid var(--primary
       </div>` : ''}
   </div>
 
-  <footer>
-    <strong>${escapeHTML(data.siteUrl || 'autenticcomotors.com.br')}</strong>
-  </footer>
+  <footer><strong>${escapeHTML(data.siteUrl || 'autenticcomotors.com.br')}</strong></footer>
 </body>
 </html>`;
 
-  // IFRAME oculto para imprimir
+  // impressão via IFRAME (sem popup)
   const iframe = document.createElement('iframe');
   iframe.style.position = 'fixed';
   iframe.style.right = '0';
@@ -160,7 +144,7 @@ footer{position:fixed;left:0;right:0;bottom:0;border-top:2px solid var(--primary
   finally { setTimeout(() => iframe.parentNode && iframe.parentNode.removeChild(iframe), 1500); }
 }
 
-// ====== helpers ======
+// helpers
 function escapeHTML(str) {
   return String(str || '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -168,7 +152,7 @@ function escapeHTML(str) {
 }
 function escapeAttr(str){ return String(str || '').replace(/"/g, '&quot;'); }
 
-// ícones inline (SVG minimalistas)
+// ícones inline (SVGs simples)
 function svgCar(){return '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 13l2-5a2 2 0 012-1h10a2 2 0 012 1l2 5"/><path d="M5 16h14"/><circle cx="7.5" cy="16.5" r="1.5"/><circle cx="16.5" cy="16.5" r="1.5"/></svg>';}
 function svgCalendar(){return '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>';}
 function svgMoney(){return '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M8 12h5a2 2 0 100-4h-3m0 8h4"/></svg>';}

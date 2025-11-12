@@ -13,7 +13,6 @@ const currencyBR = (v) =>
 const DEFAULT_LABELS = ['OLX', 'Webmotors', 'MercadoLivre', 'Facebook/Instagram', 'Google Ads'];
 
 const normalize = (s = '') => String(s || '').trim().toLowerCase();
-
 const mapPlatformLabel = (name = '') => {
   const n = normalize(name);
   if (n.includes('olx')) return 'OLX';
@@ -21,9 +20,8 @@ const mapPlatformLabel = (name = '') => {
   if (n.includes('mercado')) return 'MercadoLivre';
   if (n.includes('facebook') || n.includes('instagram') || n.includes('meta')) return 'Facebook/Instagram';
   if (n.includes('google')) return 'Google Ads';
-  return name?.trim() || 'Outro';
+  return (name || 'Anúncio').trim();
 };
-
 const mapExpenseLabel = (cat = '', desc = '') => {
   const key = `${normalize(cat)} ${normalize(desc)}`;
   if (key.includes('frete') || key.includes('transport')) return 'Frete';
@@ -36,14 +34,12 @@ const mapExpenseLabel = (cat = '', desc = '') => {
 };
 
 const QuoteGenerator = () => {
-  // ====== Cabeçalho ======
   const [cars, setCars] = useState([]);
   const [manualVehicle, setManualVehicle] = useState(false);
   const [vehicleId, setVehicleId] = useState('');
   const [vehicleText, setVehicleText] = useState('');
   const [period, setPeriod] = useState('até vender');
 
-  // título
   const [titleMode, setTitleMode] = useState('ads'); // ads | docs | custom
   const [customTitle, setCustomTitle] = useState('');
   const effectiveTitle = useMemo(() => {
@@ -52,13 +48,12 @@ const QuoteGenerator = () => {
     return customTitle || 'Relatório de Custos';
   }, [titleMode, customTitle]);
 
-  // observações
   const [notes, setNotes] = useState('');
 
-  // ====== Itens ======
   const [items, setItems] = useState(
     DEFAULT_LABELS.map((label) => ({ id: crypto.randomUUID(), label, amount: '' }))
   );
+
   const total = useMemo(
     () =>
       items.reduce((acc, it) => {
@@ -68,7 +63,6 @@ const QuoteGenerator = () => {
     [items]
   );
 
-  // ====== Carrega carros ======
   useEffect(() => {
     (async () => {
       try {
@@ -88,9 +82,10 @@ const QuoteGenerator = () => {
   const handleItemChange = (id, field, value) => {
     setItems((prev) => prev.map((it) => (it.id === id ? { ...it, [field]: value } : it)));
   };
-  const addItem = () => setItems((prev) => [...prev, { id: crypto.randomUUID(), label: '', amount: '' }]);
+  const addItem = () =>
+    setItems((prev) => [...prev, { id: crypto.randomUUID(), label: '', amount: '' }]);
   const removeItem = (id) => setItems((prev) => prev.filter((it) => it.id !== id));
-  const duplicateItem = (id) => {
+  const duplicateItem = (id) =>
     setItems((prev) => {
       const idx = prev.findIndex((it) => it.id === id);
       if (idx < 0) return prev;
@@ -99,9 +94,8 @@ const QuoteGenerator = () => {
       clone.splice(idx + 1, 0, dup);
       return clone;
     });
-  };
 
-  // ====== Pré-preencher a partir do banco ======
+  // PRÉ-PREENCHER — anúncios em LINHAS SEPARADAS + gastos agregados
   const preloadFromVehicle = async () => {
     const car = selectedCar;
     if (!manualVehicle && !car) {
@@ -116,53 +110,56 @@ const QuoteGenerator = () => {
       if (!vehicleText) setVehicleText(name);
     }
 
-    // 1) anúncios (vehicle_publications.spent)
     let pubs = [];
-    // 2) gastos (vehicle_expenses.amount / category / description)
     let exps = [];
     try {
       if (car?.id) {
-        pubs = await getPublicationsByCar(car.id); // [{ platform_name?, spent, ... }]
-        exps = await getExpensesByCar(car.id);     // [{ category, description, amount, ... }]
+        pubs = await getPublicationsByCar(car.id); // [{ platform_name?, title?, reference?, spent }]
+        exps = await getExpensesByCar(car.id);     // [{ category, description, amount }]
       }
     } catch (e) {
       console.error('Erro ao buscar pubs/expenses:', e);
     }
 
-    const map = new Map();
+    // 1) anúncios: UMA LINHA POR ANÚNCIO
+    const adItems = (pubs || [])
+      .map((p) => {
+        const platform = mapPlatformLabel(p?.platform_name || p?.platform || p?.name);
+        const labelExtra = p?.title || p?.reference || p?.listing_id || p?.id || '';
+        const label =
+          labelExtra && String(labelExtra).trim()
+            ? `${platform} — ${String(labelExtra).trim()}`
+            : platform;
+        const val = Number(p?.spent || 0);
+        if (!isFinite(val) || val <= 0) return null;
+        return { id: crypto.randomUUID(), label, amount: String(val.toFixed(2)) };
+      })
+      .filter(Boolean);
 
-    // começa com labels padrão (sem valores)
-    DEFAULT_LABELS.forEach((l) => map.set(l, 0));
-
-    // anúncios
-    (pubs || []).forEach((p) => {
-      const label = mapPlatformLabel(p?.platform_name || p?.platform || p?.name || 'Anúncio');
-      const val = Number(p?.spent || 0);
-      if (!isNaN(val) && val) map.set(label, (map.get(label) || 0) + val);
-    });
-
-    // gastos
+    // 2) gastos: agregados por categoria legível
+    const byCat = new Map();
     (exps || []).forEach((g) => {
       const label = mapExpenseLabel(g?.category, g?.description);
-      const val = Number(g?.amount || g?.value || 0);
-      if (!isNaN(val) && val) map.set(label, (map.get(label) || 0) + val);
+      const v = Number(g?.amount || g?.value || 0);
+      if (!isFinite(v) || v <= 0) return;
+      byCat.set(label, (byCat.get(label) || 0) + v);
     });
-
-    // monta a lista e SUBSTITUI os itens
-    const merged = Array.from(map.entries()).map(([label, amount]) => ({
+    const expItems = Array.from(byCat.entries()).map(([label, v]) => ({
       id: crypto.randomUUID(),
       label,
-      amount: amount ? String(amount.toFixed(2)) : '',
+      amount: String(v.toFixed(2)),
     }));
 
-    setItems(merged);
+    const merged = [...adItems, ...expItems];
+
+    // Se não houver nada do carro, cai para labels padrão vazias
+    setItems(merged.length ? merged : DEFAULT_LABELS.map((l) => ({ id: crypto.randomUUID(), label: l, amount: '' })));
     toast({ title: 'Itens carregados do veículo (editáveis).' });
   };
 
-  // ====== PDF ======
   const handleGenerate = async () => {
     const payload = {
-      logoUrl: '/logo.png', // se não existir, o layout usa fallback (marca d’água garante branding)
+      logoUrl: '/logo.png', // use sua logo pública; se não existir, só não mostra a imagem
       siteUrl: 'https://autenticcomotors.com.br',
       title: effectiveTitle,
       vehicle:
@@ -204,9 +201,8 @@ const QuoteGenerator = () => {
       </h1>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* ====== COL ESQUERDA ====== */}
+        {/* ESQUERDA */}
         <div className="space-y-4">
-          {/* veículo */}
           <div className="border rounded-xl p-4 bg-white">
             <p className="font-semibold mb-3">Veículo</p>
             <div className="flex items-center gap-3 mb-3">
@@ -241,19 +237,13 @@ const QuoteGenerator = () => {
               />
             )}
 
-            <Button
-              onClick={preloadFromVehicle}
-              className="w-full bg-black text-white hover:bg-gray-800"
-              type="button"
-            >
+            <Button onClick={preloadFromVehicle} className="w-full bg-black text-white hover:bg-gray-800" type="button">
               Pré-preencher com dados do veículo
             </Button>
           </div>
 
-          {/* título */}
           <div className="border rounded-xl p-4 bg-white">
             <p className="font-semibold mb-3">Título do documento</p>
-
             <div className="space-y-2">
               <label className="flex items-center gap-2 text-sm">
                 <input type="radio" name="titleMode" value="ads" checked={titleMode === 'ads'} onChange={() => setTitleMode('ads')} />
@@ -268,7 +258,6 @@ const QuoteGenerator = () => {
                 Personalizado
               </label>
             </div>
-
             <input
               className="mt-3 w-full border rounded-md p-2"
               placeholder="Digite o título"
@@ -278,7 +267,6 @@ const QuoteGenerator = () => {
             />
           </div>
 
-          {/* período */}
           <div className="border rounded-xl p-4 bg-white">
             <p className="font-semibold mb-2">Período</p>
             <input
@@ -290,7 +278,6 @@ const QuoteGenerator = () => {
             <p className="text-xs text-gray-500 mt-1">Deixe como “até vender” ou edite manualmente.</p>
           </div>
 
-          {/* observações */}
           <div className="border rounded-xl p-4 bg-white">
             <p className="font-semibold mb-2">Observações (opcional)</p>
             <textarea
@@ -302,27 +289,21 @@ const QuoteGenerator = () => {
           </div>
         </div>
 
-        {/* ====== COL DIREITA ====== */}
+        {/* DIREITA */}
         <div className="border rounded-xl p-4 bg-white">
           <div className="flex items-center justify-between mb-3">
             <p className="font-semibold">Itens do orçamento</p>
-            <Button
-              type="button"
-              onClick={addItem}
-              className="bg-yellow-400 text-black hover:bg-yellow-500 h-8 px-2 py-1 text-xs"
-            >
+            <Button type="button" onClick={addItem} className="bg-yellow-400 text-black hover:bg-yellow-500 h-8 px-2 py-1 text-xs">
               <Plus className="h-4 w-4 mr-1" /> Adicionar item
             </Button>
           </div>
 
-          {/* Cabeçalho */}
           <div className="grid grid-cols-[1fr,140px,92px] gap-2 items-center text-xs font-semibold text-gray-600 mb-2">
             <div>Item</div>
             <div>Preço (R$)</div>
             <div className="text-right">Ações</div>
           </div>
 
-          {/* Linhas */}
           <div className="space-y-2">
             {items.map((it) => (
               <div key={it.id} className="grid grid-cols-[1fr,140px,92px] gap-2 items-center">
@@ -361,7 +342,6 @@ const QuoteGenerator = () => {
             ))}
           </div>
 
-          {/* Total */}
           <div className="mt-6 flex items-center justify-between">
             <div />
             <div className="text-right">
@@ -370,7 +350,6 @@ const QuoteGenerator = () => {
             </div>
           </div>
 
-          {/* Ação principal */}
           <div className="mt-6 flex justify-end">
             <Button onClick={handleGenerate} className="bg-yellow-400 text-black hover:bg-yellow-500" type="button">
               <Printer className="w-4 h-4 mr-2" />

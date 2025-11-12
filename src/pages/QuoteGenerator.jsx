@@ -1,3 +1,4 @@
+// src/pages/QuoteGenerator.jsx
 import React, { useEffect, useMemo, useState } from 'react';
 import { Helmet } from 'react-helmet';
 import { Button } from '@/components/ui/button';
@@ -5,6 +6,7 @@ import { toast } from '@/components/ui/use-toast';
 import { getCars, getPublicationsByCar, getExpensesByCar } from '@/lib/car-api';
 import { Printer, Plus, Copy, Trash2 } from 'lucide-react';
 import { generateQuotePDF } from '@/lib/quote-print';
+import Logo from '@/assets/logo.png'; // garante o path correto em produção (Vite)
 
 const currencyBR = (v) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -13,6 +15,7 @@ const currencyBR = (v) =>
 const DEFAULT_LABELS = ['OLX', 'Webmotors', 'MercadoLivre', 'Facebook/Instagram', 'Google Ads'];
 
 const normalize = (s = '') => String(s || '').trim().toLowerCase();
+
 const mapPlatformLabel = (name = '') => {
   const n = normalize(name);
   if (n.includes('olx')) return 'OLX';
@@ -22,6 +25,7 @@ const mapPlatformLabel = (name = '') => {
   if (n.includes('google')) return 'Google Ads';
   return (name || 'Anúncio').trim();
 };
+
 const mapExpenseLabel = (cat = '', desc = '') => {
   const key = `${normalize(cat)} ${normalize(desc)}`;
   if (key.includes('frete') || key.includes('transport')) return 'Frete';
@@ -34,12 +38,14 @@ const mapExpenseLabel = (cat = '', desc = '') => {
 };
 
 const QuoteGenerator = () => {
+  // ====== Cabeçalho ======
   const [cars, setCars] = useState([]);
   const [manualVehicle, setManualVehicle] = useState(false);
   const [vehicleId, setVehicleId] = useState('');
   const [vehicleText, setVehicleText] = useState('');
   const [period, setPeriod] = useState('até vender');
 
+  // título
   const [titleMode, setTitleMode] = useState('ads'); // ads | docs | custom
   const [customTitle, setCustomTitle] = useState('');
   const effectiveTitle = useMemo(() => {
@@ -48,8 +54,10 @@ const QuoteGenerator = () => {
     return customTitle || 'Relatório de Custos';
   }, [titleMode, customTitle]);
 
+  // observações
   const [notes, setNotes] = useState('');
 
+  // ====== Itens ======
   const [items, setItems] = useState(
     DEFAULT_LABELS.map((label) => ({ id: crypto.randomUUID(), label, amount: '' }))
   );
@@ -63,6 +71,7 @@ const QuoteGenerator = () => {
     [items]
   );
 
+  // ====== Carrega carros ======
   useEffect(() => {
     (async () => {
       try {
@@ -82,10 +91,12 @@ const QuoteGenerator = () => {
   const handleItemChange = (id, field, value) => {
     setItems((prev) => prev.map((it) => (it.id === id ? { ...it, [field]: value } : it)));
   };
-  const addItem = () =>
-    setItems((prev) => [...prev, { id: crypto.randomUUID(), label: '', amount: '' }]);
+
+  const addItem = () => setItems((prev) => [...prev, { id: crypto.randomUUID(), label: '', amount: '' }]);
+
   const removeItem = (id) => setItems((prev) => prev.filter((it) => it.id !== id));
-  const duplicateItem = (id) =>
+
+  const duplicateItem = (id) => {
     setItems((prev) => {
       const idx = prev.findIndex((it) => it.id === id);
       if (idx < 0) return prev;
@@ -94,8 +105,9 @@ const QuoteGenerator = () => {
       clone.splice(idx + 1, 0, dup);
       return clone;
     });
+  };
 
-  // PRÉ-PREENCHER — anúncios em LINHAS SEPARADAS + gastos agregados
+  // ====== Pré-preencher a partir do banco ======
   const preloadFromVehicle = async () => {
     const car = selectedCar;
     if (!manualVehicle && !car) {
@@ -110,7 +122,9 @@ const QuoteGenerator = () => {
       if (!vehicleText) setVehicleText(name);
     }
 
+    // 1) anúncios
     let pubs = [];
+    // 2) gastos
     let exps = [];
     try {
       if (car?.id) {
@@ -157,10 +171,17 @@ const QuoteGenerator = () => {
     toast({ title: 'Itens carregados do veículo (editáveis).' });
   };
 
+  // ====== PDF ======
   const handleGenerate = async () => {
     const payload = {
-      logoUrl: '/logo.png', // use sua logo pública; se não existir, só não mostra a imagem
+      logoUrl: Logo, // usa import para garantir resolução de path
       siteUrl: 'https://autenticcomotors.com.br',
+      companyName: 'AutenTicco Motors',
+      contact: {
+        address: 'São Paulo — SP',  // ajuste se quiser endereço completo
+        phone: '(11) 99999-9999',   // ajuste com seu número
+        site: 'autenticcomotors.com.br',
+      },
       title: effectiveTitle,
       vehicle:
         manualVehicle || !selectedCar
@@ -201,8 +222,9 @@ const QuoteGenerator = () => {
       </h1>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* ESQUERDA */}
+        {/* ====== COL ESQUERDA ====== */}
         <div className="space-y-4">
+          {/* veículo */}
           <div className="border rounded-xl p-4 bg-white">
             <p className="font-semibold mb-3">Veículo</p>
             <div className="flex items-center gap-3 mb-3">
@@ -237,13 +259,19 @@ const QuoteGenerator = () => {
               />
             )}
 
-            <Button onClick={preloadFromVehicle} className="w-full bg-black text-white hover:bg-gray-800" type="button">
+            <Button
+              onClick={preloadFromVehicle}
+              className="w-full bg-black text-white hover:bg-gray-800"
+              type="button"
+            >
               Pré-preencher com dados do veículo
             </Button>
           </div>
 
+          {/* título */}
           <div className="border rounded-xl p-4 bg-white">
             <p className="font-semibold mb-3">Título do documento</p>
+
             <div className="space-y-2">
               <label className="flex items-center gap-2 text-sm">
                 <input type="radio" name="titleMode" value="ads" checked={titleMode === 'ads'} onChange={() => setTitleMode('ads')} />
@@ -258,6 +286,7 @@ const QuoteGenerator = () => {
                 Personalizado
               </label>
             </div>
+
             <input
               className="mt-3 w-full border rounded-md p-2"
               placeholder="Digite o título"
@@ -267,6 +296,7 @@ const QuoteGenerator = () => {
             />
           </div>
 
+          {/* período */}
           <div className="border rounded-xl p-4 bg-white">
             <p className="font-semibold mb-2">Período</p>
             <input
@@ -278,6 +308,7 @@ const QuoteGenerator = () => {
             <p className="text-xs text-gray-500 mt-1">Deixe como “até vender” ou edite manualmente.</p>
           </div>
 
+          {/* observações */}
           <div className="border rounded-xl p-4 bg-white">
             <p className="font-semibold mb-2">Observações (opcional)</p>
             <textarea
@@ -289,21 +320,27 @@ const QuoteGenerator = () => {
           </div>
         </div>
 
-        {/* DIREITA */}
+        {/* ====== COL DIREITA ====== */}
         <div className="border rounded-xl p-4 bg-white">
           <div className="flex items-center justify-between mb-3">
             <p className="font-semibold">Itens do orçamento</p>
-            <Button type="button" onClick={addItem} className="bg-yellow-400 text-black hover:bg-yellow-500 h-8 px-2 py-1 text-xs">
+            <Button
+              type="button"
+              onClick={addItem}
+              className="bg-yellow-400 text-black hover:bg-yellow-500 h-8 px-2 py-1 text-xs"
+            >
               <Plus className="h-4 w-4 mr-1" /> Adicionar item
             </Button>
           </div>
 
+          {/* Cabeçalho */}
           <div className="grid grid-cols-[1fr,140px,92px] gap-2 items-center text-xs font-semibold text-gray-600 mb-2">
             <div>Item</div>
             <div>Preço (R$)</div>
             <div className="text-right">Ações</div>
           </div>
 
+          {/* Linhas */}
           <div className="space-y-2">
             {items.map((it) => (
               <div key={it.id} className="grid grid-cols-[1fr,140px,92px] gap-2 items-center">
@@ -342,6 +379,7 @@ const QuoteGenerator = () => {
             ))}
           </div>
 
+          {/* Total */}
           <div className="mt-6 flex items-center justify-between">
             <div />
             <div className="text-right">
@@ -350,6 +388,7 @@ const QuoteGenerator = () => {
             </div>
           </div>
 
+          {/* Ação principal */}
           <div className="mt-6 flex justify-end">
             <Button onClick={handleGenerate} className="bg-yellow-400 text-black hover:bg-yellow-500" type="button">
               <Printer className="w-4 h-4 mr-2" />

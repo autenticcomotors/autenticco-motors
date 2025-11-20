@@ -20,7 +20,9 @@ export async function generateChecklistPDF(payload) {
   const interno = payload?.interno || [];
   const observacoes = payload?.observacoes || '';
 
-  const problemas = [...externo, ...interno].filter((x) => x.status && x.status !== 'OK');
+  const problemas = [...externo, ...interno].filter(
+    (x) => x.status && x.status !== 'OK'
+  );
 
   const html = `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -33,45 +35,166 @@ export async function generateChecklistPDF(payload) {
 <style>
 :root{--primary:${primary};--dark:${dark}}
 *{box-sizing:border-box}
-body{margin:0;background:#fff;color:#0f172a;font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
-.wrap{max-width:940px;margin:24px auto;padding:28px 24px 88px;border:1px solid #e5e7eb;border-radius:18px;background:#fff;box-shadow:0 8px 30px rgba(0,0,0,.06)}
-header{display:flex;align-items:center;gap:16px;padding-bottom:16px;margin-bottom:20px;border-bottom:6px solid var(--primary)}
-.brand{display:flex;align-items:center;gap:14px}
-.brand img{height:60px;width:auto;object-fit:contain;border-radius:10px;background:#fff}
-.brand h1{margin:0;font-size:22px;line-height:1.2;font-weight:900}
-.brand .site{color:#64748b;font-size:12px}
+body{
+  margin:0;
+  background:#fff;
+  color:#0f172a;
+  font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+  font-size:11px;
+}
+.wrap{
+  max-width:940px;
+  margin:16px auto;
+  padding:18px 18px 70px;
+  border:1px solid #e5e7eb;
+  border-radius:16px;
+  background:#fff;
+  box-shadow:0 6px 24px rgba(0,0,0,.05);
+}
+header{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding-bottom:10px;
+  margin-bottom:12px;
+  border-bottom:4px solid var(--primary);
+}
+.brand{display:flex;align-items:center;gap:10px}
+.brand img{
+  height:46px;
+  width:auto;
+  object-fit:contain;
+  border-radius:8px;
+  background:#fff;
+}
+.brand h1{
+  margin:0;
+  font-size:18px;
+  line-height:1.2;
+  font-weight:900;
+}
+.brand .site{color:#64748b;font-size:11px}
 .header-meta{margin-left:auto;text-align:right}
-.badge{display:inline-block;background:var(--primary);color:#111;font-weight:800;font-size:11px;padding:5px 10px;border-radius:999px}
-.meta-small{color:#64748b;font-size:12px;margin-top:6px}
+.badge{
+  display:inline-block;
+  background:var(--primary);
+  color:#111;
+  font-weight:800;
+  font-size:10px;
+  padding:4px 8px;
+  border-radius:999px;
+}
+.meta-small{color:#64748b;font-size:10px;margin-top:4px}
 
-.section-title{display:flex;align-items:center;gap:8px;margin:16px 0 10px;font-weight:900}
-.section-title .dot{width:8px;height:8px;border-radius:99px;background:var(--primary)}
+.section-title{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  margin:10px 0 6px;
+  font-weight:800;
+  font-size:11px;
+}
+.section-title .dot{
+  width:7px;
+  height:7px;
+  border-radius:99px;
+  background:var(--primary);
+}
 
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:6px 0 14px}
-.card{border:1px solid #eaecef;border-radius:14px;padding:12px 14px;background:#fff;box-shadow:0 4px 16px rgba(0,0,0,.04)}
-.card .label{font-size:12px;color:#64748b;margin-bottom:6px}
-.card .value{font-size:14px;font-weight:700}
+.cards{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+  gap:8px;
+  margin:4px 0 8px;
+}
+.card{
+  border:1px solid #e5e7eb;
+  border-radius:10px;
+  padding:8px 9px;
+  background:#fff;
+}
+.card .label{font-size:10px;color:#64748b;margin-bottom:4px}
+.card .value{font-size:12px;font-weight:700}
 
-.table{border:1px solid #eaecef;border-radius:14px;overflow:hidden;background:#fff;box-shadow:0 4px 16px rgba(0,0,0,.04);margin-bottom:14px}
+.alert{
+  border:1px dashed #eab308;
+  background:#fffbeb;
+  border-radius:10px;
+  padding:8px 9px;
+  font-size:10px;
+  margin-bottom:8px;
+}
+.alert .title{font-weight:800;margin-bottom:4px}
+.alert ul{margin:4px 0 0 16px;padding:0}
+.alert li{margin-bottom:2px}
+
+.two-cols{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(0,1fr));
+  gap:8px;
+  margin:4px 0 10px;
+}
+.table{
+  border:1px solid #e5e7eb;
+  border-radius:10px;
+  overflow:hidden;
+  background:#fff;
+}
 table{width:100%;border-collapse:separate;border-spacing:0}
-thead th{background:#0f172a;color:#fff;text-align:left;padding:10px 12px;font-size:12px}
-tbody td{padding:10px 12px;font-size:14px;border-top:1px solid #f1f5f9}
+thead th{
+  background:#0f172a;
+  color:#fff;
+  text-align:left;
+  padding:6px 7px;
+  font-size:10px;
+}
+tbody td{
+  padding:5px 7px;
+  font-size:10px;
+  border-top:1px solid #f1f5f9;
+}
 tbody tr:nth-child(odd) td{background:#fbfdff}
-td.status{width:180px}
-.badge-status{display:inline-block;padding:4px 8px;border-radius:999px;font-size:12px;font-weight:700}
+td.status{width:80px}
+td.note{width:140px;font-size:9px;color:#6b7280}
+
+.badge-status{
+  display:inline-block;
+  padding:3px 6px;
+  border-radius:999px;
+  font-size:9px;
+  font-weight:700;
+}
 .s-ok{background:#dcfce7;color:#065f46}
 .s-rd,.s-ad,.s-dd,.s-qd,.s-ft{background:#0f172a;color:#fff}
 
-.alert{border:1px dashed #eab308;background:#fffbeb;border-radius:14px;padding:12px 14px}
-.alert .title{font-weight:800;margin-bottom:6px}
-.alert ul{margin:6px 0 0 18px}
+.obs-card{
+  border:1px solid #e5e7eb;
+  border-radius:10px;
+  padding:8px 9px;
+  background:#fff;
+  font-size:10px;
+  white-space:pre-wrap;
+}
 
-footer{position:fixed;left:0;right:0;bottom:0;border-top:2px solid var(--primary);background:#fff;padding:10px 16px 12px;font-size:12px;text-align:center}
+footer{
+  position:fixed;
+  left:0;right:0;bottom:0;
+  border-top:2px solid var(--primary);
+  background:#fff;
+  padding:6px 12px 8px;
+  font-size:9px;
+  text-align:center;
+}
 .footer-line-1{font-weight:800}
 .footer-line-2{margin-top:2px;color:#475569}
 
 @media print{
-  .wrap{border:none;box-shadow:none;margin:0;padding:18mm 12mm 24mm}
+  .wrap{
+    border:none;
+    box-shadow:none;
+    margin:0;
+    padding:14mm 10mm 22mm;
+  }
   footer{position:fixed}
 }
 </style>
@@ -96,62 +219,88 @@ footer{position:fixed;left:0;right:0;bottom:0;border-top:2px solid var(--primary
     <div class="cards">
       <div class="card"><div class="label">Veículo</div><div class="value">${esc(meta.veiculo || '—')}</div></div>
       <div class="card"><div class="label">Tipo</div><div class="value">${esc(meta.tipo || '—')}</div></div>
-      <div class="card"><div class="label">Nível de combustível</div><div class="value">${esc(meta.nivel || '—')}</div></div>
+      <div class="card"><div class="label">Combustível</div><div class="value">${esc(meta.nivel || '—')}</div></div>
       <div class="card"><div class="label">FIPE</div><div class="value">${esc(meta.fipe || '—')}</div></div>
       <div class="card"><div class="label">Preço do anúncio</div><div class="value">${esc(meta.preco || '—')}</div></div>
     </div>
 
-    ${problemas.length ? `
-      <div class="section-title"><span class="dot"></span>Pendências e observações principais</div>
-      <div class="alert">
-        <div class="title">${problemas.length} item(ns) requer(em) atenção</div>
-        <ul>
-          ${problemas.map(p => `<li><b>${esc(p.nome)}</b>: ${esc(MAP_DESC[p.status] || p.status || '—')}</li>`).join('')}
-        </ul>
+    <div class="section-title"><span class="dot"></span>Pendências principais</div>
+    ${
+      problemas.length
+        ? `<div class="alert">
+            <div class="title">${problemas.length} item(ns) requer(em) atenção</div>
+            <ul>
+              ${problemas
+                .map(
+                  (p) =>
+                    `<li><b>${esc(p.nome)}</b>: ${esc(
+                      MAP_DESC[p.status] || p.status || '—'
+                    )}${
+                      p.note ? ` — ${esc(p.note)}` : ''
+                    }</li>`
+                )
+                .join('')}
+            </ul>
+          </div>`
+        : `<div class="alert">
+            <div class="title">Sem pendências relevantes</div>
+            Todos os itens avaliados estão em estado adequado.
+          </div>`
+    }
+
+    <div class="section-title"><span class="dot"></span>Detalhamento dos itens</div>
+    <div class="two-cols">
+      <div class="table">
+        <table>
+          <thead>
+            <tr><th colspan="3">Parte externa</th></tr>
+            <tr><th>Item</th><th>Status</th><th>Obs.</th></tr>
+          </thead>
+          <tbody>
+            ${externo
+              .map(
+                (row) => `
+              <tr>
+                <td>${esc(row.nome)}</td>
+                <td class="status">${renderStatus(row.status)}</td>
+                <td class="note">${row.note ? esc(row.note) : ''}</td>
+              </tr>`
+              )
+              .join('')}
+          </tbody>
+        </table>
       </div>
-    ` : `
-      <div class="section-title"><span class="dot"></span>Pendências e observações principais</div>
-      <div class="alert"><div class="title">Sem pendências</div>Todos os itens inspecionados estão em estado adequado.</div>
-    `}
 
-    <div class="section-title"><span class="dot"></span>Parte externa</div>
-    <div class="table">
-      <table>
-        <thead><tr><th>Item</th><th class="status">Status</th></tr></thead>
-        <tbody>
-          ${externo.map(row => `
-            <tr>
-              <td>${esc(row.nome)}</td>
-              <td class="status">
-                ${renderStatus(row.status)}
-              </td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
+      <div class="table">
+        <table>
+          <thead>
+            <tr><th colspan="3">Documentos / interno</th></tr>
+            <tr><th>Item</th><th>Status</th><th>Obs.</th></tr>
+          </thead>
+          <tbody>
+            ${interno
+              .map(
+                (row) => `
+              <tr>
+                <td>${esc(row.nome)}</td>
+                <td class="status">${renderStatus(row.status)}</td>
+                <td class="note">${row.note ? esc(row.note) : ''}</td>
+              </tr>`
+              )
+              .join('')}
+          </tbody>
+        </table>
+      </div>
     </div>
 
-    <div class="section-title"><span class="dot"></span>Documentos / Interno</div>
-    <div class="table">
-      <table>
-        <thead><tr><th>Item</th><th class="status">Status</th></tr></thead>
-        <tbody>
-          ${interno.map(row => `
-            <tr>
-              <td>${esc(row.nome)}</td>
-              <td class="status">
-                ${renderStatus(row.status)}
-              </td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    </div>
-
-    ${observacoes ? `
-      <div class="section-title"><span class="dot"></span>Observações adicionais</div>
-      <div class="card" style="white-space:pre-wrap">${esc(observacoes)}</div>
-    ` : ''}
+    ${
+      observacoes
+        ? `
+      <div class="section-title"><span class="dot"></span>Observações gerais</div>
+      <div class="obs-card">${esc(observacoes)}</div>
+    `
+        : ''
+    }
 
   </div>
 
@@ -163,8 +312,12 @@ footer{position:fixed;left:0;right:0;bottom:0;border-top:2px solid var(--primary
           contact.phone ? `☎ ${contact.phone}` : null,
           contact.email ? `✉ ${contact.email}` : null,
           contact.address ? `📍 ${contact.address}` : null,
-          contact.site ? `🌐 ${contact.site}` : siteUrl.replace(/^https?:\/\/(www\.)?/, ''),
-        ].filter(Boolean).join(' • ')
+          contact.site
+            ? `🌐 ${contact.site}`
+            : siteUrl.replace(/^https?:\/\/(www\.)?/, ''),
+        ]
+          .filter(Boolean)
+          .join(' • ')
       )
     }</div>
   </footer>
@@ -174,41 +327,70 @@ footer{position:fixed;left:0;right:0;bottom:0;border-top:2px solid var(--primary
   // imprime via iframe oculto
   const iframe = document.createElement('iframe');
   iframe.style.position = 'fixed';
-  iframe.style.right = '0'; iframe.style.bottom = '0';
-  iframe.style.width = '0'; iframe.style.height = '0'; iframe.style.border = '0';
+  iframe.style.right = '0';
+  iframe.style.bottom = '0';
+  iframe.style.width = '0';
+  iframe.style.height = '0';
+  iframe.style.border = '0';
   iframe.setAttribute('aria-hidden', 'true');
   document.body.appendChild(iframe);
 
   const doc = iframe.contentDocument || iframe.contentWindow.document;
-  doc.open(); doc.write(html); doc.close();
+  doc.open();
+  doc.write(html);
+  doc.close();
 
   await waitForImages(doc);
-  try { iframe.contentWindow.focus(); iframe.contentWindow.print(); }
-  finally { setTimeout(() => iframe.parentNode && iframe.parentNode.removeChild(iframe), 1500); }
+  try {
+    iframe.contentWindow.focus();
+    iframe.contentWindow.print();
+  } finally {
+    setTimeout(() => {
+      if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+    }, 1500);
+  }
 }
 
 // helpers
-function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
-function escapeAttr(s){return String(s||'').replace(/"/g,'&quot;')}
-function renderStatus(code){
-  if(!code) return '<span class="badge-status">—</span>';
-  const cls = code==='OK' ? 's-ok' : `s-${code.toLowerCase()}`;
+function esc(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+function escapeAttr(s) {
+  return String(s || '').replace(/"/g, '&quot;');
+}
+function renderStatus(code) {
+  if (!code)
+    return '<span class="badge-status">—</span>';
+  const cls = code === 'OK' ? 's-ok' : `s-${code.toLowerCase()}`;
   const txt = MAP_DESC[code] || code;
   return `<span class="badge-status ${cls}">${esc(txt)}</span>`;
 }
-async function waitForImages(doc){
-  await new Promise((resolve)=>{
-    const done=()=>setTimeout(resolve,200);
-    if(doc.readyState==='complete'){
-      const imgs=Array.from(doc.images||[]);
-      if(imgs.length===0) return done();
-      let n=0;
-      imgs.forEach(img=>{
-        const fin=()=>{n++; if(n===imgs.length) done();};
-        if(img.complete) fin(); else {img.addEventListener('load',fin); img.addEventListener('error',fin);}
+async function waitForImages(doc) {
+  await new Promise((resolve) => {
+    const done = () => setTimeout(resolve, 150);
+    if (doc.readyState === 'complete') {
+      const imgs = Array.from(doc.images || []);
+      if (imgs.length === 0) return done();
+      let n = 0;
+      imgs.forEach((img) => {
+        const fin = () => {
+          n++;
+          if (n === imgs.length) done();
+        };
+        if (img.complete) fin();
+        else {
+          img.addEventListener('load', fin);
+          img.addEventListener('error', fin);
+        }
       });
-    }else{
-      doc.addEventListener('readystatechange',()=>doc.readyState==='complete'&&done());
+    } else {
+      doc.addEventListener('readystatechange', () => {
+        if (doc.readyState === 'complete') done();
+      });
     }
   });
 }

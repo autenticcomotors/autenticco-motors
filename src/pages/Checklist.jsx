@@ -73,12 +73,19 @@ const Checklist = () => {
   const [carId, setCarId] = useState(carParam);
   const [car, setCar] = useState(null);
 
+  /**
+   * Estrutura nova do items:
+   * {
+   *   [nomeItem]: { status: 'OK' | 'RD' | ... | '', note: 'texto livre' }
+   * }
+   * (com compatibilidade com dados antigos em string)
+   */
   const [itens, setItens] = useState({});
   const [observacoes, setObservacoes] = useState('');
   const [tipo, setTipo] = useState('compra');
   const [nivel, setNivel] = useState('50%');
   const [salvando, setSalvando] = useState(false);
-  const [checklistId, setChecklistId] = useState(null); // insert/update
+  const [checklistId, setChecklistId] = useState(null);
 
   // carrega carros
   useEffect(() => {
@@ -91,11 +98,34 @@ const Checklist = () => {
     })();
   }, []);
 
+  // normaliza items vindos do banco (string antiga ou objeto novo)
+  const normalizeItems = (raw) => {
+    const src = raw || {};
+    const normalized = {};
+
+    Object.entries(src).forEach(([nome, value]) => {
+      if (value && typeof value === 'object') {
+        normalized[nome] = {
+          status: value.status || '',
+          note: value.note || '',
+        };
+      } else {
+        normalized[nome] = {
+          status: typeof value === 'string' ? value : '',
+          note: '',
+        };
+      }
+    });
+
+    return normalized;
+  };
+
   // quando troca o carro -> carrega checklist dele
   useEffect(() => {
     if (!carId) {
       setCar(null);
       setChecklistId(null);
+      setItens({});
       return;
     }
     const found = (cars || []).find((c) => c.id === carId);
@@ -112,7 +142,7 @@ const Checklist = () => {
 
       if (!error && data) {
         setChecklistId(data.id);
-        setItens(data.items || {});
+        setItens(normalizeItems(data.items));
         setObservacoes(data.observacoes || '');
         setTipo(data.tipo || 'compra');
         setNivel(data.nivel_combustivel || '50%');
@@ -127,8 +157,27 @@ const Checklist = () => {
     })();
   }, [carId, cars]);
 
+  // toggle do status (clica de novo para desmarcar)
   const marcar = (nome, valor) => {
-    setItens((prev) => ({ ...prev, [nome]: valor }));
+    setItens((prev) => {
+      const atual = prev[nome] || { status: '', note: '' };
+      const novoStatus = atual.status === valor ? '' : valor;
+      return {
+        ...prev,
+        [nome]: { status: novoStatus, note: atual.note || '' },
+      };
+    });
+  };
+
+  // atualizar observação individual
+  const atualizarNota = (nome, note) => {
+    setItens((prev) => {
+      const atual = prev[nome] || { status: '', note: '' };
+      return {
+        ...prev,
+        [nome]: { status: atual.status || '', note: note || '' },
+      };
+    });
   };
 
   const salvar = async () => {
@@ -177,9 +226,9 @@ const Checklist = () => {
     }
 
     const vehicleStr = car
-      ? `${car.brand || ''} ${car.model || ''}${car.year ? ` (${car.year})` : ''}${
-          car.plate ? ` • ${car.plate}` : ''
-        }`.trim()
+      ? `${car.brand || ''} ${car.model || ''}${
+          car.year ? ` (${car.year})` : ''
+        }${car.plate ? ` • ${car.plate}` : ''}`.trim()
       : '';
 
     await generateChecklistPDF({
@@ -189,18 +238,31 @@ const Checklist = () => {
       contact: {
         phone: '(11) 97507-1300',
         email: 'contato@autenticcomotors.com',
-        address: 'R. Vieira de Morais, 2110 - Sala 1015 - Campo Belo, São Paulo - SP',
+        address:
+          'R. Vieira de Morais, 2110 - Sala 1015 - Campo Belo, São Paulo - SP',
         site: 'autenticcomotors.com.br',
       },
       meta: {
         tipo,
         nivel,
         veiculo: vehicleStr || '—',
-        fipe: car?.fipe_value ? `R$ ${Number(car.fipe_value).toLocaleString('pt-BR')}` : '—',
-        preco: car?.price ? `R$ ${Number(car.price).toLocaleString('pt-BR')}` : '—',
+        fipe: car?.fipe_value
+          ? `R$ ${Number(car.fipe_value).toLocaleString('pt-BR')}`
+          : '—',
+        preco: car?.price
+          ? `R$ ${Number(car.price).toLocaleString('pt-BR')}`
+          : '—',
       },
-      externo: BLOCO_EXTERNO.map((n) => ({ nome: n, status: itens[n] || '' })),
-      interno: BLOCO_INTERNO.map((n) => ({ nome: n, status: itens[n] || '' })),
+      externo: BLOCO_EXTERNO.map((nome) => ({
+        nome,
+        status: itens[nome]?.status || '',
+        note: itens[nome]?.note || '',
+      })),
+      interno: BLOCO_INTERNO.map((nome) => ({
+        nome,
+        status: itens[nome]?.status || '',
+        note: itens[nome]?.note || '',
+      })),
       observacoes: observacoes,
       theme: { primary: '#FACC15', dark: '#111111' },
     });
@@ -238,7 +300,8 @@ const Checklist = () => {
               <option value="">-- escolher --</option>
               {cars.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.brand} {c.model} {c.year ? `(${c.year})` : ''} — {c.plate || 'sem placa'}
+                  {c.brand} {c.model} {c.year ? `(${c.year})` : ''} —{' '}
+                  {c.plate || 'sem placa'}
                 </option>
               ))}
             </select>
@@ -286,68 +349,111 @@ const Checklist = () => {
         {carId ? (
           <>
             <div className="bg-white rounded-2xl border shadow-sm p-3 text-xs text-slate-500">
-              LEGENDA: <b>OK</b> = Estado adequado • <b>RD</b> = Riscado • <b>AD</b> = Amassado •{' '}
-              <b>DD</b> = Danificado • <b>QD</b> = Quebrado • <b>FT</b> = Falta
+              LEGENDA: <b>OK</b> = Estado adequado • <b>RD</b> = Riscado •{' '}
+              <b>AD</b> = Amassado • <b>DD</b> = Danificado • <b>QD</b> =
+              Quebrado • <b>FT</b> = Falta
             </div>
 
             <div className="grid md:grid-cols-2 gap-4">
+              {/* Parte externa */}
               <div className="bg-white rounded-2xl border shadow-sm p-3 space-y-2">
-                <p className="text-sm font-semibold text-slate-900 mb-1">Parte externa</p>
-                {BLOCO_EXTERNO.map((nome) => (
-                  <div key={nome} className="flex items-center justify-between gap-2">
-                    <span className="text-sm text-slate-800 w-44">{nome}</span>
-                    <div className="flex gap-1 overflow-x-auto">
-                      {STATUS.map((st) => (
-                        <button
-                          key={st}
-                          type="button"
-                          onClick={() => marcar(nome, st)}
-                          className={`px-2 py-1 rounded text-xs whitespace-nowrap ${
-                            itens[nome] === st
-                              ? st === 'OK'
-                                ? 'bg-emerald-100 text-emerald-700'
-                                : 'bg-slate-900 text-white'
-                              : 'bg-slate-100 text-slate-500'
-                          }`}
-                        >
-                          {st}
-                        </button>
-                      ))}
+                <p className="text-sm font-semibold text-slate-900 mb-1">
+                  Parte externa
+                </p>
+                {BLOCO_EXTERNO.map((nome) => {
+                  const item = itens[nome] || { status: '', note: '' };
+                  return (
+                    <div
+                      key={nome}
+                      className="flex flex-col gap-1 border-b border-slate-100 pb-2 mb-1 last:border-b-0 last:pb-0 last:mb-0"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm text-slate-800 w-40">
+                          {nome}
+                        </span>
+                        <div className="flex gap-1 overflow-x-auto">
+                          {STATUS.map((st) => (
+                            <button
+                              key={st}
+                              type="button"
+                              onClick={() => marcar(nome, st)}
+                              className={`px-2 py-1 rounded text-[11px] whitespace-nowrap ${
+                                item.status === st
+                                  ? st === 'OK'
+                                    ? 'bg-emerald-100 text-emerald-700'
+                                    : 'bg-slate-900 text-white'
+                                  : 'bg-slate-100 text-slate-500'
+                              }`}
+                            >
+                              {st}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <input
+                        type="text"
+                        value={item.note}
+                        onChange={(e) => atualizarNota(nome, e.target.value)}
+                        className="w-full border rounded-md px-2 py-1 text-xs bg-slate-50"
+                        placeholder="Observação deste item (opcional)..."
+                      />
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
+              {/* Documentos / interno */}
               <div className="bg-white rounded-2xl border shadow-sm p-3 space-y-2">
-                <p className="text-sm font-semibold text-slate-900 mb-1">Documentos / interno</p>
-                {BLOCO_INTERNO.map((nome) => (
-                  <div key={nome} className="flex items-center justify-between gap-2">
-                    <span className="text-sm text-slate-800 w-48">{nome}</span>
-                    <div className="flex gap-1 overflow-x-auto">
-                      {STATUS.map((st) => (
-                        <button
-                          key={st}
-                          type="button"
-                          onClick={() => marcar(nome, st)}
-                          className={`px-2 py-1 rounded text-xs whitespace-nowrap ${
-                            itens[nome] === st
-                              ? st === 'OK'
-                                ? 'bg-emerald-100 text-emerald-700'
-                                : 'bg-slate-900 text-white'
-                              : 'bg-slate-100 text-slate-500'
-                          }`}
-                        >
-                          {st}
-                        </button>
-                      ))}
+                <p className="text-sm font-semibold text-slate-900 mb-1">
+                  Documentos / interno
+                </p>
+                {BLOCO_INTERNO.map((nome) => {
+                  const item = itens[nome] || { status: '', note: '' };
+                  return (
+                    <div
+                      key={nome}
+                      className="flex flex-col gap-1 border-b border-slate-100 pb-2 mb-1 last:border-b-0 last:pb-0 last:mb-0"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm text-slate-800 w-40">
+                          {nome}
+                        </span>
+                        <div className="flex gap-1 overflow-x-auto">
+                          {STATUS.map((st) => (
+                            <button
+                              key={st}
+                              type="button"
+                              onClick={() => marcar(nome, st)}
+                              className={`px-2 py-1 rounded text-[11px] whitespace-nowrap ${
+                                item.status === st
+                                  ? st === 'OK'
+                                    ? 'bg-emerald-100 text-emerald-700'
+                                    : 'bg-slate-900 text-white'
+                                  : 'bg-slate-100 text-slate-500'
+                              }`}
+                            >
+                              {st}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <input
+                        type="text"
+                        value={item.note}
+                        onChange={(e) => atualizarNota(nome, e.target.value)}
+                        className="w-full border rounded-md px-2 py-1 text-xs bg-slate-50"
+                        placeholder="Observação deste item (opcional)..."
+                      />
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
             <div className="bg-white rounded-2xl border shadow-sm p-4 space-y-2">
-              <label className="text-sm text-slate-700">Observações / pendências</label>
+              <label className="text-sm text-slate-700">
+                Observações / pendências gerais
+              </label>
               <textarea
                 value={observacoes}
                 onChange={(e) => setObservacoes(e.target.value)}

@@ -1,14 +1,15 @@
 // src/lib/checklist-print.js
 
 // Abre uma nova janela com o HTML pronto para impressão do checklist
+// Mantém compatibilidade com o Checklist.jsx, que chama com { items: itens }
 export function openChecklistPrintWindow({
   car,
-  itens = {},
+  items = {},          // <- mantém o nome "items"
   observacoes = '',
   tipo = '',
   nivel = '',
 }) {
-  const items = itens || {};
+  const allItems = items || {};
 
   const BLOCO_EXTERNO = [
     'Teto',
@@ -66,11 +67,27 @@ export function openChecklistPrintWindow({
     'Freios / embreagem',
   ];
 
-  const getEntry = (nome) => items[nome] || {};
-  const getStatus = (nome) => (getEntry(nome).status || '').trim();
-  const getObs = (nome) => (getEntry(nome).obs || '').trim();
+  // Normaliza o formato do item:
+  // - se vier string: "OK" -> { status: "OK", obs: "" }
+  // - se vier objeto: { status, obs }
+  const getEntry = (nome) => {
+    const raw = allItems[nome];
+    if (!raw) return { status: '', obs: '' };
+    if (typeof raw === 'string') {
+      return { status: raw || '', obs: '' };
+    }
+    if (typeof raw === 'object') {
+      return {
+        status: (raw.status || '').trim(),
+        obs: (raw.obs || '').trim(),
+      };
+    }
+    return { status: '', obs: '' };
+  };
 
-  // Só considera "marcado" se tiver status (OK, RD, AD, etc.)
+  const getStatus = (nome) => getEntry(nome).status;
+  const getObs = (nome) => getEntry(nome).obs;
+
   const externosMarcados = BLOCO_EXTERNO.filter((nome) => !!getStatus(nome));
   const internosMarcados = BLOCO_INTERNO.filter((nome) => !!getStatus(nome));
   const anyMarcado =
@@ -78,8 +95,8 @@ export function openChecklistPrintWindow({
 
   const resumoVeiculo = car
     ? `${car.brand || ''} ${car.model || ''} ${
-        car.year ? '(' + car.year + ')' : ''
-      } ${car.plate ? '• ' + car.plate : ''}`
+        car.year ? `(${car.year})` : ''
+      } ${car.plate ? `• ${car.plate}` : ''}`
     : '';
 
   const hoje = new Date();

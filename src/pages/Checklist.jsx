@@ -3,7 +3,6 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import logo from '@/assets/logo.png';
 import { openChecklistPrintWindow } from '@/lib/checklist-print';
 
 const STATUS = ['OK', 'RD', 'AD', 'DD', 'QD', 'FT'];
@@ -73,12 +72,7 @@ const Checklist = () => {
   const [carId, setCarId] = useState(carParam);
   const [car, setCar] = useState(null);
 
-  /**
-   * itens: {
-   *   "Teto": { status: "OK", obs: "90% borracha boa" },
-   *   ...
-   * }
-   */
+  // sempre: { [nome]: { status, obs } }
   const [itens, setItens] = useState({});
   const [observacoes, setObservacoes] = useState('');
   const [tipo, setTipo] = useState('compra');
@@ -86,63 +80,7 @@ const Checklist = () => {
   const [salvando, setSalvando] = useState(false);
   const [checklistId, setChecklistId] = useState(null);
 
-  // ---------- helpers de estado ----------
-
-  const normalizarItensParaEstado = (rawItems) => {
-    if (!rawItems || typeof rawItems !== 'object') return {};
-
-    const todosNomes = [...BLOCO_EXTERNO, ...BLOCO_INTERNO];
-    const novo = {};
-
-    for (const nome of todosNomes) {
-      const v = rawItems[nome];
-      if (!v) continue;
-
-      if (typeof v === 'string') {
-        // formato antigo: "OK"
-        if (v.trim()) {
-          novo[nome] = { status: v.trim(), obs: '' };
-        }
-      } else if (typeof v === 'object') {
-        const status = (v.status || '').trim();
-        const obs = (v.obs || '').trim();
-        if (status || obs) {
-          novo[nome] = { status, obs };
-        }
-      }
-    }
-
-    return novo;
-  };
-
-  const marcar = (nome, valor) => {
-    setItens((prev) => {
-      const atual = prev[nome] || { status: '', obs: '' };
-      const novoStatus = atual.status === valor ? '' : valor; // toggle
-      const atualizado = { ...prev, [nome]: { ...atual, status: novoStatus } };
-
-      if (!atualizado[nome].status && !atualizado[nome].obs.trim()) {
-        const { [nome]: _, ...rest } = atualizado;
-        return rest;
-      }
-      return atualizado;
-    });
-  };
-
-  const atualizarObsItem = (nome, texto) => {
-    setItens((prev) => {
-      const atual = prev[nome] || { status: '', obs: '' };
-      const atualizado = { ...prev, [nome]: { ...atual, obs: texto } };
-
-      if (!atualizado[nome].status && !atualizado[nome].obs.trim()) {
-        const { [nome]: _, ...rest } = atualizado;
-        return rest;
-      }
-      return atualizado;
-    });
-  };
-
-  // ---------- carregar carros ----------
+  // carrega carros
   useEffect(() => {
     (async () => {
       const { data, error } = await supabase
@@ -153,7 +91,24 @@ const Checklist = () => {
     })();
   }, []);
 
-  // ---------- quando troca o carro ----------
+  // converte formato vindo do banco (string antiga ou objeto novo)
+  const normalizeItemsFromDb = (raw) => {
+    if (!raw || typeof raw !== 'object') return {};
+    const result = {};
+    Object.entries(raw).forEach(([nome, value]) => {
+      if (value && typeof value === 'object') {
+        result[nome] = {
+          status: (value.status || '').trim(),
+          obs: (value.obs || '').trim(),
+        };
+      } else if (typeof value === 'string') {
+        result[nome] = { status: value.trim(), obs: '' };
+      }
+    });
+    return result;
+  };
+
+  // quando troca o carro -> carrega checklist dele
   useEffect(() => {
     if (!carId) {
       setCar(null);
@@ -179,7 +134,7 @@ const Checklist = () => {
 
       if (!error && data) {
         setChecklistId(data.id);
-        setItens(normalizarItensParaEstado(data.items || {}));
+        setItens(normalizeItemsFromDb(data.items));
         setObservacoes(data.observacoes || '');
         setTipo(data.tipo || 'compra');
         setNivel(data.nivel_combustivel || '50%');
@@ -193,17 +148,36 @@ const Checklist = () => {
     })();
   }, [carId, cars]);
 
-  // ---------- salvar ----------
+  // marca / desmarca status
+  const marcar = (nome, valor) => {
+    setItens((prev) => {
+      const atual = prev[nome] || { status: '', obs: '' };
+      const novoStatus = atual.status === valor ? '' : valor; // clique de novo desmarca
+      return {
+        ...prev,
+        [nome]: { ...atual, status: novoStatus },
+      };
+    });
+  };
+
+  // altera observação
+  const handleObsChange = (nome, texto) => {
+    setItens((prev) => {
+      const atual = prev[nome] || { status: '', obs: '' };
+      return {
+        ...prev,
+        [nome]: { ...atual, obs: texto },
+      };
+    });
+  };
+
   const salvar = async () => {
-    if (!carId) {
-      alert('Selecione um veículo antes de salvar.');
-      return;
-    }
+    if (!carId) return;
     setSalvando(true);
 
     const payload = {
       car_id: carId,
-      items: itens, // sempre no formato { nome: { status, obs } }
+      items: itens,
       observacoes,
       tipo,
       nivel_combustivel: nivel,
@@ -236,71 +210,44 @@ const Checklist = () => {
     }
   };
 
-  // ---------- imprimir ----------
-  const handlePrint = () => {
+  const gerarPdf = () => {
     if (!car) {
-      alert('Selecione um veículo para gerar o relatório.');
+      alert('Selecione um veículo antes de gerar o relatório.');
       return;
     }
 
-    const externos = BLOCO_EXTERNO.map((nome) => {
-      const entry = itens[nome] || { status: '', obs: '' };
-      return {
-        nome,
-        status: entry.status || '',
-        obs: (entry.obs || '').trim(),
-      };
-    }).filter((r) => r.status || r.obs);
-
-    const internos = BLOCO_INTERNO.map((nome) => {
-      const entry = itens[nome] || { status: '', obs: '' };
-      return {
-        nome,
-        status: entry.status || '',
-        obs: (entry.obs || '').trim(),
-      };
-    }).filter((r) => r.status || r.obs);
-
-    const carLabel = [
-      car.brand || '',
-      car.model || '',
-      car.year ? `(${car.year})` : '',
-      car.plate ? `• ${car.plate}` : '',
-    ]
-      .join(' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-
     openChecklistPrintWindow({
-      logoUrl: logo,
-      company: 'AutenTicco Motors',
-      siteUrl: 'https://autenticcomotors.com.br',
-      carLabel: carLabel || 'Checklist de veículo',
+      car,
+      items: itens,
+      observacoes,
       tipo,
       nivel,
-      fipeValue: car.fipe_value,
-      precoAnuncio: car.price,
-      externos,
-      internos,
-      observacoesGerais: observacoes,
-      generatedAt: new Date(),
     });
   };
 
-  // ---------- render ----------
   return (
     <div className="min-h-screen bg-slate-50 pb-16">
       <div className="sticky top-0 z-40 bg-slate-50/90 backdrop-blur border-b flex items-center gap-3 px-4 py-3">
         <h1 className="text-base md:text-lg font-bold text-slate-900 flex-1">
           Checklist de veículo
         </h1>
-        <Button
-          variant="outline"
-          onClick={() => navigate('/dashboard')}
-          className="text-xs md:text-sm"
-        >
-          Voltar
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={gerarPdf}
+            className="text-xs md:text-sm"
+            disabled={!carId}
+          >
+            Gerar PDF
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => navigate('/dashboard')}
+            className="text-xs md:text-sm"
+          >
+            Voltar
+          </Button>
+        </div>
       </div>
 
       <div className="max-w-5xl mx-auto mt-4 px-4 space-y-4">
@@ -343,7 +290,7 @@ const Checklist = () => {
             )}
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-2">
+          <div className="flex gap-2">
             <select
               value={tipo}
               onChange={(e) => setTipo(e.target.value)}
@@ -370,11 +317,12 @@ const Checklist = () => {
           <>
             <div className="bg-white rounded-2xl border shadow-sm p-3 text-xs text-slate-500">
               LEGENDA: <b>OK</b> = Estado adequado • <b>RD</b> = Riscado •{' '}
-              <b>AD</b> = Amassado • <b>DD</b> = Danificado • <b>QD</b> = Quebrado •{' '}
-              <b>FT</b> = Falta
+              <b>AD</b> = Amassado • <b>DD</b> = Danificado • <b>QD</b> =
+              Quebrado • <b>FT</b> = Falta
             </div>
 
             <div className="grid md:grid-cols-2 gap-4">
+              {/* Parte externa */}
               <div className="bg-white rounded-2xl border shadow-sm p-3 space-y-2">
                 <p className="text-sm font-semibold text-slate-900 mb-1">
                   Parte externa
@@ -384,10 +332,12 @@ const Checklist = () => {
                   return (
                     <div
                       key={nome}
-                      className="flex flex-col gap-1 border-b last:border-b-0 pb-2"
+                      className="border rounded-xl px-3 py-2 mb-1 bg-slate-50/60"
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm text-slate-800 w-44">{nome}</span>
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="text-sm text-slate-800 w-40">
+                          {nome}
+                        </span>
                         <div className="flex gap-1 overflow-x-auto">
                           {STATUS.map((st) => (
                             <button
@@ -409,16 +359,19 @@ const Checklist = () => {
                       </div>
                       <input
                         type="text"
-                        value={entry.obs || ''}
-                        onChange={(e) => atualizarObsItem(nome, e.target.value)}
+                        value={entry.obs}
+                        onChange={(e) =>
+                          handleObsChange(nome, e.target.value)
+                        }
+                        className="w-full border rounded-lg px-2 py-1 text-xs bg-white"
                         placeholder="Observação deste item (opcional)..."
-                        className="w-full border rounded-md px-2 py-1 text-xs bg-slate-50"
                       />
                     </div>
                   );
                 })}
               </div>
 
+              {/* Documentos / interno */}
               <div className="bg-white rounded-2xl border shadow-sm p-3 space-y-2">
                 <p className="text-sm font-semibold text-slate-900 mb-1">
                   Documentos / interno
@@ -428,10 +381,12 @@ const Checklist = () => {
                   return (
                     <div
                       key={nome}
-                      className="flex flex-col gap-1 border-b last:border-b-0 pb-2"
+                      className="border rounded-xl px-3 py-2 mb-1 bg-slate-50/60"
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm text-slate-800 w-48">{nome}</span>
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="text-sm text-slate-800 w-44">
+                          {nome}
+                        </span>
                         <div className="flex gap-1 overflow-x-auto">
                           {STATUS.map((st) => (
                             <button
@@ -453,10 +408,12 @@ const Checklist = () => {
                       </div>
                       <input
                         type="text"
-                        value={entry.obs || ''}
-                        onChange={(e) => atualizarObsItem(nome, e.target.value)}
+                        value={entry.obs}
+                        onChange={(e) =>
+                          handleObsChange(nome, e.target.value)
+                        }
+                        className="w-full border rounded-lg px-2 py-1 text-xs bg-white"
                         placeholder="Observação deste item (opcional)..."
-                        className="w-full border rounded-md px-2 py-1 text-xs bg-slate-50"
                       />
                     </div>
                   );
@@ -464,9 +421,9 @@ const Checklist = () => {
               </div>
             </div>
 
-            <div className="bg-white rounded-2xl border shadow-sm p-4 space-y-2 mb-6">
+            <div className="bg-white rounded-2xl border shadow-sm p-4 space-y-2">
               <label className="text-sm text-slate-700">
-                Observações / pendências gerais
+                Observações / pendências
               </label>
               <textarea
                 value={observacoes}
@@ -476,14 +433,6 @@ const Checklist = () => {
                 placeholder="Ex.: risco porta dir., faltando estepe, dono vai mandar chave reserva..."
               />
               <div className="flex justify-end gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handlePrint}
-                  className="font-semibold"
-                >
-                  Gerar PDF
-                </Button>
                 <Button
                   onClick={salvar}
                   className="bg-yellow-400 text-black hover:bg-yellow-500 font-semibold"

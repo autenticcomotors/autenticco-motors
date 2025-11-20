@@ -1,10 +1,8 @@
 // src/lib/checklist-print.js
 
-// Abre uma nova janela com o HTML pronto para impressão do checklist
-// Mantém compatibilidade com o Checklist.jsx, que chama com { items: itens }
 export function openChecklistPrintWindow({
   car,
-  items = {},          // <- mantém o nome "items"
+  items = {},
   observacoes = '',
   tipo = '',
   nivel = '',
@@ -67,9 +65,6 @@ export function openChecklistPrintWindow({
     'Freios / embreagem',
   ];
 
-  // Normaliza o formato do item:
-  // - se vier string: "OK" -> { status: "OK", obs: "" }
-  // - se vier objeto: { status, obs }
   const getEntry = (nome) => {
     const raw = allItems[nome];
     if (!raw) return { status: '', obs: '' };
@@ -113,12 +108,8 @@ export function openChecklistPrintWindow({
   <meta charset="UTF-8" />
   <title>Checklist do veículo</title>
   <style>
-    @page {
-      margin: 10mm 8mm;
-    }
-    * {
-      box-sizing: border-box;
-    }
+    @page { margin: 10mm 8mm; }
+    * { box-sizing: border-box; }
     body {
       margin: 0;
       padding: 0;
@@ -248,16 +239,9 @@ export function openChecklistPrintWindow({
     tbody tr:nth-child(even) td {
       background: #f8fafc;
     }
-    .col-item {
-      width: 45%;
-    }
-    .col-status {
-      width: 15%;
-      text-align: center;
-    }
-    .col-obs {
-      width: 40%;
-    }
+    .col-item { width: 45%; }
+    .col-status { width: 15%; text-align: center; }
+    .col-obs { width: 40%; }
     .no-items {
       padding: 6px 4px;
       font-size: 9px;
@@ -289,9 +273,7 @@ export function openChecklistPrintWindow({
       font-weight: 500;
       color: #0f172a;
     }
-    .footer-right span {
-      margin-left: 8px;
-    }
+    .footer-right span { margin-left: 8px; }
   </style>
 </head>
 <body>

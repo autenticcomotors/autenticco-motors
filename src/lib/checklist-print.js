@@ -1,14 +1,11 @@
 // src/lib/checklist-print.js
-//nova versão
 export function openChecklistPrintWindow({
   car,
-  itens = {},
+  items = {},
   observacoes = '',
   tipo = '',
   nivel = '',
 }) {
-  const items = itens || {};
-
   const BLOCO_EXTERNO = [
     'Teto',
     'Capô',
@@ -65,7 +62,6 @@ export function openChecklistPrintWindow({
     'Freios / embreagem',
   ];
 
-  // Mapeia código -> texto por extenso (layout da primeira versão)
   const STATUS_LABEL = {
     OK: 'Estado adequado',
     RD: 'Riscado',
@@ -76,7 +72,7 @@ export function openChecklistPrintWindow({
   };
 
   const getEntry = (nome) => {
-    const entry = items[nome];
+    const entry = items?.[nome];
     if (!entry) return { status: '', obs: '' };
 
     if (typeof entry === 'string') {
@@ -111,7 +107,6 @@ export function openChecklistPrintWindow({
   const anyMarcado =
     externosMarcados.length > 0 || internosMarcados.length > 0;
 
-  // Algum item com status diferente de OK?
   const hasIssues =
     [...BLOCO_EXTERNO, ...BLOCO_INTERNO].some((nome) => {
       const { status } = getEntry(nome);
@@ -157,7 +152,7 @@ export function openChecklistPrintWindow({
       min-height: 297mm;
       margin: 0 auto;
       background: #ffffff;
-      padding: 16mm 18mm 22mm; /* mais respiro em cima e embaixo */
+      padding: 16mm 18mm 22mm;
       display: flex;
       flex-direction: column;
     }
@@ -233,8 +228,6 @@ export function openChecklistPrintWindow({
       font-size: 9px;
       color: #020617;
     }
-
-    /* Pendências principais */
     .pendencias-text {
       font-size: 9px;
       color: #475569;
@@ -243,7 +236,6 @@ export function openChecklistPrintWindow({
     .pendencias-text strong {
       color: #0f172a;
     }
-
     .alert-card {
       border-radius: 10px;
       border: 1px dashed #facc15;
@@ -257,7 +249,6 @@ export function openChecklistPrintWindow({
       font-weight: 600;
       margin-bottom: 2px;
     }
-
     .items-section-title {
       font-size: 11px;
       font-weight: 600;
@@ -305,7 +296,6 @@ export function openChecklistPrintWindow({
       font-size: 9px;
       color: #94a3b8;
     }
-
     .observacoes-gerais {
       font-size: 9px;
       margin-top: 4mm;
@@ -318,7 +308,6 @@ export function openChecklistPrintWindow({
       font-weight: 600;
       margin-bottom: 2px;
     }
-
     .footer {
       margin-top: auto;
       padding-top: 6px;

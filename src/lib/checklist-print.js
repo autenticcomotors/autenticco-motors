@@ -1,13 +1,12 @@
 // src/lib/checklist-print.js
-
 export function openChecklistPrintWindow({
   car,
-  items = {},
+  itens = {},
   observacoes = '',
   tipo = '',
   nivel = '',
 }) {
-  const allItems = items || {};
+  const items = itens || {};
 
   const BLOCO_EXTERNO = [
     'Teto',
@@ -65,33 +64,63 @@ export function openChecklistPrintWindow({
     'Freios / embreagem',
   ];
 
+  // Mapeia código -> texto por extenso (layout da primeira versão)
+  const STATUS_LABEL = {
+    OK: 'Estado adequado',
+    RD: 'Riscado',
+    AD: 'Amassado',
+    DD: 'Danificado',
+    QD: 'Quebrado',
+    FT: 'Falta',
+  };
+
   const getEntry = (nome) => {
-    const raw = allItems[nome];
-    if (!raw) return { status: '', obs: '' };
-    if (typeof raw === 'string') {
-      return { status: raw || '', obs: '' };
+    const entry = items[nome];
+    if (!entry) return { status: '', obs: '' };
+
+    if (typeof entry === 'string') {
+      return { status: entry, obs: '' };
     }
-    if (typeof raw === 'object') {
+
+    if (typeof entry === 'object') {
       return {
-        status: (raw.status || '').trim(),
-        obs: (raw.obs || '').trim(),
+        status: entry.status || '',
+        obs: entry.obs || entry.observacao || '',
       };
     }
+
     return { status: '', obs: '' };
   };
 
-  const getStatus = (nome) => getEntry(nome).status;
-  const getObs = (nome) => getEntry(nome).obs;
+  const formatStatus = (codigo) => {
+    if (!codigo) return '';
+    return STATUS_LABEL[codigo] || codigo;
+  };
 
-  const externosMarcados = BLOCO_EXTERNO.filter((nome) => !!getStatus(nome));
-  const internosMarcados = BLOCO_INTERNO.filter((nome) => !!getStatus(nome));
+  const externosMarcados = BLOCO_EXTERNO.filter((nome) => {
+    const { status, obs } = getEntry(nome);
+    return !!(status || obs);
+  });
+
+  const internosMarcados = BLOCO_INTERNO.filter((nome) => {
+    const { status, obs } = getEntry(nome);
+    return !!(status || obs);
+  });
+
   const anyMarcado =
     externosMarcados.length > 0 || internosMarcados.length > 0;
 
+  // Algum item com status diferente de OK?
+  const hasIssues =
+    [...BLOCO_EXTERNO, ...BLOCO_INTERNO].some((nome) => {
+      const { status } = getEntry(nome);
+      return status && status !== 'OK';
+    }) || !!observacoes;
+
   const resumoVeiculo = car
     ? `${car.brand || ''} ${car.model || ''} ${
-        car.year ? `(${car.year})` : ''
-      } ${car.plate ? `• ${car.plate}` : ''}`
+        car.year ? '(' + car.year + ')' : ''
+      } ${car.plate ? '• ' + car.plate : ''}`
     : '';
 
   const hoje = new Date();
@@ -108,21 +137,26 @@ export function openChecklistPrintWindow({
   <meta charset="UTF-8" />
   <title>Checklist do veículo</title>
   <style>
-    @page { margin: 10mm 8mm; }
-    * { box-sizing: border-box; }
+    @page {
+      margin: 12mm 10mm;
+    }
+    * {
+      box-sizing: border-box;
+    }
     body {
       margin: 0;
       padding: 0;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       background: #f1f5f9;
       color: #020617;
+      font-size: 10px;
     }
     .page {
       width: 210mm;
       min-height: 297mm;
       margin: 0 auto;
       background: #ffffff;
-      padding: 14mm 16mm 18mm;
+      padding: 16mm 18mm 22mm; /* mais respiro em cima e embaixo */
       display: flex;
       flex-direction: column;
     }
@@ -132,7 +166,7 @@ export function openChecklistPrintWindow({
       align-items: flex-start;
       font-size: 9px;
       color: #64748b;
-      margin-bottom: 8mm;
+      margin-bottom: 6mm;
     }
     .header-left {
       display: flex;
@@ -140,7 +174,7 @@ export function openChecklistPrintWindow({
       gap: 2px;
     }
     .company-name {
-      font-size: 11px;
+      font-size: 12px;
       font-weight: 700;
       color: #020617;
     }
@@ -153,18 +187,22 @@ export function openChecklistPrintWindow({
       font-size: 9px;
       color: #64748b;
     }
+    .header-right-title {
+      font-weight: 600;
+      color: #0f172a;
+    }
     .yellow-bar {
       height: 3px;
       width: 100%;
       background: #facc15;
       border-radius: 999px;
-      margin-bottom: 8mm;
+      margin-bottom: 6mm;
     }
     .section-card {
       border: 1px solid #e2e8f0;
       border-radius: 12px;
       padding: 10px 12px;
-      margin-bottom: 8mm;
+      margin-bottom: 6mm;
     }
     .section-title {
       font-size: 11px;
@@ -194,6 +232,17 @@ export function openChecklistPrintWindow({
       font-size: 9px;
       color: #020617;
     }
+
+    /* Pendências principais */
+    .pendencias-text {
+      font-size: 9px;
+      color: #475569;
+      line-height: 1.35;
+    }
+    .pendencias-text strong {
+      color: #0f172a;
+    }
+
     .alert-card {
       border-radius: 10px;
       border: 1px dashed #facc15;
@@ -201,12 +250,13 @@ export function openChecklistPrintWindow({
       padding: 8px 10px;
       font-size: 9px;
       color: #854d0e;
-      margin-bottom: 8mm;
+      margin-bottom: 6mm;
     }
     .alert-title {
       font-weight: 600;
       margin-bottom: 2px;
     }
+
     .items-section-title {
       font-size: 11px;
       font-weight: 600;
@@ -227,29 +277,37 @@ export function openChecklistPrintWindow({
     thead th {
       text-align: left;
       font-weight: 600;
-      padding: 3px 4px;
+      padding: 4px 5px;
       border-bottom: 1px solid #e2e8f0;
       color: #475569;
     }
     tbody td {
-      padding: 2px 4px;
+      padding: 3px 5px;
       border-bottom: 1px solid #f1f5f9;
       vertical-align: top;
+      line-height: 1.35;
     }
     tbody tr:nth-child(even) td {
       background: #f8fafc;
     }
-    .col-item { width: 45%; }
-    .col-status { width: 15%; text-align: center; }
-    .col-obs { width: 40%; }
+    .col-item {
+      width: 45%;
+    }
+    .col-status {
+      width: 25%;
+    }
+    .col-obs {
+      width: 30%;
+    }
     .no-items {
       padding: 6px 4px;
       font-size: 9px;
       color: #94a3b8;
     }
+
     .observacoes-gerais {
       font-size: 9px;
-      margin-top: 6mm;
+      margin-top: 4mm;
       border-radius: 10px;
       border: 1px dashed #e2e8f0;
       background: #f8fafc;
@@ -259,6 +317,7 @@ export function openChecklistPrintWindow({
       font-weight: 600;
       margin-bottom: 2px;
     }
+
     .footer {
       margin-top: auto;
       padding-top: 6px;
@@ -273,7 +332,9 @@ export function openChecklistPrintWindow({
       font-weight: 500;
       color: #0f172a;
     }
-    .footer-right span { margin-left: 8px; }
+    .footer-right span {
+      margin-left: 8px;
+    }
   </style>
 </head>
 <body>
@@ -284,8 +345,12 @@ export function openChecklistPrintWindow({
         <div class="company-site">autenticcomotors.com.br</div>
       </div>
       <div class="header-right">
-        <div>Checklist do veículo</div>
-        <div>${dataStr} • ${horaStr}</div>
+        <div class="header-right-title">
+          ${car && car.brand && car.model
+            ? `AutenTicco Motors - ${car.brand} ${car.model}`
+            : 'AutenTicco Motors - Checklist do veículo'}
+        </div>
+        <div>Gerado em ${dataStr}, ${horaStr}</div>
       </div>
     </div>
 
@@ -299,7 +364,7 @@ export function openChecklistPrintWindow({
           <div class="field-value">${resumoVeiculo || '—'}</div>
         </div>
         <div class="field">
-          <div class="field-label">Tipo de checklist</div>
+          <div class="field-label">Tipo</div>
           <div class="field-value">${tipo || '—'}</div>
         </div>
         <div class="field">
@@ -308,24 +373,41 @@ export function openChecklistPrintWindow({
         </div>
         <div class="field">
           <div class="field-label">Preço do anúncio</div>
-          <div class="field-value">
-            ${
-              car && car.price
-                ? 'R$ ' + Number(car.price).toLocaleString('pt-BR')
-                : '—'
-            }
-          </div>
+          <div class="field-value">${
+            car && car.price
+              ? 'R$ ' + Number(car.price).toLocaleString('pt-BR')
+              : '—'
+          }</div>
         </div>
       </div>
     </div>
 
     ${
-      anyMarcado
-        ? ''
-        : `<div class="alert-card">
-             <div class="alert-title">Checklist incompleto</div>
-             <div>Nenhum item foi marcado ainda. Revise o veículo e preencha o checklist para gerar um relatório completo.</div>
-           </div>`
+      !anyMarcado
+        ? `
+        <div class="alert-card">
+          <div class="alert-title">Checklist incompleto</div>
+          <div>Nenhum item foi marcado ainda. Revise o veículo e preencha o checklist para gerar um relatório completo.</div>
+        </div>
+      `
+        : `
+        <div class="section-card">
+          <div class="section-title">Pendências principais</div>
+          <div class="pendencias-text">
+            ${
+              hasIssues
+                ? `
+              <strong>Checklist com pendências.</strong><br />
+              Há itens com observações ou status diferentes de "Estado adequado". Revise o detalhamento abaixo antes de concluir a análise.
+            `
+                : `
+              <strong>Sem pendências relevantes.</strong><br />
+              Todos os itens avaliados estão em estado adequado.
+            `
+            }
+          </div>
+        </div>
+      `
     }
 
     <div class="section-card">
@@ -347,12 +429,12 @@ export function openChecklistPrintWindow({
                   ? `<tr><td colspan="3" class="no-items">Nenhum item marcado.</td></tr>`
                   : externosMarcados
                       .map((nome) => {
-                        const st = getStatus(nome);
-                        const obs = getObs(nome);
+                        const { status, obs } = getEntry(nome);
+                        const stLabel = formatStatus(status);
                         return `<tr>
                           <td class="col-item">${nome}</td>
-                          <td class="col-status">${st}</td>
-                          <td class="col-obs">${obs}</td>
+                          <td class="col-status">${stLabel || '—'}</td>
+                          <td class="col-obs">${obs || ''}</td>
                         </tr>`;
                       })
                       .join('')
@@ -376,12 +458,12 @@ export function openChecklistPrintWindow({
                   ? `<tr><td colspan="3" class="no-items">Nenhum item marcado.</td></tr>`
                   : internosMarcados
                       .map((nome) => {
-                        const st = getStatus(nome);
-                        const obs = getObs(nome);
+                        const { status, obs } = getEntry(nome);
+                        const stLabel = formatStatus(status);
                         return `<tr>
                           <td class="col-item">${nome}</td>
-                          <td class="col-status">${st}</td>
-                          <td class="col-obs">${obs}</td>
+                          <td class="col-status">${stLabel || '—'}</td>
+                          <td class="col-obs">${obs || ''}</td>
                         </tr>`;
                       })
                       .join('')
@@ -394,10 +476,12 @@ export function openChecklistPrintWindow({
 
     ${
       observacoes
-        ? `<div class="observacoes-gerais">
-             <div class="label">Observações gerais / pendências</div>
-             <div>${observacoes}</div>
-           </div>`
+        ? `
+      <div class="observacoes-gerais">
+        <div class="label">Observações gerais / pendências</div>
+        <div>${observacoes}</div>
+      </div>
+    `
         : ''
     }
 
@@ -413,7 +497,7 @@ export function openChecklistPrintWindow({
   </div>
 </body>
 </html>
-`;
+  `;
 
   const printWindow = window.open('', '_blank');
   if (!printWindow) return;

@@ -1,397 +1,569 @@
 // src/lib/checklist-print.js
+import logoUrl from '@/assets/logo.png';
 
-const MAP_DESC = {
-  OK: 'Estado adequado',
-  RD: 'Riscado',
-  AD: 'Amassado',
-  DD: 'Danificado',
-  QD: 'Quebrado',
-  FT: 'Falta',
-};
+/**
+ * Gera a página de impressão do checklist em layout A4,
+ * com tabelas compactas, margem inferior segura e nome
+ * de arquivo sugerido: "AutenTicco Motors - <veículo>".
+ */
+export function generateChecklistPDF({ car, tipo, nivel, itens, observacoes }) {
+  if (typeof window === 'undefined') return;
 
-export async function generateChecklistPDF(payload) {
-  const primary = payload?.theme?.primary || '#FACC15';
-  const dark = payload?.theme?.dark || '#111111';
-  const company = payload?.companyName || 'AutenTicco Motors';
-  const siteUrl = payload?.siteUrl || 'https://autenticcomotors.com.br';
-  const contact = payload?.contact || {};
-  const meta = payload?.meta || {};
-  const externo = payload?.externo || [];
-  const interno = payload?.interno || [];
-  const observacoes = payload?.observacoes || '';
+  const win = window.open('', '_blank');
+  if (!win) {
+    alert('Não foi possível abrir a janela de impressão.');
+    return;
+  }
 
-  const problemas = [...externo, ...interno].filter(
-    (x) => x.status && x.status !== 'OK'
-  );
+  const now = new Date();
+  const dataTexto = now.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
 
-  const html = `<!DOCTYPE html>
+  const carLabel =
+    car && (car.brand || car.model)
+      ? `${car.brand || ''} ${car.model || ''}${
+          car.year ? ` ${car.year}` : ''
+        }${car.plate ? ` • ${car.plate}` : ''}`.trim()
+      : 'Checklist do veículo';
+
+  const fuelLabel = nivel || '—';
+
+  const tipoLabel = (() => {
+    if (tipo === 'assessoria') return 'assessoria';
+    if (tipo === 'entrega') return 'entrega';
+    return 'compra';
+  })();
+
+  const fipeLabel = car?.fipe_value
+    ? `R$ ${Number(car.fipe_value).toLocaleString('pt-BR')}`
+    : '—';
+
+  const precoLabel = car?.price
+    ? `R$ ${Number(car.price).toLocaleString('pt-BR')}`
+    : '—';
+
+  // itens pode ter formato antigo (string) ou novo ({ status, obs })
+  const parseItem = (nome) => {
+    const raw = itens?.[nome];
+    if (!raw) return { status: '—', obs: '' };
+
+    if (typeof raw === 'string') {
+      return { status: raw, obs: '' };
+    }
+
+    return {
+      status: raw.status || '—',
+      obs: raw.obs || '',
+    };
+  };
+
+  const statusToText = (code) => {
+    switch (code) {
+      case 'OK':
+        return 'Estado adequado';
+      case 'RD':
+        return 'Risco / arranhão';
+      case 'AD':
+        return 'Amassado';
+      case 'DD':
+        return 'Dano mais grave';
+      case 'QD':
+        return 'Quebrado';
+      case 'FT':
+        return 'Falta / ausente';
+      case '—':
+      default:
+        return '—';
+    }
+  };
+
+  const BLOCO_EXTERNO = [
+    'Teto',
+    'Capô',
+    'Para-choque dianteiro',
+    'Paralama dianteiro direito',
+    'Porta dianteira direita',
+    'Porta traseira direita',
+    'Coluna traseira direita',
+    'Tampa porta-malas',
+    'Para-choque traseiro',
+    'Coluna traseira esquerda',
+    'Porta traseira esquerda',
+    'Porta dianteira esquerda',
+    'Paralama dianteiro esquerdo',
+    'Retrovisores',
+    'Vidros',
+    'Teto solar',
+    'Rodas',
+    'Pneus dianteiros',
+    'Pneus traseiros',
+    'Calotas',
+    'Faróis',
+    'Lanternas',
+  ];
+
+  const BLOCO_INTERNO = [
+    'Documentação',
+    'IPVA',
+    'Histórico de manutenção',
+    'Revisões concessionária',
+    'Manual',
+    'Chave reserva',
+    'Único dono',
+    'Estepe / triângulo',
+    'Macaco / chave de rodas',
+    'Tapetes',
+    'Bancos',
+    'Forros de porta',
+    'Tapeçaria teto',
+    'Cinto de segurança',
+    'Volante',
+    'Manopla / câmbio / freio',
+    'Pedais',
+    'Extintor',
+    'Som',
+    'Multimídia',
+    'Buzina',
+    'Ar-condicionado',
+    'Parte elétrica',
+    'Trava / alarme',
+    'Motor',
+    'Câmbio',
+    'Suspensão',
+    'Freios / embreagem',
+  ];
+
+  const resumoPendencias = (() => {
+    const codigos = Object.values(itens || {})
+      .map((raw) => (typeof raw === 'string' ? raw : raw.status))
+      .filter(Boolean);
+
+    if (!codigos.length) {
+      return {
+        titulo: 'Checklist incompleto',
+        texto: 'Alguns itens ainda não foram avaliados.',
+      };
+    }
+
+    const temGrave = codigos.some((c) => c === 'DD' || c === 'QD' || c === 'FT');
+    const temLeve = codigos.some((c) => c === 'RD' || c === 'AD');
+
+    if (!temGrave && !temLeve) {
+      return {
+        titulo: 'Sem pendências relevantes',
+        texto: 'Todos os itens avaliados estão em estado adequado.',
+      };
+    }
+
+    if (temGrave) {
+      return {
+        titulo: 'Pendências importantes',
+        texto: 'Há itens com danos relevantes (DD, QD ou FT). Avalie antes da negociação.',
+      };
+    }
+
+    return {
+      titulo: 'Pendências leves',
+      texto: 'Foram identificados pequenos desgastes (RD ou AD).',
+    };
+  })();
+
+  const escapeHTML = (str) =>
+    String(str || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
+  const siteUrl = 'https://autenticcomotors.com.br';
+  const company = 'AutenTicco Motors';
+
+  const pageTitle = `AutenTicco Motors - ${carLabel}`;
+  win.document.title = pageTitle;
+
+  win.document.write(`<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Checklist do veículo</title>
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
-<style>
-:root{--primary:${primary};--dark:${dark}}
-*{box-sizing:border-box}
-body{
-  margin:0;
-  background:#fff;
-  color:#0f172a;
-  font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
-  font-size:11px;
-}
-.wrap{
-  max-width:940px;
-  margin:16px auto;
-  padding:18px 18px 70px;
-  border:1px solid #e5e7eb;
-  border-radius:16px;
-  background:#fff;
-  box-shadow:0 6px 24px rgba(0,0,0,.05);
-}
-header{
-  display:flex;
-  align-items:center;
-  gap:12px;
-  padding-bottom:10px;
-  margin-bottom:12px;
-  border-bottom:4px solid var(--primary);
-}
-.brand{display:flex;align-items:center;gap:10px}
-.brand img{
-  height:46px;
-  width:auto;
-  object-fit:contain;
-  border-radius:8px;
-  background:#fff;
-}
-.brand h1{
-  margin:0;
-  font-size:18px;
-  line-height:1.2;
-  font-weight:900;
-}
-.brand .site{color:#64748b;font-size:11px}
-.header-meta{margin-left:auto;text-align:right}
-.badge{
-  display:inline-block;
-  background:var(--primary);
-  color:#111;
-  font-weight:800;
-  font-size:10px;
-  padding:4px 8px;
-  border-radius:999px;
-}
-.meta-small{color:#64748b;font-size:10px;margin-top:4px}
+  <meta charset="utf-8" />
+  <title>${escapeHTML(pageTitle)}</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 14mm 10mm 18mm 10mm;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 11px;
+      color: #111827;
+      background: #f3f4f6;
+    }
+    .page {
+      width: 100%;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 12px 0 0 0;
+    }
+    .page-inner {
+      background: #ffffff;
+      padding: 16px 24px 40px 24px; /* padding-bottom maior p/ afastar do rodapé */
+      border-radius: 0;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .logo-box {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .logo-box img {
+      height: 38px;
+    }
+    .logo-text {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .logo-text .name {
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      font-size: 14px;
+    }
+    .logo-text .site {
+      font-size: 10px;
+      color: #6b7280;
+    }
+    .doc-meta {
+      text-align: right;
+      font-size: 10px;
+      color: #6b7280;
+    }
+    .doc-meta .title {
+      font-weight: 600;
+      color: #111827;
+      margin-bottom: 2px;
+    }
+    .divider {
+      border-bottom: 2px solid #facc15;
+      margin: 6px 0 14px 0;
+    }
+    .section-title {
+      font-size: 11px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      color: #111827;
+    }
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    .card {
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 6px 8px;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+    .card-label {
+      font-size: 9px;
+      color: #6b7280;
+      margin-bottom: 2px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .card-value {
+      font-size: 11px;
+      font-weight: 600;
+      color: #111827;
+      word-break: break-word;
+    }
+    .summary-block {
+      border-radius: 10px;
+      border: 1px dashed #facc15;
+      background: #fffbeb;
+      padding: 6px 8px;
+      margin-bottom: 10px;
+      page-break-inside: avoid;
+    }
+    .summary-title {
+      font-size: 10px;
+      font-weight: 700;
+      color: #92400e;
+      margin-bottom: 2px;
+    }
+    .summary-text {
+      font-size: 10px;
+      color: #92400e;
+    }
+    .items-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .table-wrapper {
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 6px 8px;
+      page-break-inside: avoid;
+    }
+    .table-title {
+      font-size: 10px;
+      font-weight: 600;
+      margin-bottom: 4px;
+      color: #111827;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 9px;
+    }
+    thead {
+      background: #f9fafb;
+    }
+    th, td {
+      padding: 3px 4px;
+      border-bottom: 1px solid #e5e7eb;
+      vertical-align: top;
+    }
+    th:first-child,
+    td:first-child {
+      padding-left: 0;
+    }
+    th:last-child,
+    td:last-child {
+      padding-right: 0;
+    }
+    th {
+      text-align: left;
+      color: #6b7280;
+      font-weight: 600;
+    }
+    .status-ok {
+      color: #047857;
+      font-weight: 600;
+    }
+    .status-other {
+      color: #111827;
+      font-weight: 600;
+    }
+    .obs-text {
+      color: #111827;
+    }
+    .obs-text.muted {
+      color: #9ca3af;
+    }
+    .bottom-notes {
+      margin-top: 10px;
+      font-size: 9px;
+      color: #6b7280;
+      border-radius: 10px;
+      border: 1px dashed #d1d5db;
+      padding: 6px 8px;
+      page-break-inside: avoid;
+    }
+    footer {
+      width: 100%;
+      max-width: 800px;
+      margin: 0 auto;
+      font-size: 9px;
+      color: #6b7280;
+      padding: 4px 24px 0 24px;
+    }
+    footer .line {
+      border-bottom: 2px solid #facc15;
+      margin-bottom: 2px;
+    }
+    footer .content {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 6px;
+    }
+    footer .brand {
+      font-weight: 700;
+    }
+    footer .contacts span {
+      margin-right: 6px;
+      white-space: nowrap;
+    }
 
-.section-title{
-  display:flex;
-  align-items:center;
-  gap:6px;
-  margin:10px 0 6px;
-  font-weight:800;
-  font-size:11px;
-}
-.section-title .dot{
-  width:7px;
-  height:7px;
-  border-radius:99px;
-  background:var(--primary);
-}
-
-.cards{
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
-  gap:8px;
-  margin:4px 0 8px;
-}
-.card{
-  border:1px solid #e5e7eb;
-  border-radius:10px;
-  padding:8px 9px;
-  background:#fff;
-}
-.card .label{font-size:10px;color:#64748b;margin-bottom:4px}
-.card .value{font-size:12px;font-weight:700}
-
-.alert{
-  border:1px dashed #eab308;
-  background:#fffbeb;
-  border-radius:10px;
-  padding:8px 9px;
-  font-size:10px;
-  margin-bottom:8px;
-}
-.alert .title{font-weight:800;margin-bottom:4px}
-.alert ul{margin:4px 0 0 16px;padding:0}
-.alert li{margin-bottom:2px}
-
-.two-cols{
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(0,1fr));
-  gap:8px;
-  margin:4px 0 10px;
-}
-.table{
-  border:1px solid #e5e7eb;
-  border-radius:10px;
-  overflow:hidden;
-  background:#fff;
-}
-table{width:100%;border-collapse:separate;border-spacing:0}
-thead th{
-  background:#0f172a;
-  color:#fff;
-  text-align:left;
-  padding:6px 7px;
-  font-size:10px;
-}
-tbody td{
-  padding:5px 7px;
-  font-size:10px;
-  border-top:1px solid #f1f5f9;
-}
-tbody tr:nth-child(odd) td{background:#fbfdff}
-td.status{width:80px}
-td.note{width:140px;font-size:9px;color:#6b7280}
-
-.badge-status{
-  display:inline-block;
-  padding:3px 6px;
-  border-radius:999px;
-  font-size:9px;
-  font-weight:700;
-}
-.s-ok{background:#dcfce7;color:#065f46}
-.s-rd,.s-ad,.s-dd,.s-qd,.s-ft{background:#0f172a;color:#fff}
-
-.obs-card{
-  border:1px solid #e5e7eb;
-  border-radius:10px;
-  padding:8px 9px;
-  background:#fff;
-  font-size:10px;
-  white-space:pre-wrap;
-}
-
-footer{
-  position:fixed;
-  left:0;right:0;bottom:0;
-  border-top:2px solid var(--primary);
-  background:#fff;
-  padding:6px 12px 8px;
-  font-size:9px;
-  text-align:center;
-}
-.footer-line-1{font-weight:800}
-.footer-line-2{margin-top:2px;color:#475569}
-
-@media print{
-  .wrap{
-    border:none;
-    box-shadow:none;
-    margin:0;
-    padding:14mm 10mm 22mm;
-  }
-  footer{position:fixed}
-}
-</style>
+    @media screen {
+      body {
+        padding: 16px 0;
+      }
+      .page-inner {
+        border-radius: 16px;
+        box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12);
+      }
+      footer {
+        padding-bottom: 8px;
+      }
+    }
+  </style>
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <div class="brand">
-        ${payload.logoUrl ? `<img src="${escapeAttr(payload.logoUrl)}" alt="Logo" />` : ''}
-        <div>
-          <h1>${esc(company)}</h1>
-          <div class="site">${esc(siteUrl.replace(/^https?:\/\/(www\.)?/, ''))}</div>
+  <div class="page">
+    <div class="page-inner">
+      <header>
+        <div class="logo-box">
+          <img src="${logoUrl}" alt="Logo AutenTicco Motors" />
+          <div class="logo-text">
+            <div class="name">AutenTicco Motors</div>
+            <div class="site">autenticcomotors.com.br</div>
+          </div>
         </div>
-      </div>
-      <div class="header-meta">
-        <span class="badge">Checklist</span>
-        <div class="meta-small">Gerado em ${new Date().toLocaleString('pt-BR')}</div>
-      </div>
-    </header>
+        <div class="doc-meta">
+          <div class="title">Checklist do veículo</div>
+          <div>Gerado em ${escapeHTML(dataTexto)}</div>
+        </div>
+      </header>
+      <div class="divider"></div>
 
-    <div class="section-title"><span class="dot"></span>Resumo do veículo</div>
-    <div class="cards">
-      <div class="card"><div class="label">Veículo</div><div class="value">${esc(meta.veiculo || '—')}</div></div>
-      <div class="card"><div class="label">Tipo</div><div class="value">${esc(meta.tipo || '—')}</div></div>
-      <div class="card"><div class="label">Combustível</div><div class="value">${esc(meta.nivel || '—')}</div></div>
-      <div class="card"><div class="label">FIPE</div><div class="value">${esc(meta.fipe || '—')}</div></div>
-      <div class="card"><div class="label">Preço do anúncio</div><div class="value">${esc(meta.preco || '—')}</div></div>
+      <section>
+        <div class="section-title">Resumo do veículo</div>
+        <div class="grid-3">
+          <div class="card">
+            <div class="card-label">Veículo</div>
+            <div class="card-value">${escapeHTML(carLabel)}</div>
+          </div>
+          <div class="card">
+            <div class="card-label">Tipo</div>
+            <div class="card-value">${escapeHTML(tipoLabel)}</div>
+          </div>
+          <div class="card">
+            <div class="card-label">Combustível</div>
+            <div class="card-value">${escapeHTML(fuelLabel)}</div>
+          </div>
+          <div class="card">
+            <div class="card-label">FIPE</div>
+            <div class="card-value">${escapeHTML(fipeLabel)}</div>
+          </div>
+          <div class="card">
+            <div class="card-label">Preço do anúncio</div>
+            <div class="card-value">${escapeHTML(precoLabel)}</div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="section-title">Pendências principais</div>
+        <div class="summary-block">
+          <div class="summary-title">${escapeHTML(resumoPendencias.titulo)}</div>
+          <div class="summary-text">${escapeHTML(resumoPendencias.texto)}</div>
+        </div>
+      </section>
+
+      <section>
+        <div class="section-title">Detalhamento dos itens</div>
+        <div class="items-grid">
+          <div class="table-wrapper">
+            <div class="table-title">Parte externa</div>
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 50%;">Item</th>
+                  <th style="width: 30%;">Status</th>
+                  <th style="width: 20%;">Obs.</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${BLOCO_EXTERNO.map((nome) => {
+                  const { status, obs } = parseItem(nome);
+                  const statusText = statusToText(status);
+                  const statusClass = status === 'OK' ? 'status-ok' : 'status-other';
+                  const obsClass = obs ? 'obs-text' : 'obs-text muted';
+                  const obsText = obs || '—';
+                  return `
+                    <tr>
+                      <td>${escapeHTML(nome)}</td>
+                      <td class="${statusClass}">${escapeHTML(statusText)}</td>
+                      <td class="${obsClass}">${escapeHTML(obsText)}</td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="table-wrapper">
+            <div class="table-title">Documentos / interno</div>
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 50%;">Item</th>
+                  <th style="width: 30%;">Status</th>
+                  <th style="width: 20%;">Obs.</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${BLOCO_INTERNO.map((nome) => {
+                  const { status, obs } = parseItem(nome);
+                  const statusText = statusToText(status);
+                  const statusClass = status === 'OK' ? 'status-ok' : 'status-other';
+                  const obsClass = obs ? 'obs-text' : 'obs-text muted';
+                  const obsText = obs || '—';
+                  return `
+                    <tr>
+                      <td>${escapeHTML(nome)}</td>
+                      <td class="${statusClass}">${escapeHTML(statusText)}</td>
+                      <td class="${obsClass}">${escapeHTML(obsText)}</td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      ${
+        observacoes
+          ? `<section class="bottom-notes">
+              <b>Observações gerais:</b><br />
+              ${escapeHTML(observacoes)}
+            </section>`
+          : ''
+      }
     </div>
-
-    <div class="section-title"><span class="dot"></span>Pendências principais</div>
-    ${
-      problemas.length
-        ? `<div class="alert">
-            <div class="title">${problemas.length} item(ns) requer(em) atenção</div>
-            <ul>
-              ${problemas
-                .map(
-                  (p) =>
-                    `<li><b>${esc(p.nome)}</b>: ${esc(
-                      MAP_DESC[p.status] || p.status || '—'
-                    )}${
-                      p.note ? ` — ${esc(p.note)}` : ''
-                    }</li>`
-                )
-                .join('')}
-            </ul>
-          </div>`
-        : `<div class="alert">
-            <div class="title">Sem pendências relevantes</div>
-            Todos os itens avaliados estão em estado adequado.
-          </div>`
-    }
-
-    <div class="section-title"><span class="dot"></span>Detalhamento dos itens</div>
-    <div class="two-cols">
-      <div class="table">
-        <table>
-          <thead>
-            <tr><th colspan="3">Parte externa</th></tr>
-            <tr><th>Item</th><th>Status</th><th>Obs.</th></tr>
-          </thead>
-          <tbody>
-            ${externo
-              .map(
-                (row) => `
-              <tr>
-                <td>${esc(row.nome)}</td>
-                <td class="status">${renderStatus(row.status)}</td>
-                <td class="note">${row.note ? esc(row.note) : ''}</td>
-              </tr>`
-              )
-              .join('')}
-          </tbody>
-        </table>
-      </div>
-
-      <div class="table">
-        <table>
-          <thead>
-            <tr><th colspan="3">Documentos / interno</th></tr>
-            <tr><th>Item</th><th>Status</th><th>Obs.</th></tr>
-          </thead>
-          <tbody>
-            ${interno
-              .map(
-                (row) => `
-              <tr>
-                <td>${esc(row.nome)}</td>
-                <td class="status">${renderStatus(row.status)}</td>
-                <td class="note">${row.note ? esc(row.note) : ''}</td>
-              </tr>`
-              )
-              .join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    ${
-      observacoes
-        ? `
-      <div class="section-title"><span class="dot"></span>Observações gerais</div>
-      <div class="obs-card">${esc(observacoes)}</div>
-    `
-        : ''
-    }
-
   </div>
 
   <footer>
-    <div class="footer-line-1">${esc(company)}</div>
-    <div class="footer-line-2">${
-      esc(
-        [
-          contact.phone ? `☎ ${contact.phone}` : null,
-          contact.email ? `✉ ${contact.email}` : null,
-          contact.address ? `📍 ${contact.address}` : null,
-          contact.site
-            ? `🌐 ${contact.site}`
-            : siteUrl.replace(/^https?:\/\/(www\.)?/, ''),
-        ]
-          .filter(Boolean)
-          .join(' • ')
-      )
-    }</div>
+    <div class="line"></div>
+    <div class="content">
+      <div class="brand">AutenTicco Motors</div>
+      <div class="contacts">
+        <span>☎ (11) 97507-1300</span>
+        <span>✉ contato@autenticcomotors.com</span>
+        <span>📍 R. Vieira de Morais, 2110 - Sala 1015 - Campo Belo - São Paulo - SP</span>
+        <span>🌐 autenticcomotors.com.br</span>
+      </div>
+    </div>
   </footer>
 </body>
-</html>`;
+</html>`);
 
-  // imprime via iframe oculto
-  const iframe = document.createElement('iframe');
-  iframe.style.position = 'fixed';
-  iframe.style.right = '0';
-  iframe.style.bottom = '0';
-  iframe.style.width = '0';
-  iframe.style.height = '0';
-  iframe.style.border = '0';
-  iframe.setAttribute('aria-hidden', 'true');
-  document.body.appendChild(iframe);
+  win.document.close();
 
-  const doc = iframe.contentDocument || iframe.contentWindow.document;
-  doc.open();
-  doc.write(html);
-  doc.close();
-
-  await waitForImages(doc);
-  try {
-    iframe.contentWindow.focus();
-    iframe.contentWindow.print();
-  } finally {
-    setTimeout(() => {
-      if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
-    }, 1500);
-  }
-}
-
-// helpers
-function esc(s) {
-  return String(s || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-function escapeAttr(s) {
-  return String(s || '').replace(/"/g, '&quot;');
-}
-function renderStatus(code) {
-  if (!code)
-    return '<span class="badge-status">—</span>';
-  const cls = code === 'OK' ? 's-ok' : `s-${code.toLowerCase()}`;
-  const txt = MAP_DESC[code] || code;
-  return `<span class="badge-status ${cls}">${esc(txt)}</span>`;
-}
-async function waitForImages(doc) {
-  await new Promise((resolve) => {
-    const done = () => setTimeout(resolve, 150);
-    if (doc.readyState === 'complete') {
-      const imgs = Array.from(doc.images || []);
-      if (imgs.length === 0) return done();
-      let n = 0;
-      imgs.forEach((img) => {
-        const fin = () => {
-          n++;
-          if (n === imgs.length) done();
-        };
-        if (img.complete) fin();
-        else {
-          img.addEventListener('load', fin);
-          img.addEventListener('error', fin);
-        }
-      });
-    } else {
-      doc.addEventListener('readystatechange', () => {
-        if (doc.readyState === 'complete') done();
-      });
-    }
-  });
+  // pequeno delay garante que o layout carregue antes do print
+  setTimeout(() => {
+    win.focus();
+    win.print();
+  }, 500);
 }
 

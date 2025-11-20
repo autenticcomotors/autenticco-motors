@@ -3,8 +3,8 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { generateChecklistPDF } from '@/lib/checklist-print';
-import Logo from '@/assets/logo.png';
+import logo from '@/assets/logo.png';
+import { openChecklistPrintWindow } from '@/lib/checklist-print';
 
 const STATUS = ['OK', 'RD', 'AD', 'DD', 'QD', 'FT'];
 
@@ -74,11 +74,10 @@ const Checklist = () => {
   const [car, setCar] = useState(null);
 
   /**
-   * Estrutura nova do items:
-   * {
-   *   [nomeItem]: { status: 'OK' | 'RD' | ... | '', note: 'texto livre' }
+   * itens: {
+   *   "Teto": { status: "OK", obs: "90% borracha boa" },
+   *   ...
    * }
-   * (com compatibilidade com dados antigos em string)
    */
   const [itens, setItens] = useState({});
   const [observacoes, setObservacoes] = useState('');
@@ -87,7 +86,63 @@ const Checklist = () => {
   const [salvando, setSalvando] = useState(false);
   const [checklistId, setChecklistId] = useState(null);
 
-  // carrega carros
+  // ---------- helpers de estado ----------
+
+  const normalizarItensParaEstado = (rawItems) => {
+    if (!rawItems || typeof rawItems !== 'object') return {};
+
+    const todosNomes = [...BLOCO_EXTERNO, ...BLOCO_INTERNO];
+    const novo = {};
+
+    for (const nome of todosNomes) {
+      const v = rawItems[nome];
+      if (!v) continue;
+
+      if (typeof v === 'string') {
+        // formato antigo: "OK"
+        if (v.trim()) {
+          novo[nome] = { status: v.trim(), obs: '' };
+        }
+      } else if (typeof v === 'object') {
+        const status = (v.status || '').trim();
+        const obs = (v.obs || '').trim();
+        if (status || obs) {
+          novo[nome] = { status, obs };
+        }
+      }
+    }
+
+    return novo;
+  };
+
+  const marcar = (nome, valor) => {
+    setItens((prev) => {
+      const atual = prev[nome] || { status: '', obs: '' };
+      const novoStatus = atual.status === valor ? '' : valor; // toggle
+      const atualizado = { ...prev, [nome]: { ...atual, status: novoStatus } };
+
+      if (!atualizado[nome].status && !atualizado[nome].obs.trim()) {
+        const { [nome]: _, ...rest } = atualizado;
+        return rest;
+      }
+      return atualizado;
+    });
+  };
+
+  const atualizarObsItem = (nome, texto) => {
+    setItens((prev) => {
+      const atual = prev[nome] || { status: '', obs: '' };
+      const atualizado = { ...prev, [nome]: { ...atual, obs: texto } };
+
+      if (!atualizado[nome].status && !atualizado[nome].obs.trim()) {
+        const { [nome]: _, ...rest } = atualizado;
+        return rest;
+      }
+      return atualizado;
+    });
+  };
+
+  // ---------- carregar carros ----------
   useEffect(() => {
     (async () => {
       const { data, error } = await supabase
@@ -98,36 +153,18 @@ const Checklist = () => {
     })();
   }, []);
 
-  // normaliza items vindos do banco (string antiga ou objeto novo)
-  const normalizeItems = (raw) => {
-    const src = raw || {};
-    const normalized = {};
-
-    Object.entries(src).forEach(([nome, value]) => {
-      if (value && typeof value === 'object') {
-        normalized[nome] = {
-          status: value.status || '',
-          note: value.note || '',
-        };
-      } else {
-        normalized[nome] = {
-          status: typeof value === 'string' ? value : '',
-          note: '',
-        };
-      }
-    });
-
-    return normalized;
-  };
-
-  // quando troca o carro -> carrega checklist dele
+  // ---------- quando troca o carro ----------
   useEffect(() => {
     if (!carId) {
       setCar(null);
       setChecklistId(null);
       setItens({});
+      setObservacoes('');
+      setTipo('compra');
+      setNivel('50%');
       return;
     }
+
     const found = (cars || []).find((c) => c.id === carId);
     setCar(found || null);
 
@@ -142,12 +179,11 @@ const Checklist = () => {
 
       if (!error && data) {
         setChecklistId(data.id);
-        setItens(normalizeItems(data.items));
+        setItens(normalizarItensParaEstado(data.items || {}));
         setObservacoes(data.observacoes || '');
         setTipo(data.tipo || 'compra');
         setNivel(data.nivel_combustivel || '50%');
       } else {
-        // não tem, começa limpo
         setChecklistId(null);
         setItens({});
         setObservacoes('');
@@ -157,36 +193,17 @@ const Checklist = () => {
     })();
   }, [carId, cars]);
 
-  // toggle do status (clica de novo para desmarcar)
-  const marcar = (nome, valor) => {
-    setItens((prev) => {
-      const atual = prev[nome] || { status: '', note: '' };
-      const novoStatus = atual.status === valor ? '' : valor;
-      return {
-        ...prev,
-        [nome]: { status: novoStatus, note: atual.note || '' },
-      };
-    });
-  };
-
-  // atualizar observação individual
-  const atualizarNota = (nome, note) => {
-    setItens((prev) => {
-      const atual = prev[nome] || { status: '', note: '' };
-      return {
-        ...prev,
-        [nome]: { status: atual.status || '', note: note || '' },
-      };
-    });
-  };
-
+  // ---------- salvar ----------
   const salvar = async () => {
-    if (!carId) return;
+    if (!carId) {
+      alert('Selecione um veículo antes de salvar.');
+      return;
+    }
     setSalvando(true);
 
     const payload = {
       car_id: carId,
-      items: itens,
+      items: itens, // sempre no formato { nome: { status, obs } }
       observacoes,
       tipo,
       nivel_combustivel: nivel,
@@ -219,55 +236,58 @@ const Checklist = () => {
     }
   };
 
-  const gerarPDF = async () => {
-    if (!carId) {
-      alert('Selecione um veículo.');
+  // ---------- imprimir ----------
+  const handlePrint = () => {
+    if (!car) {
+      alert('Selecione um veículo para gerar o relatório.');
       return;
     }
 
-    const vehicleStr = car
-      ? `${car.brand || ''} ${car.model || ''}${
-          car.year ? ` (${car.year})` : ''
-        }${car.plate ? ` • ${car.plate}` : ''}`.trim()
-      : '';
+    const externos = BLOCO_EXTERNO.map((nome) => {
+      const entry = itens[nome] || { status: '', obs: '' };
+      return {
+        nome,
+        status: entry.status || '',
+        obs: (entry.obs || '').trim(),
+      };
+    }).filter((r) => r.status || r.obs);
 
-    await generateChecklistPDF({
-      logoUrl: Logo,
+    const internos = BLOCO_INTERNO.map((nome) => {
+      const entry = itens[nome] || { status: '', obs: '' };
+      return {
+        nome,
+        status: entry.status || '',
+        obs: (entry.obs || '').trim(),
+      };
+    }).filter((r) => r.status || r.obs);
+
+    const carLabel = [
+      car.brand || '',
+      car.model || '',
+      car.year ? `(${car.year})` : '',
+      car.plate ? `• ${car.plate}` : '',
+    ]
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    openChecklistPrintWindow({
+      logoUrl: logo,
+      company: 'AutenTicco Motors',
       siteUrl: 'https://autenticcomotors.com.br',
-      companyName: 'AutenTicco Motors',
-      contact: {
-        phone: '(11) 97507-1300',
-        email: 'contato@autenticcomotors.com',
-        address:
-          'R. Vieira de Morais, 2110 - Sala 1015 - Campo Belo, São Paulo - SP',
-        site: 'autenticcomotors.com.br',
-      },
-      meta: {
-        tipo,
-        nivel,
-        veiculo: vehicleStr || '—',
-        fipe: car?.fipe_value
-          ? `R$ ${Number(car.fipe_value).toLocaleString('pt-BR')}`
-          : '—',
-        preco: car?.price
-          ? `R$ ${Number(car.price).toLocaleString('pt-BR')}`
-          : '—',
-      },
-      externo: BLOCO_EXTERNO.map((nome) => ({
-        nome,
-        status: itens[nome]?.status || '',
-        note: itens[nome]?.note || '',
-      })),
-      interno: BLOCO_INTERNO.map((nome) => ({
-        nome,
-        status: itens[nome]?.status || '',
-        note: itens[nome]?.note || '',
-      })),
-      observacoes: observacoes,
-      theme: { primary: '#FACC15', dark: '#111111' },
+      carLabel: carLabel || 'Checklist de veículo',
+      tipo,
+      nivel,
+      fipeValue: car.fipe_value,
+      precoAnuncio: car.price,
+      externos,
+      internos,
+      observacoesGerais: observacoes,
+      generatedAt: new Date(),
     });
   };
 
+  // ---------- render ----------
   return (
     <div className="min-h-screen bg-slate-50 pb-16">
       <div className="sticky top-0 z-40 bg-slate-50/90 backdrop-blur border-b flex items-center gap-3 px-4 py-3">
@@ -323,7 +343,7 @@ const Checklist = () => {
             )}
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <select
               value={tipo}
               onChange={(e) => setTipo(e.target.value)}
@@ -350,35 +370,32 @@ const Checklist = () => {
           <>
             <div className="bg-white rounded-2xl border shadow-sm p-3 text-xs text-slate-500">
               LEGENDA: <b>OK</b> = Estado adequado • <b>RD</b> = Riscado •{' '}
-              <b>AD</b> = Amassado • <b>DD</b> = Danificado • <b>QD</b> =
-              Quebrado • <b>FT</b> = Falta
+              <b>AD</b> = Amassado • <b>DD</b> = Danificado • <b>QD</b> = Quebrado •{' '}
+              <b>FT</b> = Falta
             </div>
 
             <div className="grid md:grid-cols-2 gap-4">
-              {/* Parte externa */}
               <div className="bg-white rounded-2xl border shadow-sm p-3 space-y-2">
                 <p className="text-sm font-semibold text-slate-900 mb-1">
                   Parte externa
                 </p>
                 {BLOCO_EXTERNO.map((nome) => {
-                  const item = itens[nome] || { status: '', note: '' };
+                  const entry = itens[nome] || { status: '', obs: '' };
                   return (
                     <div
                       key={nome}
-                      className="flex flex-col gap-1 border-b border-slate-100 pb-2 mb-1 last:border-b-0 last:pb-0 last:mb-0"
+                      className="flex flex-col gap-1 border-b last:border-b-0 pb-2"
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm text-slate-800 w-40">
-                          {nome}
-                        </span>
+                        <span className="text-sm text-slate-800 w-44">{nome}</span>
                         <div className="flex gap-1 overflow-x-auto">
                           {STATUS.map((st) => (
                             <button
                               key={st}
                               type="button"
                               onClick={() => marcar(nome, st)}
-                              className={`px-2 py-1 rounded text-[11px] whitespace-nowrap ${
-                                item.status === st
+                              className={`px-2 py-1 rounded text-xs whitespace-nowrap ${
+                                entry.status === st
                                   ? st === 'OK'
                                     ? 'bg-emerald-100 text-emerald-700'
                                     : 'bg-slate-900 text-white'
@@ -392,40 +409,37 @@ const Checklist = () => {
                       </div>
                       <input
                         type="text"
-                        value={item.note}
-                        onChange={(e) => atualizarNota(nome, e.target.value)}
-                        className="w-full border rounded-md px-2 py-1 text-xs bg-slate-50"
+                        value={entry.obs || ''}
+                        onChange={(e) => atualizarObsItem(nome, e.target.value)}
                         placeholder="Observação deste item (opcional)..."
+                        className="w-full border rounded-md px-2 py-1 text-xs bg-slate-50"
                       />
                     </div>
                   );
                 })}
               </div>
 
-              {/* Documentos / interno */}
               <div className="bg-white rounded-2xl border shadow-sm p-3 space-y-2">
                 <p className="text-sm font-semibold text-slate-900 mb-1">
                   Documentos / interno
                 </p>
                 {BLOCO_INTERNO.map((nome) => {
-                  const item = itens[nome] || { status: '', note: '' };
+                  const entry = itens[nome] || { status: '', obs: '' };
                   return (
                     <div
                       key={nome}
-                      className="flex flex-col gap-1 border-b border-slate-100 pb-2 mb-1 last:border-b-0 last:pb-0 last:mb-0"
+                      className="flex flex-col gap-1 border-b last:border-b-0 pb-2"
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm text-slate-800 w-40">
-                          {nome}
-                        </span>
+                        <span className="text-sm text-slate-800 w-48">{nome}</span>
                         <div className="flex gap-1 overflow-x-auto">
                           {STATUS.map((st) => (
                             <button
                               key={st}
                               type="button"
                               onClick={() => marcar(nome, st)}
-                              className={`px-2 py-1 rounded text-[11px] whitespace-nowrap ${
-                                item.status === st
+                              className={`px-2 py-1 rounded text-xs whitespace-nowrap ${
+                                entry.status === st
                                   ? st === 'OK'
                                     ? 'bg-emerald-100 text-emerald-700'
                                     : 'bg-slate-900 text-white'
@@ -439,10 +453,10 @@ const Checklist = () => {
                       </div>
                       <input
                         type="text"
-                        value={item.note}
-                        onChange={(e) => atualizarNota(nome, e.target.value)}
-                        className="w-full border rounded-md px-2 py-1 text-xs bg-slate-50"
+                        value={entry.obs || ''}
+                        onChange={(e) => atualizarObsItem(nome, e.target.value)}
                         placeholder="Observação deste item (opcional)..."
+                        className="w-full border rounded-md px-2 py-1 text-xs bg-slate-50"
                       />
                     </div>
                   );
@@ -450,7 +464,7 @@ const Checklist = () => {
               </div>
             </div>
 
-            <div className="bg-white rounded-2xl border shadow-sm p-4 space-y-2">
+            <div className="bg-white rounded-2xl border shadow-sm p-4 space-y-2 mb-6">
               <label className="text-sm text-slate-700">
                 Observações / pendências gerais
               </label>
@@ -461,20 +475,21 @@ const Checklist = () => {
                 className="w-full border rounded-lg px-3 py-2 text-sm bg-slate-50"
                 placeholder="Ex.: risco porta dir., faltando estepe, dono vai mandar chave reserva..."
               />
-              <div className="flex flex-col sm:flex-row gap-2 justify-end">
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handlePrint}
+                  className="font-semibold"
+                >
+                  Gerar PDF
+                </Button>
                 <Button
                   onClick={salvar}
                   className="bg-yellow-400 text-black hover:bg-yellow-500 font-semibold"
                   disabled={salvando}
                 >
                   {salvando ? 'Salvando...' : 'Salvar checklist'}
-                </Button>
-                <Button
-                  onClick={gerarPDF}
-                  className="bg-black text-white hover:bg-gray-800 font-semibold"
-                  type="button"
-                >
-                  Gerar relatório (PDF)
                 </Button>
               </div>
             </div>

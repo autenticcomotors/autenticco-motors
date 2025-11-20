@@ -1,5 +1,6 @@
 // src/lib/checklist-print.js
-// Gera o PDF de checklist no layout "multi páginas" preferido pelo dono.
+// Gera o PDF de checklist no layout multi páginas preferido,
+// mantendo compatibilidade com o Checklist.jsx (openChecklistPrintWindow).
 
 const BLOCO_EXTERNO = [
   'Teto',
@@ -140,7 +141,7 @@ const buildRowsHTML = (labels, itens) => {
 
   for (const nome of labels) {
     const { statusCode, obs } = getItemData(itens, nome);
-    // Regra de funcionamento atual: só mostra se tiver status OU observação
+    // Regra: só mostra se tiver status OU observação
     if (!statusCode && !obs) continue;
 
     rows.push({
@@ -189,7 +190,8 @@ const buildResumoPendencias = (itens) => {
   if (!totalMarcados) {
     return {
       titulo: 'Checklist incompleto',
-      texto: 'Nenhum item foi marcado ainda. Revise o veículo e preencha o checklist para gerar um relatório completo.',
+      texto:
+        'Nenhum item foi marcado ainda. Revise o veículo e preencha o checklist para gerar um relatório completo.',
     };
   }
 
@@ -206,7 +208,8 @@ const buildResumoPendencias = (itens) => {
   };
 };
 
-export function printChecklist({ car, tipo, nivel, itens, observacoes }) {
+// Função principal que monta o HTML e dispara o print
+function printChecklist({ car, tipo, nivel, itens, observacoes, logoSrc }) {
   if (typeof window === 'undefined') return;
 
   const win = window.open('', '_blank');
@@ -238,6 +241,10 @@ export function printChecklist({ car, tipo, nivel, itens, observacoes }) {
 
   const externoRowsHTML = buildRowsHTML(BLOCO_EXTERNO, itens || {});
   const internoRowsHTML = buildRowsHTML(BLOCO_INTERNO, itens || {});
+
+  const logoHtml = logoSrc
+    ? `<img src="${escapeHTML(logoSrc)}" alt="AutenTicco Motors" class="brand-logo" />`
+    : '';
 
   const html = `
 <!DOCTYPE html>
@@ -452,18 +459,6 @@ export function printChecklist({ car, tipo, nivel, itens, observacoes }) {
         color: #9ca3af;
         font-style: italic;
       }
-      .observacoes-gerais {
-        margin-top: 16px;
-        border-radius: 10px;
-        border: 1px solid #e5e7eb;
-        background: #f9fafb;
-        padding: 8px 10px;
-        font-size: 10px;
-      }
-      .observacoes-gerais strong {
-        display: block;
-        margin-bottom: 4px;
-      }
       .footer {
         font-size: 8px;
         color: #6b7280;
@@ -497,7 +492,7 @@ export function printChecklist({ car, tipo, nivel, itens, observacoes }) {
 
       <div class="header-main">
         <div class="brand">
-          <img src="${window.location.origin}/src/assets/logo.png" alt="AutenTicco Motors" class="brand-logo" />
+          ${logoHtml}
           <div class="brand-text">
             <span class="brand-name">AutenTicco Motors</span>
             <span class="brand-site">autenticcomotors.com.br</span>
@@ -602,10 +597,17 @@ export function printChecklist({ car, tipo, nivel, itens, observacoes }) {
   win.document.write(html);
   win.document.close();
 
-  // Pequeno delay para garantir que o logo e estilos carreguem antes do print
   setTimeout(() => {
     win.focus();
     win.print();
   }, 400);
+}
+
+/**
+ * Função usada pelo Checklist.jsx.
+ * Mantém compatibilidade com o código existente.
+ */
+export function openChecklistPrintWindow(params) {
+  printChecklist(params || {});
 }
 

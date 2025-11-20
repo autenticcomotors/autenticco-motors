@@ -1,5 +1,4 @@
 // src/lib/checklist-print.js
-//
 export function openChecklistPrintWindow({
   car,
   items = {},

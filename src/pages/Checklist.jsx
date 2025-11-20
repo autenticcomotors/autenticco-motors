@@ -3,6 +3,8 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { generateChecklistPDF } from '@/lib/checklist-print';
+import Logo from '@/assets/logo.png';
 
 const STATUS = ['OK', 'RD', 'AD', 'DD', 'QD', 'FT'];
 
@@ -76,7 +78,7 @@ const Checklist = () => {
   const [tipo, setTipo] = useState('compra');
   const [nivel, setNivel] = useState('50%');
   const [salvando, setSalvando] = useState(false);
-  const [checklistId, setChecklistId] = useState(null); // 👈 pra saber se é insert ou update
+  const [checklistId, setChecklistId] = useState(null); // insert/update
 
   // carrega carros
   useEffect(() => {
@@ -144,14 +146,12 @@ const Checklist = () => {
     let error = null;
 
     if (checklistId) {
-      // UPDATE
       const { error: e } = await supabase
         .from('vehicle_checklists')
         .update(payload)
         .eq('id', checklistId);
       error = e;
     } else {
-      // INSERT
       const { data, error: e } = await supabase
         .from('vehicle_checklists')
         .insert(payload)
@@ -168,6 +168,42 @@ const Checklist = () => {
       console.error(error);
       alert('Erro ao salvar checklist');
     }
+  };
+
+  const gerarPDF = async () => {
+    if (!carId) {
+      alert('Selecione um veículo.');
+      return;
+    }
+
+    const vehicleStr = car
+      ? `${car.brand || ''} ${car.model || ''}${car.year ? ` (${car.year})` : ''}${
+          car.plate ? ` • ${car.plate}` : ''
+        }`.trim()
+      : '';
+
+    await generateChecklistPDF({
+      logoUrl: Logo,
+      siteUrl: 'https://autenticcomotors.com.br',
+      companyName: 'AutenTicco Motors',
+      contact: {
+        phone: '(11) 97507-1300',
+        email: 'contato@autenticcomotors.com',
+        address: 'R. Vieira de Morais, 2110 - Sala 1015 - Campo Belo, São Paulo - SP',
+        site: 'autenticcomotors.com.br',
+      },
+      meta: {
+        tipo,
+        nivel,
+        veiculo: vehicleStr || '—',
+        fipe: car?.fipe_value ? `R$ ${Number(car.fipe_value).toLocaleString('pt-BR')}` : '—',
+        preco: car?.price ? `R$ ${Number(car.price).toLocaleString('pt-BR')}` : '—',
+      },
+      externo: BLOCO_EXTERNO.map((n) => ({ nome: n, status: itens[n] || '' })),
+      interno: BLOCO_INTERNO.map((n) => ({ nome: n, status: itens[n] || '' })),
+      observacoes: observacoes,
+      theme: { primary: '#FACC15', dark: '#111111' },
+    });
   };
 
   return (
@@ -319,13 +355,20 @@ const Checklist = () => {
                 className="w-full border rounded-lg px-3 py-2 text-sm bg-slate-50"
                 placeholder="Ex.: risco porta dir., faltando estepe, dono vai mandar chave reserva..."
               />
-              <div className="flex justify-end">
+              <div className="flex flex-col sm:flex-row gap-2 justify-end">
                 <Button
                   onClick={salvar}
                   className="bg-yellow-400 text-black hover:bg-yellow-500 font-semibold"
                   disabled={salvando}
                 >
                   {salvando ? 'Salvando...' : 'Salvar checklist'}
+                </Button>
+                <Button
+                  onClick={gerarPDF}
+                  className="bg-black text-white hover:bg-gray-800 font-semibold"
+                  type="button"
+                >
+                  Gerar relatório (PDF)
                 </Button>
               </div>
             </div>

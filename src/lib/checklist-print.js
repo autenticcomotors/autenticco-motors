@@ -139,40 +139,37 @@ export function generateChecklistPDF({ car, tipo, nivel, itens, observacoes }) {
     'Freios / embreagem',
   ];
 
-  const resumoPendencias = (() => {
-    const codigos = Object.values(itens || {})
-      .map((raw) => (typeof raw === 'string' ? raw : raw.status))
-      .filter(Boolean);
+  // Só considera códigos de itens realmente marcados (status diferente de "—")
+  const codigosMarcados = Object.values(itens || {})
+    .map((raw) => (typeof raw === 'string' ? raw : raw.status))
+    .filter((c) => c && c !== '—');
 
-    if (!codigos.length) {
-      return {
-        titulo: 'Checklist incompleto',
-        texto: 'Alguns itens ainda não foram avaliados.',
-      };
-    }
+  let resumoPendencias = null;
 
-    const temGrave = codigos.some((c) => c === 'DD' || c === 'QD' || c === 'FT');
-    const temLeve = codigos.some((c) => c === 'RD' || c === 'AD');
+  if (codigosMarcados.length) {
+    const temGrave = codigosMarcados.some(
+      (c) => c === 'DD' || c === 'QD' || c === 'FT',
+    );
+    const temLeve = codigosMarcados.some((c) => c === 'RD' || c === 'AD');
 
     if (!temGrave && !temLeve) {
-      return {
+      resumoPendencias = {
         titulo: 'Sem pendências relevantes',
         texto: 'Todos os itens avaliados estão em estado adequado.',
       };
-    }
-
-    if (temGrave) {
-      return {
+    } else if (temGrave) {
+      resumoPendencias = {
         titulo: 'Pendências importantes',
         texto: 'Há itens com danos relevantes (DD, QD ou FT). Avalie antes da negociação.',
       };
+    } else {
+      resumoPendencias = {
+        titulo: 'Pendências leves',
+        texto: 'Foram identificados pequenos desgastes (RD ou AD).',
+      };
     }
-
-    return {
-      titulo: 'Pendências leves',
-      texto: 'Foram identificados pequenos desgastes (RD ou AD).',
-    };
-  })();
+  }
+  // se não tiver nenhum marcado, simplesmente não mostra o bloco de pendências
 
   const escapeHTML = (str) =>
     String(str || '')
@@ -187,6 +184,35 @@ export function generateChecklistPDF({ car, tipo, nivel, itens, observacoes }) {
 
   const pageTitle = `AutenTicco Motors - ${carLabel}`;
   win.document.title = pageTitle;
+
+  // monta linhas só com itens marcados (status != "—" OU com observação)
+  const makeRows = (lista) =>
+    lista
+      .map((nome) => {
+        const { status, obs } = parseItem(nome);
+        const hasStatus = status && status !== '—';
+        const hasObs = !!obs;
+
+        if (!hasStatus && !hasObs) return null;
+
+        const statusText = statusToText(hasStatus ? status : '—');
+        const statusClass = hasStatus && status === 'OK' ? 'status-ok' : 'status-other';
+        const obsClass = hasObs ? 'obs-text' : 'obs-text muted';
+        const obsText = hasObs ? obs : '—';
+
+        return `
+          <tr>
+            <td>${escapeHTML(nome)}</td>
+            <td class="${statusClass}">${escapeHTML(statusText)}</td>
+            <td class="${obsClass}">${escapeHTML(obsText)}</td>
+          </tr>
+        `;
+      })
+      .filter(Boolean)
+      .join('');
+
+  const rowsExterno = makeRows(BLOCO_EXTERNO);
+  const rowsInterno = makeRows(BLOCO_INTERNO);
 
   win.document.write(`<!DOCTYPE html>
 <html lang="pt-BR">
@@ -461,13 +487,17 @@ export function generateChecklistPDF({ car, tipo, nivel, itens, observacoes }) {
         </div>
       </section>
 
-      <section>
-        <div class="section-title">Pendências principais</div>
-        <div class="summary-block">
-          <div class="summary-title">${escapeHTML(resumoPendencias.titulo)}</div>
-          <div class="summary-text">${escapeHTML(resumoPendencias.texto)}</div>
-        </div>
-      </section>
+      ${
+        resumoPendencias
+          ? `<section>
+              <div class="section-title">Pendências principais</div>
+              <div class="summary-block">
+                <div class="summary-title">${escapeHTML(resumoPendencias.titulo)}</div>
+                <div class="summary-text">${escapeHTML(resumoPendencias.texto)}</div>
+              </div>
+            </section>`
+          : ''
+      }
 
       <section>
         <div class="section-title">Detalhamento dos itens</div>
@@ -483,20 +513,10 @@ export function generateChecklistPDF({ car, tipo, nivel, itens, observacoes }) {
                 </tr>
               </thead>
               <tbody>
-                ${BLOCO_EXTERNO.map((nome) => {
-                  const { status, obs } = parseItem(nome);
-                  const statusText = statusToText(status);
-                  const statusClass = status === 'OK' ? 'status-ok' : 'status-other';
-                  const obsClass = obs ? 'obs-text' : 'obs-text muted';
-                  const obsText = obs || '—';
-                  return `
-                    <tr>
-                      <td>${escapeHTML(nome)}</td>
-                      <td class="${statusClass}">${escapeHTML(statusText)}</td>
-                      <td class="${obsClass}">${escapeHTML(obsText)}</td>
-                    </tr>
-                  `;
-                }).join('')}
+                ${
+                  rowsExterno ||
+                  '<tr><td colspan="3" class="obs-text muted">Nenhum item marcado.</td></tr>'
+                }
               </tbody>
             </table>
           </div>
@@ -512,20 +532,10 @@ export function generateChecklistPDF({ car, tipo, nivel, itens, observacoes }) {
                 </tr>
               </thead>
               <tbody>
-                ${BLOCO_INTERNO.map((nome) => {
-                  const { status, obs } = parseItem(nome);
-                  const statusText = statusToText(status);
-                  const statusClass = status === 'OK' ? 'status-ok' : 'status-other';
-                  const obsClass = obs ? 'obs-text' : 'obs-text muted';
-                  const obsText = obs || '—';
-                  return `
-                    <tr>
-                      <td>${escapeHTML(nome)}</td>
-                      <td class="${statusClass}">${escapeHTML(statusText)}</td>
-                      <td class="${obsClass}">${escapeHTML(obsText)}</td>
-                    </tr>
-                  `;
-                }).join('')}
+                ${
+                  rowsInterno ||
+                  '<tr><td colspan="3" class="obs-text muted">Nenhum item marcado.</td></tr>'
+                }
               </tbody>
             </table>
           </div>
@@ -560,7 +570,6 @@ export function generateChecklistPDF({ car, tipo, nivel, itens, observacoes }) {
 
   win.document.close();
 
-  // pequeno delay garante que o layout carregue antes do print
   setTimeout(() => {
     win.focus();
     win.print();

@@ -72,7 +72,7 @@ const Checklist = () => {
   const [carId, setCarId] = useState(carParam);
   const [car, setCar] = useState(null);
 
-  // sempre: { [nome]: { status, obs } }
+  // SEMPRE neste formato: { [nome]: { status, obs } }
   const [itens, setItens] = useState({});
   const [observacoes, setObservacoes] = useState('');
   const [tipo, setTipo] = useState('compra');
@@ -148,11 +148,11 @@ const Checklist = () => {
     })();
   }, [carId, cars]);
 
-  // marca / desmarca status
+  // marcar / DESmarcar status
   const marcar = (nome, valor) => {
     setItens((prev) => {
       const atual = prev[nome] || { status: '', obs: '' };
-      const novoStatus = atual.status === valor ? '' : valor; // clique de novo desmarca
+      const novoStatus = atual.status === valor ? '' : valor; // clicou de novo, desmarca
       return {
         ...prev,
         [nome]: { ...atual, status: novoStatus },
@@ -160,7 +160,7 @@ const Checklist = () => {
     });
   };
 
-  // altera observação
+  // alterar observação do item
   const handleObsChange = (nome, texto) => {
     setItens((prev) => {
       const atual = prev[nome] || { status: '', obs: '' };
@@ -227,30 +227,22 @@ const Checklist = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 pb-16">
+      {/* Cabeçalho simples + Voltar, igual já existia */}
       <div className="sticky top-0 z-40 bg-slate-50/90 backdrop-blur border-b flex items-center gap-3 px-4 py-3">
         <h1 className="text-base md:text-lg font-bold text-slate-900 flex-1">
           Checklist de veículo
         </h1>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={gerarPdf}
-            className="text-xs md:text-sm"
-            disabled={!carId}
-          >
-            Gerar PDF
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => navigate('/dashboard')}
-            className="text-xs md:text-sm"
-          >
-            Voltar
-          </Button>
-        </div>
+        <Button
+          variant="outline"
+          onClick={() => navigate('/dashboard')}
+          className="text-xs md:text-sm"
+        >
+          Voltar
+        </Button>
       </div>
 
       <div className="max-w-5xl mx-auto mt-4 px-4 space-y-4">
+        {/* Seleção de veículo + tipo/nivel */}
         <div className="bg-white rounded-2xl border shadow-sm p-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="flex-1">
             <p className="text-xs uppercase text-slate-500 mb-1">
@@ -315,12 +307,14 @@ const Checklist = () => {
 
         {carId ? (
           <>
+            {/* Legenda */}
             <div className="bg-white rounded-2xl border shadow-sm p-3 text-xs text-slate-500">
               LEGENDA: <b>OK</b> = Estado adequado • <b>RD</b> = Riscado •{' '}
               <b>AD</b> = Amassado • <b>DD</b> = Danificado • <b>QD</b> =
               Quebrado • <b>FT</b> = Falta
             </div>
 
+            {/* Grid de itens */}
             <div className="grid md:grid-cols-2 gap-4">
               {/* Parte externa */}
               <div className="bg-white rounded-2xl border shadow-sm p-3 space-y-2">
@@ -421,6 +415,7 @@ const Checklist = () => {
               </div>
             </div>
 
+            {/* Observações gerais + botões */}
             <div className="bg-white rounded-2xl border shadow-sm p-4 space-y-2">
               <label className="text-sm text-slate-700">
                 Observações / pendências
@@ -433,6 +428,14 @@ const Checklist = () => {
                 placeholder="Ex.: risco porta dir., faltando estepe, dono vai mandar chave reserva..."
               />
               <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={gerarPdf}
+                  disabled={!car}
+                  className="text-sm"
+                >
+                  Gerar PDF
+                </Button>
                 <Button
                   onClick={salvar}
                   className="bg-yellow-400 text-black hover:bg-yellow-500 font-semibold"

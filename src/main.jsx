@@ -7,6 +7,7 @@ import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import Home from './pages/Home';
 import Stock from './pages/Stock';
 import SellCar from './pages/SellCar';
+import Services from './pages/Services';
 import About from './pages/About';
 import Contact from './pages/Contact';
 import CarDetail from './pages/car-detail';
@@ -24,6 +25,7 @@ const router = createBrowserRouter([
       { path: '/', element: <Home /> },
       { path: '/estoque', element: <Stock /> },
       { path: '/vender', element: <SellCar /> },
+      { path: '/loja-servicos', element: <Services /> },
       { path: '/sobre', element: <About /> },
       { path: '/contato', element: <Contact /> },
       { path: '/carro/:slug', element: <CarDetail /> },

@@ -4,7 +4,7 @@ import { Helmet } from 'react-helmet';
 import { motion } from 'framer-motion';
 import { ShoppingCart, Tool, Tire, Film, ChevronRight } from 'lucide-react';
 import BackgroundShape from '@/components/BackgroundShape';
-import placeholderService from '@/assets/placeholder-service.jpg'; // se não existir, substitua por URL
+//import placeholderService from '@/assets/placeholder-service.jpg'; // se não existir, substitua por URL
 
 const servicesData = [
   {

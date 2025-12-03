@@ -2,7 +2,7 @@
 import React from 'react';
 import { Helmet } from 'react-helmet';
 import { motion } from 'framer-motion';
-import { ShoppingCart, Tool, Truck, Film, ChevronRight } from 'lucide-react';
+import { ShoppingCart, Wrench, Truck, Film, ChevronRight } from 'lucide-react';
 import BackgroundShape from '@/components/BackgroundShape';
 
 const servicesData = [
@@ -31,7 +31,7 @@ const servicesData = [
     id: 'martelinho',
     title: 'Martelinho de Ouro',
     short: 'Reparos sem pintura — acabamento profissional.',
-    icon: <Tool className="w-6 h-6" />,
+    icon: <Wrench className="w-6 h-6" />,
     img: 'https://placehold.co/600x400?text=Martelinho+de+Ouro',
   },
 ];

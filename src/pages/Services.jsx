@@ -2,41 +2,75 @@
 import React from 'react';
 import { Helmet } from 'react-helmet';
 import { motion } from 'framer-motion';
-import { ChevronRight, Music, Droplet, Tool } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import BackgroundShape from '@/components/BackgroundShape';
 
-/**
- * Imagens públicas (Unsplash). O conteúdo pode variar conforme a seleção do Unsplash.
- * Se preferir imagens fixas, envie os arquivos e eu atualizo para assets locais (/public/images/...).
- */
+/* SVGs inline — garantem compatibilidade no build */
+const IconScreen = ({ className = 'w-5 h-5' }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+    <rect x="3" y="4" width="18" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.6" />
+    <path d="M8 20h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    <path d="M12 16v4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+  </svg>
+);
+
+const IconWindow = ({ className = 'w-5 h-5' }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+    <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="1.6" />
+    <path d="M12 3v18" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    <path d="M3 12h18" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+  </svg>
+);
+
+const IconWheel = ({ className = 'w-5 h-5' }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+    <circle cx="12" cy="12" r="6.2" stroke="currentColor" strokeWidth="1.6" />
+    <circle cx="12" cy="12" r="2.2" stroke="currentColor" strokeWidth="1.6" />
+    <path d="M12 4v3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    <path d="M12 20v-3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    <path d="M4 12h3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    <path d="M20 12h-3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+  </svg>
+);
+
+const IconHammer = ({ className = 'w-5 h-5' }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+    <path d="M2 20l7-7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M7 15l6-6 4 4-6 6-4-4z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M15 9l4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+);
+
+/* imagens públicas (Unsplash) — aleatórias por termo; se quiser imagens fixas, me envia os arquivos */
 const servicesData = [
   {
     id: 'multimidia',
     title: 'Central Multimídia',
-    short: 'Instalação e configuração de som, tela e integração com smartphone — entrega com garantia AutenTicco.',
-    img: 'https://source.unsplash.com/800x600/?car-audio,headunit,car-dashboard',
-    smallIcon: <Music className="w-5 h-5" />,
+    short:
+      'Instalação e configuração de som, tela e integração com smartphone — entrega com garantia AutenTicco.',
+    img: 'https://source.unsplash.com/1200x800/?car-audio,headunit,car-dashboard',
+    smallIcon: <IconScreen />,
   },
   {
     id: 'insulfilm',
     title: 'Insulfilm',
-    short: 'Aplicação profissional de películas — conforto térmico, UV e estética.',
-    img: 'https://source.unsplash.com/800x600/?car-window,tint,car-window-tint',
-    smallIcon: <Droplet className="w-5 h-5" />,
+    short: 'Aplicação profissional de películas — conforto térmico, proteção UV e estética.',
+    img: 'https://source.unsplash.com/1200x800/?car-window,tint,window-tint',
+    smallIcon: <IconWindow />,
   },
   {
     id: 'pneus',
     title: 'Pneus, Alinhamento & Balanceamento',
-    short: 'Troca de pneus, alinhamento e balanceamento com garantia de processo e segurança.',
-    img: 'https://source.unsplash.com/800x600/?car-wheel,tire,car-tyre',
-    smallIcon: <ChevronRight className="w-5 h-5" />, // ícone neutro aqui
+    short: 'Troca de pneus, alinhamento e balanceamento com garantia e processo profissional.',
+    img: 'https://source.unsplash.com/1200x800/?car-wheel,tire,tyre',
+    smallIcon: <IconWheel />,
   },
   {
     id: 'martelinho',
     title: 'Martelinho de Ouro',
     short: 'Reparos finos de lataria sem pintura — acabamento preciso e discreto.',
-    img: 'https://source.unsplash.com/800x600/?body-repair,car-repair,auto-body',
-    smallIcon: <Tool className="w-5 h-5" />,
+    img: 'https://source.unsplash.com/1200x800/?auto-body,body-repair,car-repair',
+    smallIcon: <IconHammer />,
   },
 ];
 
@@ -55,7 +89,11 @@ const Services = () => {
 
       <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <section className="py-20 text-center">
-          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+          >
             <h1 className="text-4xl md:text-5xl font-extrabold text-gray-900">
               Loja & Serviços <span className="text-yellow-500">AutenTicco</span>
             </h1>
@@ -81,15 +119,16 @@ const Services = () => {
                     src={s.img}
                     alt={s.title}
                     className="w-full h-full object-cover"
-                    onError={(e) => { e.currentTarget.src = 'https://placehold.co/800x600?text=Serviço'; }}
+                    onError={(e) => {
+                      e.currentTarget.src = 'https://placehold.co/1200x800?text=Serviço';
+                    }}
                   />
                 </div>
 
                 <div className="p-6">
-                  {/* bolinha amarela menor só com ícone para reforçar tema (opcional) */}
                   <div className="flex items-start gap-4">
                     <div className="w-10 h-10 bg-yellow-400 rounded-full flex items-center justify-center text-black flex-shrink-0">
-                      {s.smallIcon}
+                      <div className="text-black">{s.smallIcon}</div>
                     </div>
 
                     <div className="flex-1">

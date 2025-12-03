@@ -2,9 +2,8 @@
 import React from 'react';
 import { Helmet } from 'react-helmet';
 import { motion } from 'framer-motion';
-import { ShoppingCart, Tool, Tire, Film, ChevronRight } from 'lucide-react';
+import { ShoppingCart, Tool, Truck, Film, ChevronRight } from 'lucide-react';
 import BackgroundShape from '@/components/BackgroundShape';
-//import placeholderService from '@/assets/placeholder-service.jpg'; // se não existir, substitua por URL
 
 const servicesData = [
   {
@@ -25,7 +24,7 @@ const servicesData = [
     id: 'pneus',
     title: 'Pneus, Alinhamento e Balanceamento',
     short: 'Serviços completos com parceiras certificadas.',
-    icon: <Tire className="w-6 h-6" />,
+    icon: <Truck className="w-6 h-6" />,
     img: 'https://placehold.co/600x400?text=Pneus+%26+Alinhamento',
   },
   {

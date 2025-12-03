@@ -2,37 +2,41 @@
 import React from 'react';
 import { Helmet } from 'react-helmet';
 import { motion } from 'framer-motion';
-import { ShoppingCart, Wrench, Truck, Film, ChevronRight } from 'lucide-react';
+import { ChevronRight, Music, Droplet, Tool } from 'lucide-react';
 import BackgroundShape from '@/components/BackgroundShape';
 
+/**
+ * Imagens públicas (Unsplash). O conteúdo pode variar conforme a seleção do Unsplash.
+ * Se preferir imagens fixas, envie os arquivos e eu atualizo para assets locais (/public/images/...).
+ */
 const servicesData = [
   {
     id: 'multimidia',
     title: 'Central Multimídia',
-    short: 'Instalação e configuração com garantia AutenTicco.',
-    icon: <ShoppingCart className="w-6 h-6" />,
-    img: 'https://placehold.co/600x400?text=Central+Multim%C3%ADdia',
+    short: 'Instalação e configuração de som, tela e integração com smartphone — entrega com garantia AutenTicco.',
+    img: 'https://source.unsplash.com/800x600/?car-audio,headunit,car-dashboard',
+    smallIcon: <Music className="w-5 h-5" />,
   },
   {
     id: 'insulfilm',
     title: 'Insulfilm',
-    short: 'Proteção, conforto térmico e estética.',
-    icon: <Film className="w-6 h-6" />,
-    img: 'https://placehold.co/600x400?text=Insulfilm',
+    short: 'Aplicação profissional de películas — conforto térmico, UV e estética.',
+    img: 'https://source.unsplash.com/800x600/?car-window,tint,car-window-tint',
+    smallIcon: <Droplet className="w-5 h-5" />,
   },
   {
     id: 'pneus',
-    title: 'Pneus, Alinhamento e Balanceamento',
-    short: 'Serviços completos com parceiras certificadas.',
-    icon: <Truck className="w-6 h-6" />,
-    img: 'https://placehold.co/600x400?text=Pneus+%26+Alinhamento',
+    title: 'Pneus, Alinhamento & Balanceamento',
+    short: 'Troca de pneus, alinhamento e balanceamento com garantia de processo e segurança.',
+    img: 'https://source.unsplash.com/800x600/?car-wheel,tire,car-tyre',
+    smallIcon: <ChevronRight className="w-5 h-5" />, // ícone neutro aqui
   },
   {
     id: 'martelinho',
     title: 'Martelinho de Ouro',
-    short: 'Reparos sem pintura — acabamento profissional.',
-    icon: <Wrench className="w-6 h-6" />,
-    img: 'https://placehold.co/600x400?text=Martelinho+de+Ouro',
+    short: 'Reparos finos de lataria sem pintura — acabamento preciso e discreto.',
+    img: 'https://source.unsplash.com/800x600/?body-repair,car-repair,auto-body',
+    smallIcon: <Tool className="w-5 h-5" />,
   },
 ];
 
@@ -56,7 +60,7 @@ const Services = () => {
               Loja & Serviços <span className="text-yellow-500">AutenTicco</span>
             </h1>
             <p className="mt-4 text-lg text-gray-600 max-w-3xl mx-auto">
-              Oferecemos uma seleção de serviços e acessórios feitos por parceiros qualificados — entregues ao cliente com a nossa garantia e nota AutenTicco.
+              Oferecemos serviços e acessórios entregues ao cliente como se fossem feitos por nós — com nossa nota e garantia.
             </p>
           </motion.div>
         </section>
@@ -71,25 +75,27 @@ const Services = () => {
                 viewport={{ once: true }}
                 className="bg-gray-50 rounded-2xl overflow-hidden shadow-md border hover:shadow-lg transition-transform hover:-translate-y-2"
               >
-                <div className="aspect-w-16 aspect-h-10">
-                  <img src={s.img} alt={s.title} className="w-full h-full object-cover" />
+                {/* imagem no topo representativa */}
+                <div className="w-full h-44 bg-gray-200 overflow-hidden">
+                  <img
+                    src={s.img}
+                    alt={s.title}
+                    className="w-full h-full object-cover"
+                    onError={(e) => { e.currentTarget.src = 'https://placehold.co/800x600?text=Serviço'; }}
+                  />
                 </div>
-                <div className="p-5">
-                  <div className="flex items-start gap-3">
-                    <div className="w-12 h-12 bg-yellow-400 rounded-full flex items-center justify-center text-black flex-shrink-0">
-                      {s.icon}
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-bold text-gray-900">{s.title}</h3>
-                      <p className="text-gray-600 mt-1">{s.short}</p>
-                    </div>
-                  </div>
 
-                  <div className="mt-6 flex items-center justify-between">
-                    <span className="text-sm text-gray-500">Parceiros certificados</span>
-                    <button className="inline-flex items-center gap-2 text-yellow-500 font-semibold">
-                      Saiba mais <ChevronRight className="w-4 h-4" />
-                    </button>
+                <div className="p-6">
+                  {/* bolinha amarela menor só com ícone para reforçar tema (opcional) */}
+                  <div className="flex items-start gap-4">
+                    <div className="w-10 h-10 bg-yellow-400 rounded-full flex items-center justify-center text-black flex-shrink-0">
+                      {s.smallIcon}
+                    </div>
+
+                    <div className="flex-1">
+                      <h3 className="text-lg font-bold text-gray-900">{s.title}</h3>
+                      <p className="text-gray-600 mt-2 text-sm leading-relaxed">{s.short}</p>
+                    </div>
                   </div>
                 </div>
               </motion.div>

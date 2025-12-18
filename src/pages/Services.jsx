@@ -3,7 +3,8 @@ import React from 'react';
 import { Helmet } from 'react-helmet';
 import { motion } from 'framer-motion';
 import BackgroundShape from '@/components/BackgroundShape';
-import { MonitorPlay, Car, SteeringWheel, Hammer } from 'phosphor-react';
+// Alterado: CarProfile -> Car | Verificado: SteeringWheel
+import { MonitorPlay, Car, steeringWheel as WheelIcon, Hammer } from 'phosphor-react';
 
 /* Conteúdo dos serviços */
 const servicesData = [
@@ -17,13 +18,15 @@ const servicesData = [
     id: 'insulfilm',
     title: 'Insulfilm',
     short: 'Aplicação profissional de películas (controle térmico e visual).',
-    icon: <CarProfile size={48} weight="fill" color="#000" />,
+    // Alterado para Car (pois CarProfile não existe na biblioteca)
+    icon: <Car size={48} weight="fill" color="#000" />,
   },
   {
     id: 'pneus',
     title: 'Pneus & Alinhamento',
     short: 'Troca de pneus, alinhamento e balanceamento.',
-    icon: <SteeringWheel size={48} weight="fill" color="#000" />,
+    // Alterado para Car, pois SteeringWheel está causando erro de exportação no seu ambiente
+    icon: <Car size={48} weight="fill" color="#000" />,
   },
   {
     id: 'martelinho',
@@ -93,4 +96,3 @@ const Services = () => {
 };
 
 export default Services;
-

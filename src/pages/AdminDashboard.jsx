@@ -500,8 +500,6 @@ const AdminDashboard = () => {
     }
   };
 
-const [editMainPhotoIndex, setEditMainPhotoIndex] = useState(0);
-
   // adicionar veículo
   const handleAddCar = async (e) => {
     e.preventDefault();
@@ -600,113 +598,87 @@ const [editMainPhotoIndex, setEditMainPhotoIndex] = useState(0);
   };
 
   const handleEditCarClick = (car) => {
-  setPhotosToUpload([]);
-  setPhotosToDelete([]);
-
-  const clonedCar = JSON.parse(JSON.stringify(car));
-  setEditingCar(clonedCar);
-
-  const mainIndex = clonedCar.photo_urls?.findIndex(
-    (url) => url === clonedCar.main_photo_url
-  );
-
-  setEditMainPhotoIndex(mainIndex >= 0 ? mainIndex : 0);
-
-  setIsEditDialogOpen(true);
-};
-
+    setPhotosToUpload([]);
+    setPhotosToDelete([]);
+    setEditingCar(JSON.parse(JSON.stringify(car)));
+    setIsEditDialogOpen(true);
+  };
 
   const handleUpdateCar = async (e) => {
-  e.preventDefault();
-  if (!editingCar) return;
-  setLoading(true);
-
-  try {
-    let finalCarData = { ...editingCar };
-
-    if (photosToUpload.length > 0) {
-      const newPhotoUrls = [];
-
-      for (const file of photosToUpload) {
-        const fileName = `${finalCarData.brand}/${Date.now()}_${file.name}`;
-        const { data, error } = await supabase.storage
-          .from('car_photos')
-          .upload(fileName, file);
-
-        if (error) {
-          toast({
-            title: 'Erro no upload.',
-            description: error.message,
-            variant: 'destructive',
-          });
-          setLoading(false);
-          return;
+    e.preventDefault();
+    if (!editingCar) return;
+    setLoading(true);
+    try {
+      let finalCarData = { ...editingCar };
+      if (photosToUpload.length > 0) {
+        const newPhotoUrls = [];
+        for (const file of photosToUpload) {
+          const fileName = `${finalCarData.brand}/${Date.now()}_${file.name}`;
+          const { data, error } = await supabase.storage
+            .from('car_photos')
+            .upload(fileName, file);
+          if (error) {
+            toast({
+              title: 'Erro no upload.',
+              description: error.message,
+              variant: 'destructive',
+            });
+            setLoading(false);
+            return;
+          }
+          const {
+            data: { publicUrl },
+          } = supabase.storage.from('car_photos').getPublicUrl(data.path);
+          newPhotoUrls.push(publicUrl);
         }
-
-        const {
-          data: { publicUrl },
-        } = supabase.storage.from('car_photos').getPublicUrl(data.path);
-
-        newPhotoUrls.push(publicUrl);
+        finalCarData.photo_urls = [
+          ...(finalCarData.photo_urls || []),
+          ...newPhotoUrls,
+        ];
       }
-
-      finalCarData.photo_urls = [
-        ...(finalCarData.photo_urls || []),
-        ...newPhotoUrls,
-      ];
-    }
-
-    if (photosToDelete.length > 0) {
-      const filePaths = photosToDelete
-        .map((url) => url.split('/car_photos/')[1])
-        .filter(Boolean);
-
-      if (filePaths.length > 0) {
-        await supabase.storage.from('car_photos').remove(filePaths);
+      if (photosToDelete.length > 0) {
+        const filePaths = photosToDelete
+          .map((url) => url.split('/car_photos/')[1])
+          .filter(Boolean);
+        if (filePaths.length > 0)
+          await supabase.storage.from('car_photos').remove(filePaths);
       }
-    }
-
-    // GARANTE FOTO PRINCIPAL VÁLIDA
-    if (
-      !finalCarData.photo_urls ||
-      !finalCarData.photo_urls.includes(finalCarData.main_photo_url)
-    ) {
-      finalCarData.main_photo_url =
-        finalCarData.photo_urls?.[editMainPhotoIndex] ||
-        finalCarData.photo_urls?.[0] ||
-        null;
-    }
-
-    const { error } = await updateCar(finalCarData.id, {
-      ...finalCarData,
-      price: parseFloat(finalCarData.price || 0),
-    });
-
-    if (error) {
+      if (
+        !finalCarData.photo_urls ||
+        !finalCarData.photo_urls.includes(finalCarData.main_photo_url)
+      ) {
+        finalCarData.main_photo_url =
+          (finalCarData.photo_urls && finalCarData.photo_urls[0]) || null;
+      }
+      const { error } = await updateCar(finalCarData.id, {
+        ...finalCarData,
+        price: parseFloat(finalCarData.price || 0),
+      });
+      if (error) {
+        toast({
+          title: 'Erro ao atualizar.',
+          description: error.message,
+          variant: 'destructive',
+        });
+      } else {
+        setCars((prev) =>
+          prev.map((c) => (c.id === finalCarData.id ? finalCarData : c))
+        );
+        setIsEditDialogOpen(false);
+        setEditingCar(null);
+        toast({ title: 'Veículo atualizado!' });
+      }
+    } catch (err) {
+      console.error('Erro handleUpdateCar:', err);
       toast({
-        title: 'Erro ao atualizar.',
-        description: error.message,
+        title: 'Erro ao atualizar veículo',
+        description: err.message || String(err),
         variant: 'destructive',
       });
-    } else {
-      setCars((prev) =>
-        prev.map((c) => (c.id === finalCarData.id ? finalCarData : c))
-      );
-      setIsEditDialogOpen(false);
-      setEditingCar(null);
-      toast({ title: 'Veículo atualizado!' });
+    } finally {
+      setLoading(false);
     }
-  } catch (err) {
-    toast({
-      title: 'Erro ao atualizar veículo',
-      description: err.message || String(err),
-      variant: 'destructive',
-    });
-  } finally {
-    setLoading(false);
-  }
-};
-
+  };
 
   const handleDeleteCar = async (id) => {
     setLoading(true);
@@ -1859,31 +1831,54 @@ const [editMainPhotoIndex, setEditMainPhotoIndex] = useState(0);
                 />
               </div>
               <div className="space-y-2">
-                <label className="font-medium text-sm text-gray-700">Fotos</label>
+                <label className="font-medium text-sm text-gray-700">
+                  Fotos (Clique na foto para torná-la principal)
+                </label>
                 <div className="flex flex-wrap gap-4 p-2 bg-gray-100 rounded-lg min-h-[112px]">
                   {editingCar.photo_urls &&
                     editingCar.photo_urls.map((url, index) => (
-                      <div key={url} className="relative">
+                      <div 
+                        key={url} 
+                        className="relative cursor-pointer group"
+                        onClick={() => setEditingCar(prev => ({ ...prev, main_photo_url: url }))}
+                      >
                         <img
                           src={url}
                           alt={`Foto ${index + 1}`}
-                          className="h-24 w-24 object-cover rounded-md"
+                          className={`h-24 w-24 object-cover rounded-md transition-all ${
+                            editingCar.main_photo_url === url 
+                            ? 'ring-4 ring-yellow-500 shadow-lg' 
+                            : 'opacity-70 hover:opacity-100'
+                          }`}
                         />
+                        
+                        {/* Indicador de Foto Principal */}
+                        {editingCar.main_photo_url === url && (
+                          <div className="absolute top-1 right-1 bg-yellow-500 text-black rounded-full p-1 shadow-md">
+                            <Check className="h-3 w-3" />
+                          </div>
+                        )}
+
                         <button
                           type="button"
-                          onClick={() => removePhoto(index, true)}
-                          className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1"
+                          onClick={(e) => {
+                            e.stopPropagation(); // Evita marcar como principal ao deletar
+                            removePhoto(index, true);
+                          }}
+                          className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
                         >
                           <Trash2 className="h-3 w-3" />
                         </button>
                       </div>
                     ))}
+                  
+                  {/* Fotos que ainda não foram subidas (Upload pendente) */}
                   {photosToUpload.map((file, index) => (
-                    <div key={index} className="relative">
+                    <div key={index} className="relative opacity-60">
                       <img
                         src={URL.createObjectURL(file)}
                         alt={`Preview ${index}`}
-                        className="h-24 w-24 object-cover rounded-lg"
+                        className="h-24 w-24 object-cover rounded-lg border-2 border-dashed border-gray-400"
                       />
                       <button
                         type="button"

@@ -500,6 +500,8 @@ const AdminDashboard = () => {
     }
   };
 
+const [editMainPhotoIndex, setEditMainPhotoIndex] = useState(0);
+
   // adicionar veículo
   const handleAddCar = async (e) => {
     e.preventDefault();
@@ -598,87 +600,113 @@ const AdminDashboard = () => {
   };
 
   const handleEditCarClick = (car) => {
-    setPhotosToUpload([]);
-    setPhotosToDelete([]);
-    setEditingCar(JSON.parse(JSON.stringify(car)));
-    setIsEditDialogOpen(true);
-  };
+  setPhotosToUpload([]);
+  setPhotosToDelete([]);
+
+  const clonedCar = JSON.parse(JSON.stringify(car));
+  setEditingCar(clonedCar);
+
+  const mainIndex = clonedCar.photo_urls?.findIndex(
+    (url) => url === clonedCar.main_photo_url
+  );
+
+  setEditMainPhotoIndex(mainIndex >= 0 ? mainIndex : 0);
+
+  setIsEditDialogOpen(true);
+};
+
 
   const handleUpdateCar = async (e) => {
-    e.preventDefault();
-    if (!editingCar) return;
-    setLoading(true);
-    try {
-      let finalCarData = { ...editingCar };
-      if (photosToUpload.length > 0) {
-        const newPhotoUrls = [];
-        for (const file of photosToUpload) {
-          const fileName = `${finalCarData.brand}/${Date.now()}_${file.name}`;
-          const { data, error } = await supabase.storage
-            .from('car_photos')
-            .upload(fileName, file);
-          if (error) {
-            toast({
-              title: 'Erro no upload.',
-              description: error.message,
-              variant: 'destructive',
-            });
-            setLoading(false);
-            return;
-          }
-          const {
-            data: { publicUrl },
-          } = supabase.storage.from('car_photos').getPublicUrl(data.path);
-          newPhotoUrls.push(publicUrl);
+  e.preventDefault();
+  if (!editingCar) return;
+  setLoading(true);
+
+  try {
+    let finalCarData = { ...editingCar };
+
+    if (photosToUpload.length > 0) {
+      const newPhotoUrls = [];
+
+      for (const file of photosToUpload) {
+        const fileName = `${finalCarData.brand}/${Date.now()}_${file.name}`;
+        const { data, error } = await supabase.storage
+          .from('car_photos')
+          .upload(fileName, file);
+
+        if (error) {
+          toast({
+            title: 'Erro no upload.',
+            description: error.message,
+            variant: 'destructive',
+          });
+          setLoading(false);
+          return;
         }
-        finalCarData.photo_urls = [
-          ...(finalCarData.photo_urls || []),
-          ...newPhotoUrls,
-        ];
+
+        const {
+          data: { publicUrl },
+        } = supabase.storage.from('car_photos').getPublicUrl(data.path);
+
+        newPhotoUrls.push(publicUrl);
       }
-      if (photosToDelete.length > 0) {
-        const filePaths = photosToDelete
-          .map((url) => url.split('/car_photos/')[1])
-          .filter(Boolean);
-        if (filePaths.length > 0)
-          await supabase.storage.from('car_photos').remove(filePaths);
+
+      finalCarData.photo_urls = [
+        ...(finalCarData.photo_urls || []),
+        ...newPhotoUrls,
+      ];
+    }
+
+    if (photosToDelete.length > 0) {
+      const filePaths = photosToDelete
+        .map((url) => url.split('/car_photos/')[1])
+        .filter(Boolean);
+
+      if (filePaths.length > 0) {
+        await supabase.storage.from('car_photos').remove(filePaths);
       }
-      if (
-        !finalCarData.photo_urls ||
-        !finalCarData.photo_urls.includes(finalCarData.main_photo_url)
-      ) {
-        finalCarData.main_photo_url =
-          (finalCarData.photo_urls && finalCarData.photo_urls[0]) || null;
-      }
-      const { error } = await updateCar(finalCarData.id, {
-        ...finalCarData,
-        price: parseFloat(finalCarData.price || 0),
-      });
-      if (error) {
-        toast({
-          title: 'Erro ao atualizar.',
-          description: error.message,
-          variant: 'destructive',
-        });
-      } else {
-        setCars((prev) =>
-          prev.map((c) => (c.id === finalCarData.id ? finalCarData : c))
-        );
-        setIsEditDialogOpen(false);
-        setEditingCar(null);
-        toast({ title: 'Veículo atualizado!' });
-      }
-    } catch (err) {
-      console.error('Erro handleUpdateCar:', err);
+    }
+
+    // GARANTE FOTO PRINCIPAL VÁLIDA
+    if (
+      !finalCarData.photo_urls ||
+      !finalCarData.photo_urls.includes(finalCarData.main_photo_url)
+    ) {
+      finalCarData.main_photo_url =
+        finalCarData.photo_urls?.[editMainPhotoIndex] ||
+        finalCarData.photo_urls?.[0] ||
+        null;
+    }
+
+    const { error } = await updateCar(finalCarData.id, {
+      ...finalCarData,
+      price: parseFloat(finalCarData.price || 0),
+    });
+
+    if (error) {
       toast({
-        title: 'Erro ao atualizar veículo',
-        description: err.message || String(err),
+        title: 'Erro ao atualizar.',
+        description: error.message,
         variant: 'destructive',
       });
-    } finally {
-      setLoading(false);
+    } else {
+      setCars((prev) =>
+        prev.map((c) => (c.id === finalCarData.id ? finalCarData : c))
+      );
+      setIsEditDialogOpen(false);
+      setEditingCar(null);
+      toast({ title: 'Veículo atualizado!' });
     }
-  };
+  } catch (err) {
+    toast({
+      title: 'Erro ao atualizar veículo',
+      description: err.message || String(err),
+      variant: 'destructive',
+    });
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   const handleDeleteCar = async (id) => {
     setLoading(true);

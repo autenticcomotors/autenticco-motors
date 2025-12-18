@@ -3,7 +3,7 @@ import React from 'react';
 import { Helmet } from 'react-helmet';
 import { motion } from 'framer-motion';
 import BackgroundShape from '@/components/BackgroundShape';
-import { MonitorPlay, CarProfile, SteeringWheel, Hammer } from 'phosphor-react';
+import { MonitorPlay, Car, SteeringWheel, Hammer } from 'phosphor-react';
 
 /* Conteúdo dos serviços */
 const servicesData = [

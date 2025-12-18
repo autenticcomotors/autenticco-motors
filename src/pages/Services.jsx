@@ -3,8 +3,8 @@ import React from 'react';
 import { Helmet } from 'react-helmet';
 import { motion } from 'framer-motion';
 import BackgroundShape from '@/components/BackgroundShape';
-// Importação simplificada para evitar erros de exportação do Vite
-import { MonitorPlay, Car, Wrench, Gavel } from 'phosphor-react';
+// Usando apenas ícones que o seu build já validou que existem
+import { MonitorPlay, Car } from 'phosphor-react';
 
 /* Conteúdo dos serviços */
 const servicesData = [
@@ -24,13 +24,13 @@ const servicesData = [
     id: 'pneus',
     title: 'Pneus & Alinhamento',
     short: 'Troca de pneus, alinhamento e balanceamento.',
-    icon: <Wrench size={48} weight="fill" color="#000" />, 
+    icon: <Car size={48} weight="fill" color="#000" />, 
   },
   {
     id: 'martelinho',
     title: 'Martelinho de Ouro',
     short: 'Reparos finos de lataria sem pintura.',
-    icon: <Gavel size={48} weight="fill" color="#000" />, // Gavel é similar ao martelo e costuma ser mais estável na biblioteca
+    icon: <Car size={48} weight="fill" color="#000" />,
   },
 ];
 

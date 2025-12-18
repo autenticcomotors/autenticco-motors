@@ -3,8 +3,8 @@ import React from 'react';
 import { Helmet } from 'react-helmet';
 import { motion } from 'framer-motion';
 import BackgroundShape from '@/components/BackgroundShape';
-// Alterado: CarProfile -> Car | Verificado: SteeringWheel
-import { MonitorPlay, Car, steeringWheel as WheelIcon, Hammer } from 'phosphor-react';
+// Importação simplificada para evitar erros de exportação do Vite
+import { MonitorPlay, Car, Wrench, Gavel } from 'phosphor-react';
 
 /* Conteúdo dos serviços */
 const servicesData = [
@@ -18,21 +18,19 @@ const servicesData = [
     id: 'insulfilm',
     title: 'Insulfilm',
     short: 'Aplicação profissional de películas (controle térmico e visual).',
-    // Alterado para Car (pois CarProfile não existe na biblioteca)
     icon: <Car size={48} weight="fill" color="#000" />,
   },
   {
     id: 'pneus',
     title: 'Pneus & Alinhamento',
     short: 'Troca de pneus, alinhamento e balanceamento.',
-    // Alterado para Car, pois SteeringWheel está causando erro de exportação no seu ambiente
-    icon: <Car size={48} weight="fill" color="#000" />,
+    icon: <Wrench size={48} weight="fill" color="#000" />, 
   },
   {
     id: 'martelinho',
     title: 'Martelinho de Ouro',
     short: 'Reparos finos de lataria sem pintura.',
-    icon: <Hammer size={48} weight="fill" color="#000" />,
+    icon: <Gavel size={48} weight="fill" color="#000" />, // Gavel é similar ao martelo e costuma ser mais estável na biblioteca
   },
 ];
 

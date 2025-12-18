@@ -188,30 +188,70 @@ const CarDetail = () => {
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 items-start">
               {/* FOTOS */}
               <div className="lg:col-span-3">
-                <AnimatePresence mode="wait">
-                  <motion.div
-                    key={selectedImage}
-                    className="mb-4 rounded-xl overflow-hidden bg-white shadow-2xl"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                  >
-                    <img
-                      src={selectedImage}
-                      alt="Imagem principal do veículo"
-                      className="w-full h-auto object-cover"
-                    />
-                  </motion.div>
-                </AnimatePresence>
+                <div className="relative group mb-4">
+                  <AnimatePresence mode="wait">
+                    <motion.div
+                      key={selectedImage}
+                      className="rounded-xl overflow-hidden bg-white shadow-2xl"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <img
+                        src={selectedImage}
+                        alt="Imagem principal do veículo"
+                        className="w-full h-auto object-cover"
+                      />
+                    </motion.div>
+                  </AnimatePresence>
 
+                  {/* SETAS DE NAVEGAÇÃO */}
+                  {car.photo_urls && car.photo_urls.length > 1 && (
+                    <>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const currentIndex = car.photo_urls.indexOf(selectedImage);
+                          const prevIndex = (currentIndex - 1 + car.photo_urls.length) % car.photo_urls.length;
+                          setSelectedImage(car.photo_urls[prevIndex]);
+                        }}
+                        className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/30 hover:bg-white/90 backdrop-blur-md text-gray-900 p-2 rounded-full shadow-lg transition-all duration-300 opacity-0 group-hover:opacity-100 focus:opacity-100"
+                        aria-label="Foto anterior"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-chevron-left"><path d="m15 18-6-6 6-6"/></svg>
+                      </button>
+
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const currentIndex = car.photo_urls.indexOf(selectedImage);
+                          const nextIndex = (currentIndex + 1) % car.photo_urls.length;
+                          setSelectedImage(car.photo_urls[nextIndex]);
+                        }}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/30 hover:bg-white/90 backdrop-blur-md text-gray-900 p-2 rounded-full shadow-lg transition-all duration-300 opacity-0 group-hover:opacity-100 focus:opacity-100"
+                        aria-label="Próxima foto"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-chevron-right"><path d="m9 18 6-6-6-6"/></svg>
+                      </button>
+                    </>
+                  )}
+                  
+                  {/* INDICADOR DE POSIÇÃO (OPCIONAL) */}
+                  <div className="absolute bottom-4 right-4 bg-black/50 backdrop-blur-sm text-white text-xs px-3 py-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                    {car.photo_urls.indexOf(selectedImage) + 1} / {car.photo_urls.length}
+                  </div>
+                </div>
+
+                {/* MINIATURAS */}
                 <div className="grid grid-cols-4 sm:grid-cols-6 gap-3">
                   {car.photo_urls.map((url, index) => (
                     <div
                       key={index}
-                      className={`rounded-lg overflow-hidden cursor-pointer ring-2 ${
+                      className={`rounded-lg overflow-hidden cursor-pointer ring-2 transition-all duration-300 ${
                         selectedImage === url
                           ? 'ring-yellow-400'
-                          : 'ring-transparent'
+                          : 'ring-transparent hover:ring-gray-300'
                       }`}
                       onClick={() => setSelectedImage(url)}
                     >

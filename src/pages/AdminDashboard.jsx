@@ -71,8 +71,6 @@ import BackgroundShape from '@/components/BackgroundShape';
 import VehicleManager from '@/components/VehicleManager';
 import Reports from '@/pages/Reports';
 import OverviewBoard from '@/components/OverviewBoard';
-
-// >>> NOVO IMPORT (apenas isso)
 import QuoteGenerator from '@/pages/QuoteGenerator';
 
 // ---------- FORM FIELDS (inclui PLACA) ----------
@@ -101,7 +99,6 @@ const FormFields = React.memo(({ carData, onChange, carOptions }) => (
       className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none"
     />
 
-    {/* PLACA */}
     <input
       name="plate"
       value={carData.plate || ''}
@@ -233,7 +230,6 @@ const AdminDashboard = () => {
     car_sold: '',
   });
 
-  // carro novo (inclui placa)
   const [newCar, setNewCar] = useState({
     brand: '',
     model: '',
@@ -268,25 +264,20 @@ const AdminDashboard = () => {
   const fileInputRef = useRef(null);
   const navigate = useNavigate();
 
-  // filtros de veículos
   const [carSearch, setCarSearch] = useState('');
   const [brandFilter, setBrandFilter] = useState('');
 
-  // matriz / gestão
   const [selectedCar, setSelectedCar] = useState(null);
   const [isGestaoOpen, setIsGestaoOpen] = useState(false);
 
-  // pedidos / oferecidos
   const [clientRequests, setClientRequests] = useState([]);
   const [isReqDialogOpen, setIsReqDialogOpen] = useState(false);
   const [editingRequest, setEditingRequest] = useState(null);
 
-  // filtros da lista de pedidos/oferecidos
-  const [reqFilterType, setReqFilterType] = useState('all'); // all | pedido | oferecido
+  const [reqFilterType, setReqFilterType] = useState('all');
   const [reqSearch, setReqSearch] = useState('');
-  const [reqSort, setReqSort] = useState('desc'); // desc = mais novos primeiro
+  const [reqSort, setReqSort] = useState('desc');
 
-  // popup de match
   const [matchModalOpen, setMatchModalOpen] = useState(false);
   const [matchModalPayload, setMatchModalPayload] = useState(null);
 
@@ -306,6 +297,7 @@ const AdminDashboard = () => {
       'Outra',
     ],
   };
+
   const statusOptions = [
     'Novo',
     'Contato Realizado',
@@ -332,7 +324,32 @@ const AdminDashboard = () => {
       .trim()
       .toLowerCase();
 
-  // regra de match
+  const formatCurrencyBRL = (value) => {
+    if (value === null || value === undefined || value === '') return '-';
+    const num = Number(value);
+    if (Number.isNaN(num)) return '-';
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    }).format(num);
+  };
+
+  const formatKm = (value) => {
+    if (value === null || value === undefined || value === '') return '-';
+    const num = Number(value);
+    if (Number.isNaN(num)) return value;
+    return `${new Intl.NumberFormat('pt-BR').format(num)} km`;
+  };
+
+  const getRequestYearLabel = (req) => {
+    if (!req) return '-';
+    if (req.year_exact) return String(req.year_exact);
+    if (req.year_min && req.year_max) return `${req.year_min} - ${req.year_max}`;
+    if (req.year_min) return `A partir de ${req.year_min}`;
+    if (req.year_max) return `Até ${req.year_max}`;
+    return '-';
+  };
+
   const doesRequestMatchCar = (req, car) => {
     if (!req || !car) return false;
     if (car.is_sold) return false;
@@ -382,6 +399,7 @@ const AdminDashboard = () => {
             getPlatforms(),
             getClientRequests(),
           ]);
+
         setCars(sortCarsActiveFirst(carsData || []));
         setTestimonials(testimonialsData || []);
         setLeads(leadsData || []);
@@ -442,14 +460,17 @@ const AdminDashboard = () => {
     const finalValue = type === 'checkbox' ? checked : value;
     setStateFunc((prev) => ({ ...prev, [name]: finalValue }));
   };
+
   const handleNewCarInputChange = useCallback(
     (e) => handleInputChange(e, setNewCar),
     []
   );
+
   const handleEditingCarInputChange = useCallback(
     (e) => handleInputChange(e, setEditingCar),
     []
   );
+
   const handleNewTestimonialInputChange = useCallback(
     (e) => handleInputChange(e, setNewTestimonial),
     []
@@ -476,6 +497,7 @@ const AdminDashboard = () => {
     });
     fetchAllData();
   };
+
   const handleDeleteTestimonial = async (id) => {
     await deleteTestimonial(id);
     toast({ title: 'Depoimento removido.' });
@@ -500,7 +522,6 @@ const AdminDashboard = () => {
     }
   };
 
-  // adicionar veículo
   const handleAddCar = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -511,6 +532,7 @@ const AdminDashboard = () => {
         const { data, error } = await supabase.storage
           .from('car_photos')
           .upload(fileName, file);
+
         if (error) {
           toast({
             title: 'Erro no upload.',
@@ -520,11 +542,14 @@ const AdminDashboard = () => {
           setLoading(false);
           return;
         }
+
         const {
           data: { publicUrl },
         } = supabase.storage.from('car_photos').getPublicUrl(data.path);
+
         photoUrls.push(publicUrl);
       }
+
       const carData = {
         ...newCar,
         photo_urls: photoUrls,
@@ -532,7 +557,9 @@ const AdminDashboard = () => {
         price: parseFloat(newCar.price || 0),
         is_available: true,
       };
+
       const { data: addedCar, error } = await addCar(carData);
+
       if (error) {
         toast({
           title: 'Erro ao adicionar.',
@@ -563,10 +590,10 @@ const AdminDashboard = () => {
         if (fileInputRef.current) fileInputRef.current.value = '';
         toast({ title: 'Veículo adicionado!' });
 
-        // MATCH com pedidos
         const pendingReqs = (clientRequests || []).filter(
           (r) => !r.matched_car_id && r.type === 'pedido'
         );
+
         const matchedNow = pendingReqs.filter((req) =>
           doesRequestMatchCar(req, addedCar)
         );
@@ -575,12 +602,14 @@ const AdminDashboard = () => {
           for (const m of matchedNow) {
             await updateClientRequest(m.id, { matched_car_id: addedCar.id });
           }
+
           setMatchModalPayload({
             mode: 'car',
             car: addedCar,
             requests: matchedNow,
           });
           setMatchModalOpen(true);
+
           const ref = await getClientRequests();
           setClientRequests(ref || []);
         }
@@ -608,15 +637,19 @@ const AdminDashboard = () => {
     e.preventDefault();
     if (!editingCar) return;
     setLoading(true);
+
     try {
       let finalCarData = { ...editingCar };
+
       if (photosToUpload.length > 0) {
         const newPhotoUrls = [];
+
         for (const file of photosToUpload) {
           const fileName = `${finalCarData.brand}/${Date.now()}_${file.name}`;
           const { data, error } = await supabase.storage
             .from('car_photos')
             .upload(fileName, file);
+
           if (error) {
             toast({
               title: 'Erro no upload.',
@@ -626,23 +659,30 @@ const AdminDashboard = () => {
             setLoading(false);
             return;
           }
+
           const {
             data: { publicUrl },
           } = supabase.storage.from('car_photos').getPublicUrl(data.path);
+
           newPhotoUrls.push(publicUrl);
         }
+
         finalCarData.photo_urls = [
           ...(finalCarData.photo_urls || []),
           ...newPhotoUrls,
         ];
       }
+
       if (photosToDelete.length > 0) {
         const filePaths = photosToDelete
           .map((url) => url.split('/car_photos/')[1])
           .filter(Boolean);
-        if (filePaths.length > 0)
+
+        if (filePaths.length > 0) {
           await supabase.storage.from('car_photos').remove(filePaths);
+        }
       }
+
       if (
         !finalCarData.photo_urls ||
         !finalCarData.photo_urls.includes(finalCarData.main_photo_url)
@@ -650,10 +690,12 @@ const AdminDashboard = () => {
         finalCarData.main_photo_url =
           (finalCarData.photo_urls && finalCarData.photo_urls[0]) || null;
       }
+
       const { error } = await updateCar(finalCarData.id, {
         ...finalCarData,
         price: parseFloat(finalCarData.price || 0),
       });
+
       if (error) {
         toast({
           title: 'Erro ao atualizar.',
@@ -684,6 +726,7 @@ const AdminDashboard = () => {
     setLoading(true);
     try {
       const carToDeleteData = cars.find((car) => car.id === id);
+
       if (
         carToDeleteData &&
         carToDeleteData.photo_urls &&
@@ -692,10 +735,14 @@ const AdminDashboard = () => {
         const filePaths = carToDeleteData.photo_urls
           .map((url) => url.split('/car_photos/')[1])
           .filter(Boolean);
-        if (filePaths.length > 0)
+
+        if (filePaths.length > 0) {
           await supabase.storage.from('car_photos').remove(filePaths);
+        }
       }
+
       const { error } = await deleteCar(id);
+
       if (error) {
         toast({ title: 'Erro ao remover.', variant: 'destructive' });
       } else {
@@ -715,7 +762,6 @@ const AdminDashboard = () => {
     }
   };
 
-  // venda
   const openSaleDialog = (car) => {
     setCarToSell(car);
     setSaleForm({
@@ -734,7 +780,6 @@ const AdminDashboard = () => {
     setSaleForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  // filtros de veículos
   const brandOptions = useMemo(() => {
     const brands = Array.from(
       new Set(
@@ -749,19 +794,23 @@ const AdminDashboard = () => {
 
   const filteredCars = useMemo(() => {
     const term = (carSearch || '').trim().toLowerCase();
+
     return (cars || []).filter((c) => {
       if (
         brandFilter &&
         brandFilter !== 'ALL' &&
-        String((c.brand || '')).toLowerCase() !==
-          String(brandFilter).toLowerCase()
-      )
+        String(c.brand || '').toLowerCase() !== String(brandFilter).toLowerCase()
+      ) {
         return false;
+      }
+
       if (!term) return true;
+
       const brand = (c.brand || '').toLowerCase();
       const model = (c.model || '').toLowerCase();
       const plate = (c.plate || '').toLowerCase();
       const combined = `${brand} ${model} ${plate}`;
+
       return (
         brand.includes(term) ||
         model.includes(term) ||
@@ -771,7 +820,6 @@ const AdminDashboard = () => {
     });
   }, [cars, carSearch, brandFilter]);
 
-  // pedidos / oferecidos — modelo em branco
   const blankRequest = {
     type: 'pedido',
     client_name: '',
@@ -786,6 +834,8 @@ const AdminDashboard = () => {
     year_min: '',
     year_max: '',
     year_exact: '',
+    mileage: '',
+    fipe_value: '',
     lead_date: new Date().toISOString().slice(0, 10),
     lead_source: '',
     notes: '',
@@ -806,6 +856,7 @@ const AdminDashboard = () => {
 
   const saveRequest = async () => {
     if (!editingRequest) return;
+
     const payload = {
       ...editingRequest,
       price_min: editingRequest.price_min
@@ -819,10 +870,15 @@ const AdminDashboard = () => {
       year_exact: editingRequest.year_exact
         ? Number(editingRequest.year_exact)
         : null,
+      mileage: editingRequest.mileage ? Number(editingRequest.mileage) : null,
+      fipe_value: editingRequest.fipe_value
+        ? Number(editingRequest.fipe_value)
+        : null,
     };
 
     if (!editingRequest.id) {
       const { data, error } = await addClientRequest(payload);
+
       if (error) {
         toast({
           title: 'Erro ao salvar pedido/oferecido',
@@ -830,9 +886,9 @@ const AdminDashboard = () => {
           variant: 'destructive',
         });
       } else {
-        // match imediato
         const stock = cars || [];
         const matchedCar = stock.find((c) => doesRequestMatchCar(data, c));
+
         if (matchedCar) {
           await updateClientRequest(data.id, { matched_car_id: matchedCar.id });
           setMatchModalPayload({
@@ -842,12 +898,14 @@ const AdminDashboard = () => {
           });
           setMatchModalOpen(true);
         }
+
         const refreshed = await getClientRequests();
         setClientRequests(refreshed || []);
         toast({ title: 'Registro salvo!' });
       }
     } else {
       const { error } = await updateClientRequest(editingRequest.id, payload);
+
       if (error) {
         toast({
           title: 'Erro ao atualizar pedido/oferecido',
@@ -872,7 +930,6 @@ const AdminDashboard = () => {
     toast({ title: 'Registro removido.' });
   };
 
-  // aplica os filtros da aba de pedidos
   const filteredRequests = useMemo(() => {
     let list = [...(clientRequests || [])];
 
@@ -892,9 +949,15 @@ const AdminDashboard = () => {
           r.model,
           r.lead_source,
           r.notes,
+          r.year_exact,
+          r.year_min,
+          r.year_max,
+          r.mileage,
+          r.fipe_value,
         ]
           .map((x) => norm(x))
           .join(' ');
+
         return txt.includes(term);
       });
     }
@@ -908,7 +971,6 @@ const AdminDashboard = () => {
     return list;
   }, [clientRequests, reqFilterType, reqSearch, reqSort]);
 
-  // =========== RENDER ===========
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex justify-center items-center">
@@ -937,6 +999,7 @@ const AdminDashboard = () => {
       <Helmet>
         <title>Dashboard - AutenTicco Motors</title>
       </Helmet>
+
       <BackgroundShape />
 
       <div className="relative z-10 w-full px-4 sm:px-6 lg:px-12 py-12">
@@ -950,7 +1013,6 @@ const AdminDashboard = () => {
             </Button>
           </div>
 
-          {/* abas */}
           <div className="flex space-x-4 mb-8 border-b overflow-x-auto">
             <button
               className={`px-4 py-2 font-semibold ${
@@ -962,6 +1024,7 @@ const AdminDashboard = () => {
             >
               <Users className="inline mr-2" /> Leads
             </button>
+
             <button
               className={`px-4 py-2 font-semibold ${
                 activeTab === 'cars'
@@ -972,6 +1035,7 @@ const AdminDashboard = () => {
             >
               <Car className="inline mr-2" /> Veículos
             </button>
+
             <button
               className={`px-4 py-2 font-semibold ${
                 activeTab === 'testimonials'
@@ -982,6 +1046,7 @@ const AdminDashboard = () => {
             >
               <MessageSquare className="inline mr-2" /> Depoimentos
             </button>
+
             <button
               className={`px-4 py-2 font-semibold ${
                 activeTab === 'gestao'
@@ -992,6 +1057,7 @@ const AdminDashboard = () => {
             >
               <FileText className="inline mr-2" /> Gestão
             </button>
+
             <button
               className={`px-4 py-2 font-semibold ${
                 activeTab === 'matriz'
@@ -1002,6 +1068,7 @@ const AdminDashboard = () => {
             >
               <BarChart2 className="inline mr-2" /> Matriz
             </button>
+
             <button
               className={`px-4 py-2 font-semibold ${
                 activeTab === 'reports'
@@ -1012,6 +1079,7 @@ const AdminDashboard = () => {
             >
               <BarChart2 className="inline mr-2" /> Relatórios
             </button>
+
             <button
               className={`px-4 py-2 font-semibold ${
                 activeTab === 'requests'
@@ -1023,7 +1091,6 @@ const AdminDashboard = () => {
               <ListChecks className="inline mr-2" /> Pedidos / Oferecidos
             </button>
 
-            {/* >>> NOVA ABA: ORÇAMENTOS */}
             <button
               className={`px-4 py-2 font-semibold ${
                 activeTab === 'quotes'
@@ -1036,7 +1103,6 @@ const AdminDashboard = () => {
             </button>
           </div>
 
-          {/* LEADS */}
           {activeTab === 'leads' && (
             <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-xl border">
               <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
@@ -1044,6 +1110,7 @@ const AdminDashboard = () => {
                   Exibindo <span className="text-yellow-500">{leads.length}</span>{' '}
                   lead(s)
                 </div>
+
                 <div className="flex flex-wrap items-center justify-center gap-4">
                   <div className="flex gap-2 items-center">
                     <label htmlFor="startDate" className="text-sm font-medium">
@@ -1060,6 +1127,7 @@ const AdminDashboard = () => {
                       className="bg-white border-gray-300 rounded-md p-2 h-10 text-sm"
                     />
                   </div>
+
                   <div className="flex gap-2 items-center">
                     <label htmlFor="endDate" className="text-sm font-medium">
                       Até:
@@ -1075,6 +1143,7 @@ const AdminDashboard = () => {
                       className="bg-white border-gray-300 rounded-md p-2 h-10 text-sm"
                     />
                   </div>
+
                   <select
                     value={leadFilters.status}
                     onChange={(e) =>
@@ -1089,6 +1158,7 @@ const AdminDashboard = () => {
                       </option>
                     ))}
                   </select>
+
                   <Button variant="outline" size="sm" asChild>
                     <CSVLink
                       data={leadsForCSV(leads)}
@@ -1130,6 +1200,7 @@ const AdminDashboard = () => {
                           </p>
                         )}
                       </div>
+
                       <div className="flex items-center gap-1">
                         <select
                           value={lead.status}
@@ -1142,6 +1213,7 @@ const AdminDashboard = () => {
                             </option>
                           ))}
                         </select>
+
                         <AlertDialog
                           open={leadToDelete === lead.id}
                           onOpenChange={(isOpen) => !isOpen && setLeadToDelete(null)}
@@ -1155,6 +1227,7 @@ const AdminDashboard = () => {
                               <Trash2 className="h-5 w-5 text-red-500 hover:text-red-400" />
                             </Button>
                           </AlertDialogTrigger>
+
                           <AlertDialogContent className="bg-white">
                             <AlertDialogHeader>
                               <AlertDialogTitle>Tem certeza?</AlertDialogTitle>
@@ -1178,13 +1251,13 @@ const AdminDashboard = () => {
             </div>
           )}
 
-          {/* VEÍCULOS */}
           {activeTab === 'cars' && (
             <>
               <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-8 mb-6 shadow-xl border">
                 <h2 className="text-2xl font-semibold mb-6 flex items-center">
                   <PlusCircle className="mr-3 text-yellow-500" /> Adicionar Novo Veículo
                 </h2>
+
                 <form onSubmit={handleAddCar} className="space-y-6">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <FormFields
@@ -1193,6 +1266,7 @@ const AdminDashboard = () => {
                       carOptions={carOptions}
                     />
                   </div>
+
                   <div>
                     <Button
                       type="button"
@@ -1200,6 +1274,7 @@ const AdminDashboard = () => {
                     >
                       <ImageIcon className="mr-2 h-4 w-4" /> Adicionar Fotos
                     </Button>
+
                     <input
                       type="file"
                       ref={fileInputRef}
@@ -1208,6 +1283,7 @@ const AdminDashboard = () => {
                       accept="image/*"
                       className="hidden"
                     />
+
                     <div className="mt-4 flex flex-wrap gap-4">
                       {photosToUpload.map((file, index) => (
                         <div
@@ -1241,6 +1317,7 @@ const AdminDashboard = () => {
                       ))}
                     </div>
                   </div>
+
                   <Button
                     type="submit"
                     className="w-full bg-yellow-400 text-black font-bold py-3"
@@ -1251,7 +1328,6 @@ const AdminDashboard = () => {
                 </form>
               </div>
 
-              {/* estoque */}
               <div className="flex justify-between items-center mb-6">
                 <div>
                   <h2 className="text-2xl font-semibold flex items-center">
@@ -1277,7 +1353,6 @@ const AdminDashboard = () => {
                 </Button>
               </div>
 
-              {/* filtros veículos */}
               <div className="flex flex-col md:flex-row gap-3 items-center mb-4">
                 <input
                   placeholder="Pesquisar marca, modelo ou PLACA..."
@@ -1285,6 +1360,7 @@ const AdminDashboard = () => {
                   onChange={(e) => setCarSearch(e.target.value)}
                   className="w-full md:w-1/2 p-2 border rounded"
                 />
+
                 <select
                   value={brandFilter || 'ALL'}
                   onChange={(e) =>
@@ -1299,6 +1375,7 @@ const AdminDashboard = () => {
                     </option>
                   ))}
                 </select>
+
                 <Button
                   variant="ghost"
                   size="sm"
@@ -1335,26 +1412,26 @@ const AdminDashboard = () => {
                                 : ''
                             }`}
                           />
+
                           {car.is_available === false && (
                             <div className="absolute top-1 left-1 bg-red-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">
                               VENDIDO
                             </div>
                           )}
+
                           {car.is_blindado && (
                             <div className="absolute top-1 right-1 bg-yellow-400 text-black text-xs font-bold px-2 py-0.5 rounded-full">
                               BLINDADO
                             </div>
                           )}
                         </div>
+
                         <div>
                           <h3 className="font-bold text-lg text-gray-900">
                             {car.brand} {car.model} ({car.year})
                           </h3>
                           <p className="text-gray-800 font-semibold">
-                            {new Intl.NumberFormat('pt-BR', {
-                              style: 'currency',
-                              currency: 'BRL',
-                            }).format(car.price || 0)}
+                            {formatCurrencyBRL(car.price || 0)}
                           </p>
                           <p className="text-xs text-gray-600 mt-1">
                             Placa: <span className="font-medium">{car.plate || '-'}</span>
@@ -1364,9 +1441,7 @@ const AdminDashboard = () => {
                             <p className="text-sm text-red-600 mt-1">
                               {(() => {
                                 const raw = car.sold_at;
-                                if (!raw) {
-                                  return 'Vendido -';
-                                }
+                                if (!raw) return 'Vendido -';
 
                                 const clean = String(raw).replace('T', ' ').trim();
                                 const y = clean.slice(0, 4);
@@ -1375,21 +1450,13 @@ const AdminDashboard = () => {
 
                                 if (!y || !m || !d) {
                                   return `Vendido em ${raw} - ${
-                                    car.sale_price
-                                      ? new Intl.NumberFormat('pt-BR', {
-                                          style: 'currency',
-                                          currency: 'BRL',
-                                        }).format(car.sale_price)
-                                      : '-'
+                                    car.sale_price ? formatCurrencyBRL(car.sale_price) : '-'
                                   }`;
                                 }
 
                                 const dataBR = `${d}/${m}/${y}`;
                                 const preco = car.sale_price
-                                  ? new Intl.NumberFormat('pt-BR', {
-                                      style: 'currency',
-                                      currency: 'BRL',
-                                    }).format(car.sale_price)
+                                  ? formatCurrencyBRL(car.sale_price)
                                   : '-';
 
                                 return `Vendido em ${dataBR} - ${preco}`;
@@ -1423,6 +1490,7 @@ const AdminDashboard = () => {
                             <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                           </svg>
                         </Button>
+
                         <Button
                           variant="ghost"
                           size="icon"
@@ -1430,6 +1498,7 @@ const AdminDashboard = () => {
                         >
                           <Edit className="h-5 w-5 text-blue-500 hover:text-blue-400" />
                         </Button>
+
                         {car.is_available === true ? (
                           <Button
                             size="sm"
@@ -1476,6 +1545,7 @@ const AdminDashboard = () => {
                             </Button>
                           </div>
                         )}
+
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
                             <Button
@@ -1486,6 +1556,7 @@ const AdminDashboard = () => {
                               <Trash2 className="h-5 w-5 text-red-500 hover:text-red-400" />
                             </Button>
                           </AlertDialogTrigger>
+
                           <AlertDialogContent className="bg-white">
                             <AlertDialogHeader>
                               <AlertDialogTitle>Tem certeza?</AlertDialogTitle>
@@ -1510,7 +1581,6 @@ const AdminDashboard = () => {
             </>
           )}
 
-          {/* GESTÃO */}
           {activeTab === 'gestao' && (
             <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-xl border">
               <VehicleManager
@@ -1520,7 +1590,6 @@ const AdminDashboard = () => {
             </div>
           )}
 
-          {/* MATRIZ */}
           {activeTab === 'matriz' && (
             <div className="mb-8">
               <OverviewBoard
@@ -1539,13 +1608,13 @@ const AdminDashboard = () => {
             </div>
           )}
 
-          {/* DEPOIMENTOS */}
           {activeTab === 'testimonials' && (
             <>
               <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-8 mb-12 shadow-xl border">
                 <h2 className="text-2xl font-semibold mb-6 flex items-center">
                   <PlusCircle className="mr-3 text-yellow-500" /> Adicionar Novo Depoimento
                 </h2>
+
                 <form onSubmit={handleAddTestimonial} className="space-y-6">
                   <input
                     name="client_name"
@@ -1580,6 +1649,7 @@ const AdminDashboard = () => {
                   <MessageSquare className="mr-3 text-yellow-500" /> Depoimentos Cadastrados (
                   {testimonials.length})
                 </h2>
+
                 <div className="space-y-4">
                   {testimonials.map((item) => (
                     <motion.div
@@ -1596,6 +1666,7 @@ const AdminDashboard = () => {
                           </span>
                         </p>
                       </div>
+
                       <Button
                         variant="ghost"
                         size="icon"
@@ -1610,14 +1681,12 @@ const AdminDashboard = () => {
             </>
           )}
 
-          {/* RELATÓRIOS */}
           {activeTab === 'reports' && (
             <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-xl border">
               <Reports />
             </div>
           )}
 
-          {/* PEDIDOS / OFERECIDOS */}
           {activeTab === 'requests' && (
             <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-xl border">
               <div className="flex items-center justify-between mb-6">
@@ -1630,6 +1699,7 @@ const AdminDashboard = () => {
                     Registre quem pediu carro e quem ofereceu carro. Match é automático.
                   </p>
                 </div>
+
                 <Button
                   onClick={openNewRequestDialog}
                   className="bg-yellow-400 text-black hover:bg-yellow-500"
@@ -1638,7 +1708,6 @@ const AdminDashboard = () => {
                 </Button>
               </div>
 
-              {/* cards de total */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                 <div className="border rounded-xl p-4 bg-white">
                   <p className="text-xs text-gray-500">TOTAL</p>
@@ -1660,7 +1729,6 @@ const AdminDashboard = () => {
                 </div>
               </div>
 
-              {/* filtros da lista */}
               <div className="flex flex-col lg:flex-row gap-3 mb-4 items-center lg:items-end justify-between">
                 <div className="flex gap-2 w-full lg:w-auto">
                   <select
@@ -1672,6 +1740,7 @@ const AdminDashboard = () => {
                     <option value="pedido">Só pedidos</option>
                     <option value="oferecido">Só oferecidos</option>
                   </select>
+
                   <button
                     onClick={() =>
                       setReqSort((prev) => (prev === 'desc' ? 'asc' : 'desc'))
@@ -1681,10 +1750,11 @@ const AdminDashboard = () => {
                     {reqSort === 'desc' ? 'Mais recentes' : 'Mais antigos'}
                   </button>
                 </div>
+
                 <input
                   value={reqSearch}
                   onChange={(e) => setReqSearch(e.target.value)}
-                  placeholder="Buscar por nome, contato, modelo, origem..."
+                  placeholder="Buscar por nome, contato, modelo, ano, KM ou FIPE..."
                   className="w-full lg:w-1/2 border rounded px-3 py-2 text-sm"
                 />
               </div>
@@ -1700,25 +1770,23 @@ const AdminDashboard = () => {
                         Cliente
                       </th>
                       <th className="px-4 py-2 text-left font-semibold text-gray-700">
-                        Contato
-                      </th>
-                      <th className="px-4 py-2 text-left font-semibold text-gray-700">
                         Marca/Modelo
                       </th>
                       <th className="px-4 py-2 text-left font-semibold text-gray-700">
-                        Faixa Valor
+                        Ano
                       </th>
                       <th className="px-4 py-2 text-left font-semibold text-gray-700">
-                        Data
+                        KM
                       </th>
                       <th className="px-4 py-2 text-left font-semibold text-gray-700">
-                        Origem
+                        Valor tabela FIPE
                       </th>
                       <th className="px-4 py-2 text-right font-semibold text-gray-700">
                         Ações
                       </th>
                     </tr>
                   </thead>
+
                   <tbody className="divide-y divide-gray-100">
                     {filteredRequests.map((req) => (
                       <tr
@@ -1745,24 +1813,28 @@ const AdminDashboard = () => {
                             <option value="oferecido">Oferecido (tem carro)</option>
                           </select>
                         </td>
-                        <td className="px-4 py-2">{req.client_name || '-'}</td>
-                        <td className="px-4 py-2">{req.client_contact || '-'}</td>
+
+                        <td className="px-4 py-2">
+                          <div className="font-medium text-gray-900">
+                            {req.client_name || '-'}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {req.client_contact || '-'}
+                          </div>
+                        </td>
+
                         <td className="px-4 py-2">
                           {req.brand || req.model
-                            ? `${req.brand || ''} ${req.model || ''}`
+                            ? `${req.brand || ''} ${req.model || ''}`.trim()
                             : '-'}
                         </td>
-                        <td className="px-4 py-2">
-                          {req.price_min || req.price_max
-                            ? `R$ ${req.price_min || 0} — R$ ${req.price_max || '∞'}`
-                            : '-'}
-                        </td>
-                        <td className="px-4 py-2">
-                          {req.lead_date
-                            ? new Date(req.lead_date).toISOString().slice(0, 10)
-                            : '-'}
-                        </td>
-                        <td className="px-4 py-2">{req.lead_source || '-'}</td>
+
+                        <td className="px-4 py-2">{getRequestYearLabel(req)}</td>
+
+                        <td className="px-4 py-2">{formatKm(req.mileage)}</td>
+
+                        <td className="px-4 py-2">{formatCurrencyBRL(req.fipe_value)}</td>
+
                         <td className="px-4 py-2 text-right">
                           <div className="flex gap-2 justify-end">
                             <Button
@@ -1775,6 +1847,7 @@ const AdminDashboard = () => {
                             >
                               <Edit className="h-4 w-4 text-blue-500" />
                             </Button>
+
                             <Button
                               variant="ghost"
                               size="icon"
@@ -1790,7 +1863,7 @@ const AdminDashboard = () => {
                     {filteredRequests.length === 0 && (
                       <tr>
                         <td
-                          colSpan={8}
+                          colSpan={7}
                           className="px-4 py-6 text-center text-gray-400 text-sm"
                         >
                           Nenhum pedido ou carro oferecido encontrado com esse filtro.
@@ -1803,7 +1876,6 @@ const AdminDashboard = () => {
             </div>
           )}
 
-          {/* >>> NOVA SEÇÃO: ORÇAMENTOS */}
           {activeTab === 'quotes' && (
             <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-xl border">
               <QuoteGenerator />
@@ -1812,12 +1884,12 @@ const AdminDashboard = () => {
         </motion.div>
       </div>
 
-      {/* EDIT CAR DIALOG */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="bg-white text-gray-900">
           <DialogHeader>
             <DialogTitle>Editar Veículo</DialogTitle>
           </DialogHeader>
+
           {editingCar && (
             <form
               onSubmit={handleUpdateCar}
@@ -1830,29 +1902,32 @@ const AdminDashboard = () => {
                   carOptions={carOptions}
                 />
               </div>
+
               <div className="space-y-2">
                 <label className="font-medium text-sm text-gray-700">
                   Fotos (Clique na foto para torná-la principal)
                 </label>
+
                 <div className="flex flex-wrap gap-4 p-2 bg-gray-100 rounded-lg min-h-[112px]">
                   {editingCar.photo_urls &&
                     editingCar.photo_urls.map((url, index) => (
-                      <div 
-                        key={url} 
+                      <div
+                        key={url}
                         className="relative cursor-pointer group"
-                        onClick={() => setEditingCar(prev => ({ ...prev, main_photo_url: url }))}
+                        onClick={() =>
+                          setEditingCar((prev) => ({ ...prev, main_photo_url: url }))
+                        }
                       >
                         <img
                           src={url}
                           alt={`Foto ${index + 1}`}
                           className={`h-24 w-24 object-cover rounded-md transition-all ${
-                            editingCar.main_photo_url === url 
-                            ? 'ring-4 ring-yellow-500 shadow-lg' 
-                            : 'opacity-70 hover:opacity-100'
+                            editingCar.main_photo_url === url
+                              ? 'ring-4 ring-yellow-500 shadow-lg'
+                              : 'opacity-70 hover:opacity-100'
                           }`}
                         />
-                        
-                        {/* Indicador de Foto Principal */}
+
                         {editingCar.main_photo_url === url && (
                           <div className="absolute top-1 right-1 bg-yellow-500 text-black rounded-full p-1 shadow-md">
                             <Check className="h-3 w-3" />
@@ -1862,7 +1937,7 @@ const AdminDashboard = () => {
                         <button
                           type="button"
                           onClick={(e) => {
-                            e.stopPropagation(); // Evita marcar como principal ao deletar
+                            e.stopPropagation();
                             removePhoto(index, true);
                           }}
                           className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -1871,8 +1946,7 @@ const AdminDashboard = () => {
                         </button>
                       </div>
                     ))}
-                  
-                  {/* Fotos que ainda não foram subidas (Upload pendente) */}
+
                   {photosToUpload.map((file, index) => (
                     <div key={index} className="relative opacity-60">
                       <img
@@ -1890,6 +1964,7 @@ const AdminDashboard = () => {
                     </div>
                   ))}
                 </div>
+
                 <Button
                   type="button"
                   onClick={() => fileInputRef.current && fileInputRef.current.click()}
@@ -1898,8 +1973,13 @@ const AdminDashboard = () => {
                   <ImageIcon className="mr-2 h-4 w-4" /> Adicionar
                 </Button>
               </div>
+
               <DialogFooter className="pt-4">
-                <Button type="button" variant="ghost" onClick={() => setIsEditDialogOpen(false)}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setIsEditDialogOpen(false)}
+                >
                   Cancelar
                 </Button>
                 <Button
@@ -1915,12 +1995,12 @@ const AdminDashboard = () => {
         </DialogContent>
       </Dialog>
 
-      {/* SALE DIALOG */}
       <Dialog open={saleDialogOpen} onOpenChange={setSaleDialogOpen}>
         <DialogContent className="bg-white text-gray-900">
           <DialogHeader>
             <DialogTitle>Registrar Venda</DialogTitle>
           </DialogHeader>
+
           <form onSubmit={(e) => e.preventDefault()} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700">Veículo</label>
@@ -1930,6 +2010,7 @@ const AdminDashboard = () => {
                   : '-'}
               </div>
             </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700">Plataforma</label>
               <select
@@ -1946,6 +2027,7 @@ const AdminDashboard = () => {
                 ))}
               </select>
             </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700">
@@ -1960,8 +2042,11 @@ const AdminDashboard = () => {
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2"
                 />
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700">Data da venda</label>
+                <label className="block text-sm font-medium text-gray-700">
+                  Data da venda
+                </label>
                 <input
                   name="sale_date"
                   value={saleForm.sale_date}
@@ -1971,6 +2056,7 @@ const AdminDashboard = () => {
                 />
               </div>
             </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700">Notas (opcional)</label>
               <textarea
@@ -1981,6 +2067,7 @@ const AdminDashboard = () => {
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2"
               />
             </div>
+
             <DialogFooter>
               <Button type="button" variant="ghost" onClick={() => setSaleDialogOpen(false)}>
                 Cancelar
@@ -1997,7 +2084,9 @@ const AdminDashboard = () => {
                       sale_date: saleForm.sale_date || null,
                       notes: saleForm.notes || null,
                     };
+
                     const res = await markCarAsSold(payload);
+
                     if (res?.error) {
                       toast({
                         title: 'Erro ao marcar como vendido',
@@ -2028,12 +2117,12 @@ const AdminDashboard = () => {
         </DialogContent>
       </Dialog>
 
-      {/* DIALOG de pedido/oferecido */}
       <Dialog open={isReqDialogOpen} onOpenChange={setIsReqDialogOpen}>
         <DialogContent className="max-w-3xl bg-white text-gray-900">
           <DialogHeader>
             <DialogTitle>Novo pedido / oferecido</DialogTitle>
           </DialogHeader>
+
           {editingRequest && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[70vh] overflow-y-auto">
               <div>
@@ -2048,6 +2137,7 @@ const AdminDashboard = () => {
                   <option value="oferecido">Oferecido (tem carro)</option>
                 </select>
               </div>
+
               <div>
                 <label className="block text-sm font-medium mb-1">Contato</label>
                 <input
@@ -2057,6 +2147,7 @@ const AdminDashboard = () => {
                   className="w-full border rounded px-3 py-2"
                 />
               </div>
+
               <div>
                 <label className="block text-sm font-medium mb-1">Cliente</label>
                 <input
@@ -2066,7 +2157,9 @@ const AdminDashboard = () => {
                   className="w-full border rounded px-3 py-2"
                 />
               </div>
+
               <div />
+
               <div>
                 <label className="block text-sm font-medium mb-1">Marca</label>
                 <input
@@ -2076,6 +2169,7 @@ const AdminDashboard = () => {
                   className="w-full border rounded px-3 py-2"
                 />
               </div>
+
               <div>
                 <label className="block text-sm font-medium mb-1">Modelo</label>
                 <input
@@ -2085,6 +2179,7 @@ const AdminDashboard = () => {
                   className="w-full border rounded px-3 py-2"
                 />
               </div>
+
               <div>
                 <label className="block text-sm font-medium mb-1">Carroceria</label>
                 <select
@@ -2102,6 +2197,7 @@ const AdminDashboard = () => {
                   <option value="Outro">Outro</option>
                 </select>
               </div>
+
               <div>
                 <label className="block text-sm font-medium mb-1">Combustível</label>
                 <select
@@ -2119,6 +2215,7 @@ const AdminDashboard = () => {
                   <option value="GNV">GNV</option>
                 </select>
               </div>
+
               <div>
                 <label className="block text-sm font-medium mb-1">Câmbio</label>
                 <select
@@ -2132,6 +2229,7 @@ const AdminDashboard = () => {
                   <option value="Manual">Manual</option>
                 </select>
               </div>
+
               <div>
                 <label className="block text-sm font-medium mb-1">Valor mín (R$)</label>
                 <input
@@ -2141,6 +2239,7 @@ const AdminDashboard = () => {
                   className="w-full border rounded px-3 py-2"
                 />
               </div>
+
               <div>
                 <label className="block text-sm font-medium mb-1">Valor máx (R$)</label>
                 <input
@@ -2188,6 +2287,28 @@ const AdminDashboard = () => {
               )}
 
               <div>
+                <label className="block text-sm font-medium mb-1">KM</label>
+                <input
+                  name="mileage"
+                  value={editingRequest.mileage || ''}
+                  onChange={handleReqChange}
+                  placeholder="Ex: 65000"
+                  className="w-full border rounded px-3 py-2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Valor tabela FIPE</label>
+                <input
+                  name="fipe_value"
+                  value={editingRequest.fipe_value || ''}
+                  onChange={handleReqChange}
+                  placeholder="Ex: 89500"
+                  className="w-full border rounded px-3 py-2"
+                />
+              </div>
+
+              <div>
                 <label className="block text-sm font-medium mb-1">Data</label>
                 <input
                   type="date"
@@ -2197,6 +2318,7 @@ const AdminDashboard = () => {
                   className="w-full border rounded px-3 py-2"
                 />
               </div>
+
               <div>
                 <label className="block text-sm font-medium mb-1">Origem</label>
                 <input
@@ -2206,6 +2328,7 @@ const AdminDashboard = () => {
                   className="w-full border rounded px-3 py-2"
                 />
               </div>
+
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium mb-1">Observações</label>
                 <textarea
@@ -2232,7 +2355,6 @@ const AdminDashboard = () => {
         </DialogContent>
       </Dialog>
 
-      {/* POPUP DE MATCH */}
       {matchModalOpen && matchModalPayload && (
         <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/70 backdrop-blur-sm">
           <div className="relative bg-white rounded-3xl shadow-2xl max-w-2xl w-[95%] overflow-hidden border-4 border-yellow-400 animate-pulse">
@@ -2251,6 +2373,7 @@ const AdminDashboard = () => {
                 <X className="h-5 w-5" />
               </button>
             </div>
+
             <div className="p-6 space-y-4 bg-white">
               {matchModalPayload.mode === 'request' && (
                 <>
@@ -2258,6 +2381,7 @@ const AdminDashboard = () => {
                     O pedido de <b>{matchModalPayload.request.client_name}</b> bateu
                     com um carro que já está no estoque.
                   </p>
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="bg-gray-50 rounded-xl p-4 border">
                       <p className="text-xs text-gray-500 mb-1">Cliente</p>
@@ -2272,6 +2396,7 @@ const AdminDashboard = () => {
                         {matchModalPayload.request.model}
                       </p>
                     </div>
+
                     <div className="bg-yellow-50 rounded-xl p-4 border border-yellow-200">
                       <p className="text-xs text-gray-600 mb-1">Carro compatível</p>
                       <p className="font-bold text-gray-900">
@@ -2279,10 +2404,7 @@ const AdminDashboard = () => {
                         ({matchModalPayload.car.year})
                       </p>
                       <p className="text-sm text-gray-700">
-                        {new Intl.NumberFormat('pt-BR', {
-                          style: 'currency',
-                          currency: 'BRL',
-                        }).format(matchModalPayload.car.price || 0)}
+                        {formatCurrencyBRL(matchModalPayload.car.price || 0)}
                       </p>
                     </div>
                   </div>
@@ -2298,6 +2420,7 @@ const AdminDashboard = () => {
                     {matchModalPayload.requests.length === 1 ? 'pedido' : 'pedidos'} de
                     cliente.
                   </p>
+
                   <div className="bg-gray-50 rounded-xl p-4 border space-y-2 max-h-52 overflow-y-auto">
                     {matchModalPayload.requests.map((r) => (
                       <div
@@ -2342,4 +2465,3 @@ const AdminDashboard = () => {
 };
 
 export default AdminDashboard;
-

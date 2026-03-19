@@ -43,11 +43,11 @@ import {
   getPlatforms,
   markCarAsSold,
   unmarkCarAsSold,
-  // pedidos / oferecidos
   getClientRequests,
   addClientRequest,
   updateClientRequest,
   deleteClientRequest,
+  getFipeForCar,
 } from '@/lib/car-api';
 import {
   AlertDialog,
@@ -73,7 +73,6 @@ import Reports from '@/pages/Reports';
 import OverviewBoard from '@/components/OverviewBoard';
 import QuoteGenerator from '@/pages/QuoteGenerator';
 
-// ---------- FORM FIELDS (inclui PLACA) ----------
 const FormFields = React.memo(({ carData, onChange, carOptions }) => (
   <>
     <input
@@ -273,6 +272,7 @@ const AdminDashboard = () => {
   const [clientRequests, setClientRequests] = useState([]);
   const [isReqDialogOpen, setIsReqDialogOpen] = useState(false);
   const [editingRequest, setEditingRequest] = useState(null);
+  const [fetchingRequestFipe, setFetchingRequestFipe] = useState(false);
 
   const [reqFilterType, setReqFilterType] = useState('all');
   const [reqSearch, setReqSearch] = useState('');
@@ -465,12 +465,10 @@ const AdminDashboard = () => {
     (e) => handleInputChange(e, setNewCar),
     []
   );
-
   const handleEditingCarInputChange = useCallback(
     (e) => handleInputChange(e, setEditingCar),
     []
   );
-
   const handleNewTestimonialInputChange = useCallback(
     (e) => handleInputChange(e, setNewTestimonial),
     []
@@ -852,6 +850,57 @@ const AdminDashboard = () => {
       ...prev,
       [name]: value,
     }));
+  };
+
+  const handleFetchRequestFipe = async () => {
+    if (!editingRequest) return;
+
+    try {
+      setFetchingRequestFipe(true);
+
+      const yearToUse =
+        editingRequest.year_exact ||
+        editingRequest.year_min ||
+        editingRequest.year_max ||
+        '';
+
+      if (!editingRequest.brand || !editingRequest.model || !yearToUse) {
+        toast({
+          title: 'Preencha marca, modelo e ano antes de buscar a FIPE',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      const fakeCar = {
+        brand: editingRequest.brand,
+        model: editingRequest.model,
+        year: yearToUse,
+      };
+
+      const fipe = await getFipeForCar(fakeCar);
+
+      if (!fipe) {
+        toast({ title: 'Não encontrei FIPE para esse veículo' });
+        return;
+      }
+
+      setEditingRequest((prev) => ({
+        ...prev,
+        fipe_value: String(fipe),
+      }));
+
+      toast({ title: 'FIPE carregada' });
+    } catch (err) {
+      console.error(err);
+      toast({
+        title: 'Erro ao buscar FIPE',
+        description: err.message || String(err),
+        variant: 'destructive',
+      });
+    } finally {
+      setFetchingRequestFipe(false);
+    }
   };
 
   const saveRequest = async () => {
@@ -2299,13 +2348,26 @@ const AdminDashboard = () => {
 
               <div>
                 <label className="block text-sm font-medium mb-1">Valor tabela FIPE</label>
-                <input
-                  name="fipe_value"
-                  value={editingRequest.fipe_value || ''}
-                  onChange={handleReqChange}
-                  placeholder="Ex: 89500"
-                  className="w-full border rounded px-3 py-2"
-                />
+                <div className="flex gap-2">
+                  <input
+                    name="fipe_value"
+                    value={editingRequest.fipe_value || ''}
+                    onChange={handleReqChange}
+                    placeholder="Ex: 89500"
+                    className="w-full border rounded px-3 py-2"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleFetchRequestFipe}
+                    disabled={fetchingRequestFipe}
+                  >
+                    {fetchingRequestFipe ? 'Buscando...' : 'Buscar FIPE'}
+                  </Button>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Preencha marca, modelo e ano para buscar automaticamente. Se vier diferente, pode editar manualmente.
+                </p>
               </div>
 
               <div>
